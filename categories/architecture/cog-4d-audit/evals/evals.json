@@ -1,0 +1,51 @@
+{
+  "skill_name": "cog-4d-audit",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "帮我用 Cog-4D 框架深度审计这个 PR。测试都过了，但我怀疑权限继承逻辑有隐藏问题。",
+      "expected_output": "Cog-4D 审计报告，包含五项（P/S/E/S/重构指令），指出权限递归中的循环依赖、hasPermission 无限递归、isInheritedRole 逻辑错误等深层缺陷",
+      "files": ["workspace/iteration-1/eval-self-ref-loop/input.diff"],
+      "expectations": [
+        "报告包含 P/S/E/S/重构指令五个完整部分",
+        "指出 resolveInheritedPermissions 在有环时无限递归（E 层/自指）",
+        "指出 hasPermission 方法无环检测保护（E 层）",
+        "指出 isInheritedRole 未检测 potentialAncestorId 参数（P 层/语义错误）",
+        "指出 buildHierarchy 无环检测导致 NPE（E 层/FMEA）",
+        "至少 3 条发现引用具体行号",
+        "重构建议包含可操作代码片段"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "这个 PR 的标书状态机我总觉得有漏掉的流转路径，CI 全绿但我想用 Cog-4D 确认一下。",
+      "expected_output": "Cog-4D 审计报告指出状态机中的不可达状态、缺失的流转路径、CANCELLED 到 ARCHIVED 的单向死胡同等问题",
+      "files": ["workspace/iteration-1/eval-state-machine-gap/input.diff"],
+      "expectations": [
+        "报告包含 P/S/E/S/重构指令五个完整部分",
+        "指出 REJECTED 无法回到 DRAFT 重新提交的流程缺口（E 层/状态机）",
+        "指出 PUBLISHED 直接到 BID_OPENING 缺少时间窗口校验（P 层/语义）",
+        "指出 isTerminal() 定义的终端状态实际仍有出边（E 层/状态定义矛盾）",
+        "指出 canTransition null 时静默拒绝而非抛出明确异常（E 层）",
+        "至少 2 条发现引用具体行号",
+        "重构建议包含状态转换矩阵"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "帮我对这个缓存预热 PR 做 Cog-4D 深度审查。测试环境跑得很顺，但放到生产我总觉得会出事。",
+      "expected_output": "Cog-4D 审计报告指出缓存预热中的写回风暴风险、全量加载的内存溢出、硬编码超时在生产的失效、并发多次调用等二阶效应问题",
+      "files": ["workspace/iteration-1/eval-writeback-storm/input.diff"],
+      "expectations": [
+        "报告包含 P/S/E/S/重构指令五个完整部分",
+        "指出 ApplicationReadyEvent 在多实例部署下被每个节点同时触发（S 层/系统）",
+        "指出全量加载所有 active tender 在百万级数据时的 OOM 风险（E 层/FMEA）",
+        "指出硬编码 30s 超时在生产环境不足（S 层/实证盲区）",
+        "指出 StaleEntryRefresher 30 分钟扫描可能引发缓存雪崩（S 层/反馈回路）",
+        "指出并发 warmup 调用（测试方法中 5 线程同时调）无幂等防护（E 层）",
+        "至少 3 条发现引用具体行号",
+        "重构建议包含对冲措施代码片段"
+      ]
+    }
+  ]
+}

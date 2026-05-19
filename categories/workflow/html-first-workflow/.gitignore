@@ -1,0 +1,8 @@
+.DS_Store
+*.bak
+*.bak.*
+node_modules/
+.vscode/
+.idea/
+.omc/
+*.jsonl
