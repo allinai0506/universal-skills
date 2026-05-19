@@ -1,6 +1,6 @@
 #!/bin/bash
-# Universal Skills 同步脚本
-# 用于将 ~/universal-skills 同步到各 AI Coding 工具
+# Universal Skills 同步脚本 v2
+# 将 ~/universal-skills 同步到各 AI Coding 工具
 
 set -e
 
@@ -11,19 +11,15 @@ BACKUP_DIR="$UNIVERSAL_SKILLS/.backup"
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
+RED='\033[0;31m'
+CYAN='\033[0;36m'
 NC='\033[0m'
 
-log() {
-    echo -e "${BLUE}[$(date '+%H:%M:%S')]${NC} $1"
-}
-
-success() {
-    echo -e "${GREEN}✓${NC} $1"
-}
-
-warn() {
-    echo -e "${YELLOW}⚠${NC} $1"
-}
+log() { echo -e "${BLUE}[$(date '+%H:%M:%S')]${NC} $1"; }
+success() { echo -e "${GREEN}✓${NC} $1"; }
+warn() { echo -e "${YELLOW}⚠${NC} $1"; }
+error() { echo -e "${RED}✗${NC} $1"; }
+info() { echo -e "${CYAN}→${NC} $1"; }
 
 # 创建备份
 backup() {
@@ -36,8 +32,8 @@ backup() {
     fi
 }
 
-# 同步到 Claude Code
-sync_claude() {
+# 同步到全局 Claude（保留，用于某些情况）
+sync_claude_global() {
     local target="$HOME/.claude/skills"
 
     if [ -d "$target" ] && [ ! -L "$target" ]; then
@@ -45,119 +41,134 @@ sync_claude() {
         rm -rf "$target"
     fi
 
-    # 重新创建目标目录
     mkdir -p "$target"
+    cp -r "$UNIVERSAL_SKILLS/categories"/* "$target/"
 
-    # 复制整个 categories 内容到 target（包含隐藏目录，如 .system）
-    cp -a "$UNIVERSAL_SKILLS/categories"/. "$target"/
+    success "Claude Code 全局 skills 已同步 (~/.claude/skills/)"
+    warn "  注意: Claude Code 主要加载项目级 skills，全局目录仅供参考"
+}
 
-    success "Claude Code skills 已同步"
+# 同步到项目级 Claude（这才是真正有用的）
+sync_claude_projects() {
+    local synced_count=0
+    local skill_count_total=0
+
+    # 自动发现所有包含 .claude 目录的项目
+    local found_projects=()
+
+    # 搜索用户目录下的项目
+    while IFS= read -r -d '' project_dir; do
+        # 跳过 universal-skills 自身和隐藏目录
+        if [[ "$project_dir" == *"universal-skills"* ]] || [[ "$project_dir" == *"/."* ]]; then
+            continue
+        fi
+        # 检查是否有 .claude 目录
+        if [ -d "$project_dir/.claude" ]; then
+            found_projects+=("$project_dir")
+        fi
+    done < <(find "$HOME" -maxdepth 2 -type d -print0 2>/dev/null)
+
+    # 也搜索常见项目目录
+    for base_dir in "$HOME/code" "$HOME/projects" "$HOME/work" "$HOME/Documents"; do
+        if [ -d "$base_dir" ]; then
+            while IFS= read -r -d '' project_dir; do
+                if [ -d "$project_dir/.claude" ]; then
+                    found_projects+=("$project_dir")
+                fi
+            done < <(find "$base_dir" -maxdepth 1 -type d -print0 2>/dev/null)
+        fi
+    done
+
+    # 去重
+    local unique_projects=($(printf "%s\n" "${found_projects[@]}" | sort -u))
+
+    log "发现 ${#unique_projects[@]} 个包含 .claude 的项目"
+
+    for project_dir in "${unique_projects[@]}"; do
+        local project_name="$(basename "$project_dir")"
+        local skills_dir="$project_dir/.claude/skills"
+
+        # 创建 skills 目录
+        mkdir -p "$skills_dir"
+
+        # 同步技能
+        local skill_count=0
+        for category_dir in "$UNIVERSAL_SKILLS/categories"/*; do
+            if [ -d "$category_dir" ]; then
+                local category_name="$(basename "$category_dir")"
+                # 复制整个分类目录
+                cp -rn "$category_dir" "$skills_dir/" 2>/dev/null || true
+                # 统计技能数
+                while IFS= read -r skill_md; do
+                    ((skill_count++))
+                done < <(find "$category_dir" -name "SKILL.md" 2>/dev/null)
+            fi
+        done
+
+        if [ $skill_count -gt 0 ]; then
+            log "  → $project_name: $skill_count 个技能"
+            synced_count=$((synced_count + 1))
+            skill_count_total=$((skill_count_total + skill_count))
+        fi
+    done
+
+    if [ $synced_count -gt 0 ]; then
+        success "已同步 $synced_count 个项目的 skills ($skill_count_total 个技能文件)"
+    else
+        warn "未找到任何项目"
+    fi
 }
 
 # 同步到 Codex
 sync_codex() {
     local target="$HOME/.codex/skills"
 
+    if [ ! -d "$HOME/.codex" ]; then
+        return
+    fi
+
     if [ -d "$target" ] && [ ! -L "$target" ]; then
         backup "$target"
     fi
 
-    # 清空并重新创建目标目录
     rm -rf "$target"
     mkdir -p "$target"
 
-    # 复制所有 universal-skills 到 Codex
     local skill_count=0
 
-    # 遍历 categories 下所有包含 SKILL.md 的目录（包含隐藏目录，如 .system）
-    while IFS= read -r -d '' skill_md; do
-        local skill_dir
-        local skill_name
-        skill_dir="$(dirname "$skill_md")"
-        skill_name="$(basename "$skill_dir")"
-
-        # 避免重名技能重复复制
-        if [ -d "$target/$skill_name" ]; then
-            continue
+    for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
+        if [ -d "$skill_dir" ] && [ -f "$skill_dir/SKILL.md" ]; then
+            local skill_name="$(basename "$skill_dir")"
+            cp -r "$skill_dir" "$target/$skill_name"
+            skill_count=$((skill_count + 1))
         fi
-
-        cp -r "$skill_dir" "$target/$skill_name"
-        skill_count=$((skill_count + 1))
-        log "  → $skill_name"
-    done < <(find "$UNIVERSAL_SKILLS/categories" -type f -name "SKILL.md" -print0)
-
-    success "Codex skills 已同步 ($skill_count 个技能)"
-}
-
-# 同步到项目级 skills（为 Gemini/Gemini in projects）
-sync_projects() {
-    local synced_count=0
-
-    # 需要同步的项目列表
-    local projects=(
-        "$HOME/clawd"
-        "$HOME/clawd-work"
-        "$HOME/nexusarchive"
-        "$HOME/everything-claude-code"
-        "$HOME/JLAF"
-        "$HOME/PLM"
-        "$HOME/zhitoujianli"
-        "$HOME/liujie"
-    )
-
-    for project_dir in "${projects[@]}"; do
-        if [ ! -d "$project_dir" ]; then
-            continue
-        fi
-
-        local project_name="$(basename "$project_dir")"
-        local skills_dir="$project_dir/skills"
-
-        # 检查项目是否有 skills 目录
-        if [ ! -d "$skills_dir" ]; then
-            continue
-        fi
-
-        # 创建 universal-skills symlink
-        local symlink="$skills_dir/universal-skills"
-
-        # 删除旧的 symlink 或文件
-        if [ -L "$symlink" ]; then
-            rm -f "$symlink"
-        elif [ -e "$symlink" ]; then
-            warn "$project_name: universal-skills 是目录，跳过"
-            continue
-        fi
-
-        # 创建 symlink
-        ln -sf "$UNIVERSAL_SKILLS/categories" "$symlink"
-        log "✓ $project_name: universal-skills symlink 已创建"
-        synced_count=$((synced_count + 1))
     done
 
-    if [ $synced_count -gt 0 ]; then
-        success "已同步 $synced_count 个项目的 universal-skills symlink"
-    else
-        log "未找到需要同步的项目"
-    fi
+    for skill_dir in "$UNIVERSAL_SKILLS/categories"/*; do
+        if [ -d "$skill_dir" ] && [ -f "$skill_dir/SKILL.md" ]; then
+            local skill_name="$(basename "$skill_dir")"
+            if [ ! -d "$target/$skill_name" ]; then
+                cp -r "$skill_dir" "$target/$skill_name"
+                skill_count=$((skill_count + 1))
+            fi
+        fi
+    done
+
+    success "Codex skills 已同步 ($skill_count 个技能)"
 }
 
 # 同步到 Gemini
 sync_gemini() {
     if ! command -v gemini &> /dev/null; then
-        warn "Gemini CLI 未安装，跳过"
         return
     fi
 
     local extension_dir="$UNIVERSAL_SKILLS/gemini-extension/universal-skills"
 
-    # 确保 gemini-extension.json 存在
     if [ ! -f "$extension_dir/gemini-extension.json" ]; then
-        warn "Gemini extension 配置缺失，跳过"
         return
     fi
 
-    # 检查是否已安装
     if gemini extensions list 2>/dev/null | grep -q "universal-skills"; then
         log "Gemini extension 已安装"
     else
@@ -168,43 +179,72 @@ sync_gemini() {
     success "Gemini extension 已就绪"
 }
 
-# 同步到 Antigravity (通过 MCP)
-sync_antigravity() {
-    local mcp_config="$HOME/.gemini/mcp_config.json"
-
-    if [ ! -f "$mcp_config" ]; then
-        # 创建 MCP 配置目录
-        mkdir -p "$(dirname "$mcp_config")"
-        echo '{}' > "$mcp_config"
-    fi
-
-    # Antigravity 使用 annotations/brain 机制，不直接同步 skills
-    # 这里只确保 MCP 配置存在，便于未来集成
-    success "Antigravity MCP 配置已准备"
-}
-
 # 创建本地覆盖目录
 mkdir -p "$UNIVERSAL_SKILLS/local"
+
+# 解析命令行参数
+SKIP_GLOBAL=false
+SKIP_PROJECTS=false
+SKIP_CODEX=false
+SKIP_GEMINI=false
+SPECIFIC_PROJECT=""
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --no-global) SKIP_GLOBAL=true ;;
+        --no-projects) SKIP_PROJECTS=true ;;
+        --no-codex) SKIP_CODEX=true ;;
+        --no-gemini) SKIP_GEMINI=true ;;
+        --project=*) SPECIFIC_PROJECT="$2"; shift ;;
+        --help)
+            echo "用法: $0 [选项]"
+            echo ""
+            echo "选项:"
+            echo "  --no-global     跳过全局 Claude 同步"
+            echo "  --no-projects   跳过项目级同步"
+            echo "  --no-codex      跳过 Codex 同步"
+            echo "  --no-gemini     跳过 Gemini 同步"
+            echo "  --project NAME  只同步指定项目"
+            echo "  --help          显示此帮助"
+            exit 0
+            ;;
+        *) shift ;;
+    esac
+    shift
+done
 
 log "开始同步 Universal Skills..."
 echo ""
 
-sync_claude
-sync_codex
-sync_gemini
-sync_antigravity
-sync_projects
+if [ "$SKIP_GLOBAL" = false ]; then
+    sync_claude_global
+    echo ""
+fi
 
-echo ""
+if [ "$SKIP_PROJECTS" = false ]; then
+    sync_claude_projects
+    echo ""
+fi
+
+if [ "$SKIP_CODEX" = false ]; then
+    sync_codex
+    echo ""
+fi
+
+if [ "$SKIP_GEMINI" = false ]; then
+    sync_gemini
+    echo ""
+fi
+
 success "同步完成！"
 echo ""
 echo "提示："
-echo "  - 本地自定义技能放在: $UNIVERSAL_SKILLS/local/"
+echo "  - 本地自定义技能: $UNIVERSAL_SKILLS/local/"
 echo "  - 备份位置: $BACKUP_DIR"
-echo "  - 重启 AI Coding 工具以加载新 skills"
+echo "  - ⚠️  重启 Claude Code 以加载新 skills"
 echo ""
-echo "已同步的工具："
-echo "  ✓ Claude Code (~/.claude/skills/)"
+echo "已同步的目标："
+echo "  ✓ Claude Code 项目级 (.claude/skills/) ← 主要"
+echo "  ✓ Claude Code 全局 (~/.claude/skills/) ← 参考"
 echo "  ✓ Codex (~/.codex/skills/)"
-echo "  ✓ Gemini CLI (extension + project symlinks)"
-echo "  ✓ 项目级 (clawd, nexusarchive, etc.)"
+echo "  ✓ Gemini CLI (extension)"
