@@ -100,12 +100,8 @@ sync_claude_global() {
     warn "  注意: Claude Code 主要加载项目级 skills，全局目录仅供参考"
 }
 
-# 同步到项目级 Claude（这才是真正有用的）
-sync_claude_projects() {
-    local synced_count=0
-    local skill_count_total=0
-
-    # 自动发现所有包含 .claude 目录的项目
+# 自动发现所有包含 .claude 目录的项目
+discover_projects() {
     local found_projects=()
 
     # 搜索用户目录下的项目
@@ -132,7 +128,16 @@ sync_claude_projects() {
     done
 
     # 去重
-    local unique_projects=($(printf "%s\n" "${found_projects[@]}" | sort -u))
+    unique_projects=($(printf "%s\n" "${found_projects[@]}" | sort -u))
+}
+
+# 同步到项目级 Claude（这才是真正有用的）
+sync_claude_projects() {
+    local synced_count=0
+    local skill_count_total=0
+
+    # 自动发现所有包含 .claude 目录的项目
+    discover_projects
 
     log "发现 ${#unique_projects[@]} 个包含 .claude 的项目"
 
@@ -173,6 +178,52 @@ sync_claude_projects() {
         success "已同步 $synced_count 个项目的 skills ($skill_count_total 个技能文件)"
     else
         warn "未找到任何项目"
+    fi
+}
+
+# 同步到项目级 Cursor (.cursor/rules/)
+sync_cursor_projects() {
+    local synced_count=0
+    local skill_count_total=0
+
+    if [ -z "${unique_projects+x}" ]; then
+        discover_projects
+    fi
+
+    for project_dir in "${unique_projects[@]}"; do
+        local project_name="$(basename "$project_dir")"
+        local cursor_rules_dir="$project_dir/.cursor/rules"
+
+        # 创建 .cursor/rules 目录
+        mkdir -p "$cursor_rules_dir"
+
+        # 清理旧的 .mdc 技能文件
+        for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
+            if [ -d "$skill_dir" ] && [ -f "$skill_dir/SKILL.md" ]; then
+                local skill_name="$(basename "$skill_dir")"
+                rm -f "$cursor_rules_dir/$skill_name.mdc"
+            fi
+        done
+
+        # 拷贝扁平化的技能并重命名为 .mdc 格式
+        local skill_count=0
+        for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
+            if [ -d "$skill_dir" ] && [ -f "$skill_dir/SKILL.md" ]; then
+                local skill_name="$(basename "$skill_dir")"
+                cat "$skill_dir/SKILL.md" > "$cursor_rules_dir/$skill_name.mdc"
+                ((skill_count++))
+            fi
+        done
+
+        if [ $skill_count -gt 0 ]; then
+            log "  → $project_name (Cursor Rules): $skill_count 个技能"
+            synced_count=$((synced_count + 1))
+            skill_count_total=$((skill_count_total + skill_count))
+        fi
+    done
+
+    if [ $synced_count -gt 0 ]; then
+        success "已同步 $synced_count 个项目的 Cursor rules ($skill_count_total 个 rule 文件)"
     fi
 }
 
@@ -436,6 +487,7 @@ fi
 
 if [ "$SKIP_PROJECTS" = false ]; then
     sync_claude_projects
+    sync_cursor_projects
     sync_projects
     echo ""
 fi
@@ -462,6 +514,7 @@ echo "已同步的目标："
 [ "$SKIP_GLOBAL" = false ] && echo "  ✓ Claude Code 插件 (~/.claude/plugins/cache/local/universal-skills/)"
 [ "$SKIP_GLOBAL" = false ] && echo "  ✓ Claude Code 全局 (~/.claude/skills/) ← 参考"
 [ "$SKIP_PROJECTS" = false ] && echo "  ✓ Claude Code 项目级 (.claude/skills/) ← 主要"
+[ "$SKIP_PROJECTS" = false ] && echo "  ✓ Cursor 项目级 (.cursor/rules/) ← Cursor Rules"
 [ "$SKIP_CODEX" = false ] && echo "  ✓ Codex (~/.codex/skills/)"
 [ "$SKIP_GEMINI" = false ] && echo "  ✓ Gemini CLI (extension)"
 [ "$SKIP_GEMINI" = false ] && echo "  ✓ Antigravity (GEMINI.md 注入到 ~/.gemini/extensions/universal-skills/)"
