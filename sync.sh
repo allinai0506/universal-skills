@@ -86,7 +86,15 @@ sync_claude_global() {
     fi
 
     mkdir -p "$target"
-    cp -r "$UNIVERSAL_SKILLS/categories"/* "$target/"
+    
+    local skill_count=0
+    for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
+        if [ -d "$skill_dir" ] && [ -f "$skill_dir/SKILL.md" ]; then
+            local skill_name="$(basename "$skill_dir")"
+            cp -r "$skill_dir" "$target/$skill_name"
+            skill_count=$((skill_count + 1))
+        fi
+    done
 
     success "Claude Code 全局 skills 已同步 (~/.claude/skills/)"
     warn "  注意: Claude Code 主要加载项目级 skills，全局目录仅供参考"
@@ -135,17 +143,21 @@ sync_claude_projects() {
         # 创建 skills 目录
         mkdir -p "$skills_dir"
 
-        # 同步技能
-        local skill_count=0
+        # 清理旧的分类目录 (若存在)
         for category_dir in "$UNIVERSAL_SKILLS/categories"/*; do
             if [ -d "$category_dir" ]; then
                 local category_name="$(basename "$category_dir")"
-                # 复制整个分类目录
-                cp -rn "$category_dir" "$skills_dir/" 2>/dev/null || true
-                # 统计技能数
-                while IFS= read -r skill_md; do
-                    ((skill_count++))
-                done < <(find "$category_dir" -name "SKILL.md" 2>/dev/null)
+                rm -rf "$skills_dir/$category_name"
+            fi
+        done
+
+        # 同步技能 (扁平化复制，以兼容 Claude Code 技能解析)
+        local skill_count=0
+        for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
+            if [ -d "$skill_dir" ] && [ -f "$skill_dir/SKILL.md" ]; then
+                local skill_name="$(basename "$skill_dir")"
+                cp -rn "$skill_dir" "$skills_dir/$skill_name" 2>/dev/null || true
+                ((skill_count++))
             fi
         done
 
@@ -356,12 +368,20 @@ sync_plugin() {
 EOF
     fi
 
-    # 创建 symlinks
+    # 创建 symlinks (扁平化以兼容 Claude Code 技能解析)
     rm -f "$plugin_dir/$version/.claude-plugin"
-    rm -f "$plugin_dir/$version/skills"
+    rm -rf "$plugin_dir/$version/skills"
 
     ln -sf "$UNIVERSAL_SKILLS/.claude-plugin" "$plugin_dir/$version/.claude-plugin"
-    ln -sf "$UNIVERSAL_SKILLS/categories" "$plugin_dir/$version/skills"
+    mkdir -p "$plugin_dir/$version/skills"
+
+    # 为每个技能创建单独的 symlink
+    for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
+        if [ -d "$skill_dir" ] && [ -f "$skill_dir/SKILL.md" ]; then
+            local skill_name="$(basename "$skill_dir")"
+            ln -sf "$skill_dir" "$plugin_dir/$version/skills/$skill_name"
+        fi
+    done
 
     # 统计技能数量
     local skill_count=$(find -L "$plugin_dir/$version/skills" -name "SKILL.md" 2>/dev/null | wc -l | tr -d ' ')
