@@ -112,8 +112,8 @@ sync_claude_projects() {
         fi
     done < <(find "$HOME" -maxdepth 2 -type d -print0 2>/dev/null)
 
-    # 也搜索常见项目目录
-    for base_dir in "$HOME/code" "$HOME/projects" "$HOME/work" "$HOME/Documents"; do
+    # 也搜索常见项目目录和 worktrees 目录
+    for base_dir in "$HOME/code" "$HOME/projects" "$HOME/work" "$HOME/Documents" "$HOME/xiyu/worktrees"; do
         if [ -d "$base_dir" ]; then
             while IFS= read -r -d '' project_dir; do
                 if [ -d "$project_dir/.claude" ]; then
@@ -218,8 +218,15 @@ sync_projects() {
         "$HOME/PLM"
         "$HOME/zhitoujianli"
         "$HOME/liujie"
-        "$HOME/xiyu"
+        "$HOME/xiyu/xiyu-bid-poc"
     )
+
+    # 动态添加 xiyu 的 worktrees
+    if [ -d "$HOME/xiyu/worktrees" ]; then
+        while IFS= read -r -d '' wt; do
+            projects+=("$wt")
+        done < <(find "$HOME/xiyu/worktrees" -maxdepth 1 -mindepth 1 -type d -print0 2>/dev/null)
+    fi
 
     for project_dir in "${projects[@]}"; do
         if [ ! -d "$project_dir" ]; then
