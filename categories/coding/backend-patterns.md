@@ -1,11 +1,22 @@
 ---
 name: backend-patterns
 description: Backend architecture patterns, API design, database optimization, and server-side best practices for Node.js, Express, and Next.js API routes.
+origin: ECC
 ---
 
 # Backend Development Patterns
 
 Backend architecture patterns and best practices for scalable server-side applications.
+
+## When to Activate
+
+- Designing REST or GraphQL API endpoints
+- Implementing repository, service, or controller layers
+- Optimizing database queries (N+1, indexing, connection pooling)
+- Adding caching (Redis, in-memory, HTTP cache headers)
+- Setting up background jobs or async processing
+- Structuring error handling and validation for APIs
+- Building middleware (auth, logging, rate limiting)
 
 ## API Design Patterns
 
@@ -395,21 +406,26 @@ export function hasPermission(user: User, permission: Permission): boolean {
 }
 
 export function requirePermission(permission: Permission) {
-  return async (request: Request) => {
-    const user = await requireAuth(request)
+  return (handler: (request: Request, user: User) => Promise<Response>) => {
+    return async (request: Request) => {
+      const user = await requireAuth(request)
 
-    if (!hasPermission(user, permission)) {
-      throw new ApiError(403, 'Insufficient permissions')
+      if (!hasPermission(user, permission)) {
+        throw new ApiError(403, 'Insufficient permissions')
+      }
+
+      return handler(request, user)
     }
-
-    return user
   }
 }
 
-// Usage
-export const DELETE = requirePermission('delete')(async (request: Request) => {
-  // Handler with permission check
-})
+// Usage - HOF wraps the handler
+export const DELETE = requirePermission('delete')(
+  async (request: Request, user: User) => {
+    // Handler receives authenticated user with verified permission
+    return new Response('Deleted', { status: 200 })
+  }
+)
 ```
 
 ## Rate Limiting

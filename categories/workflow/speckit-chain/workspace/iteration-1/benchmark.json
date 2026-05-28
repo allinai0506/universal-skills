@@ -1,0 +1,383 @@
+{
+  "metadata": {
+    "skill_name": "speckit-chain",
+    "skill_path": "<path/to/skill>",
+    "executor_model": "<model-name>",
+    "analyzer_model": "<model-name>",
+    "timestamp": "2026-05-27T00:08:38Z",
+    "evals_run": [
+      1,
+      2,
+      3
+    ],
+    "runs_per_configuration": 3
+  },
+  "runs": [
+    {
+      "eval_id": 1,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 7,
+        "failed": 0,
+        "total": 7,
+        "time_seconds": 758.5,
+        "tokens": 167698,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "speckit-chain skill was invoked",
+          "passed": true,
+          "evidence": "Summary states: 'successfully completed the full speckit-chain workflow' with sequential step execution"
+        },
+        {
+          "text": "Constitution step was executed",
+          "passed": true,
+          "evidence": "'Constitution -- v1.0.0 (no changes needed)' documented in pipeline summary"
+        },
+        {
+          "text": "Specification file was created",
+          "passed": true,
+          "evidence": "'specs/011-tender-favorites/spec.md (3 user stories)' in summary"
+        },
+        {
+          "text": "Implementation plan was created",
+          "passed": true,
+          "evidence": "'specs/011-tender-favorites/plan.md + research/data-model/contracts/quickstart' in summary"
+        },
+        {
+          "text": "Task breakdown was created",
+          "passed": true,
+          "evidence": "'specs/011-tender-favorites/tasks.md (23 tasks, 5 phases, all completed)' in summary"
+        },
+        {
+          "text": "Both frontend and backend are covered",
+          "passed": true,
+          "evidence": "Summary lists both 'Backend Implementation (Spring Boot)' and 'Frontend Implementation (Vue 3)' sections with specific file paths"
+        },
+        {
+          "text": "Review gates were presented",
+          "passed": true,
+          "evidence": "Agent noted 'at each review gate, just continue' implying gates were shown before auto-proceeding"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 2,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 7,
+        "failed": 0,
+        "total": 7,
+        "time_seconds": 505.8,
+        "tokens": 102662,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "speckit-chain skill was invoked",
+          "passed": true,
+          "evidence": "Agent states: 'speckit-chain \u5de5\u4f5c\u6d41\u901a\u8fc7\u9010\u4e00\u8c03\u7528\u5404\u72ec\u7acb\u5b50\u6280\u80fd\u624b\u52a8\u6267\u884c' \u2014 chain workflow was followed explicitly"
+        },
+        {
+          "text": "Constitution step was executed",
+          "passed": true,
+          "evidence": "Step 1 completed: '\u73b0\u6709\u7ae0\u7a0b v1.0.0 \u5df2\u5b8c\u5584\uff0c\u6240\u6709\u5360\u4f4d\u7b26\u5df2\u586b\u5145'"
+        },
+        {
+          "text": "Specification file was created",
+          "passed": true,
+          "evidence": "'specs/011-keyword-subscription/spec.md' \u2014 3 user stories, 12 functional requirements, 5 entities"
+        },
+        {
+          "text": "Implementation plan was created",
+          "passed": true,
+          "evidence": "'specs/011-keyword-subscription/plan.md' + research.md + data-model.md + contracts + quickstart"
+        },
+        {
+          "text": "Task breakdown was created",
+          "passed": true,
+          "evidence": "'specs/011-keyword-subscription/tasks.md' \u2014 35 tasks across 6 phases"
+        },
+        {
+          "text": "Clarify was offered at Gate A",
+          "passed": true,
+          "evidence": "'[Gate A] \u89c4\u683c\u5ba1\u67e5 + \u6f84\u6e05' section: '\u6309\u7528\u6237\"auto-continue\"\u6307\u4ee4\u8df3\u8fc7' \u2014 Gate A was presented"
+        },
+        {
+          "text": "Implementation was partial (skipped per user request)",
+          "passed": true,
+          "evidence": "'[Step 5] \u5b9e\u73b0 -- \u5df2\u8df3\u8fc7' \u2014 explicitly skipped implementation"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 3,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 7,
+        "failed": 0,
+        "total": 7,
+        "time_seconds": 324.3,
+        "tokens": 80457,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "speckit-chain skill was invoked",
+          "passed": true,
+          "evidence": "Agent completed full speckit-chain flow including constitution\u2192specify\u2192plan\u2192tasks\u2192analyze"
+        },
+        {
+          "text": "Constitution step was executed",
+          "passed": true,
+          "evidence": "Constitution review completed as documented in the pipeline summary"
+        },
+        {
+          "text": "Specification file was created",
+          "passed": true,
+          "evidence": "Spec created with 9 functional requirements (FR-001 to FR-009) for the share feature"
+        },
+        {
+          "text": "Implementation plan was created",
+          "passed": true,
+          "evidence": "Plan generated with data model, architecture decisions, and Constitution Check"
+        },
+        {
+          "text": "Implementation plan identifies this as frontend-only",
+          "passed": true,
+          "evidence": "Analysis report states 'II. Real-API Only: No violation (no API calls needed)' and all tasks are frontend-focused"
+        },
+        {
+          "text": "Task breakdown was created",
+          "passed": true,
+          "evidence": "12 tasks generated (T001 to T012) across user story phases"
+        },
+        {
+          "text": "No backend tasks in task breakdown",
+          "passed": true,
+          "evidence": "Analysis report shows 100% coverage of 9 FRs with 0 backend/controller tasks. All tasks are Vue/composable/component focused"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 1,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.14,
+        "passed": 1,
+        "failed": 6,
+        "total": 7,
+        "time_seconds": 732.0,
+        "tokens": 134394,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "speckit-chain skill was invoked",
+          "passed": false,
+          "evidence": "Direct implementation approach used. No spec-kit workflow mentioned in summary."
+        },
+        {
+          "text": "Constitution step was executed",
+          "passed": false,
+          "evidence": "No constitution mentioned. Agent jumped straight to implementation."
+        },
+        {
+          "text": "Specification file was created",
+          "passed": false,
+          "evidence": "No spec.md created. Implementation was done directly without specification document."
+        },
+        {
+          "text": "Implementation plan was created",
+          "passed": false,
+          "evidence": "No plan.md created. Architecture decisions exist in summary but not as a formal plan document."
+        },
+        {
+          "text": "Task breakdown was created",
+          "passed": false,
+          "evidence": "No tasks.md created. Work was done without formal task breakdown."
+        },
+        {
+          "text": "Both frontend and backend are covered",
+          "passed": true,
+          "evidence": "Both backend (entity/repository/service/controller) and frontend (Vue components) were implemented"
+        },
+        {
+          "text": "Review gates were presented",
+          "passed": false,
+          "evidence": "No review gates presented. Direct implementation without structured checkpoints."
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 2,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.0,
+        "passed": 0,
+        "failed": 7,
+        "total": 7,
+        "time_seconds": 545.7,
+        "tokens": 107686,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "speckit-chain skill was invoked",
+          "passed": false,
+          "evidence": "Agent implemented directly without any speckit workflow invocation"
+        },
+        {
+          "text": "Constitution step was executed",
+          "passed": false,
+          "evidence": "No constitution step mentioned in implementation summary"
+        },
+        {
+          "text": "Specification file was created",
+          "passed": false,
+          "evidence": "No spec document created. Implementation was done directly."
+        },
+        {
+          "text": "Implementation plan was created",
+          "passed": false,
+          "evidence": "No formal plan document. Architecture decisions exist only in implementation summary."
+        },
+        {
+          "text": "Task breakdown was created",
+          "passed": false,
+          "evidence": "No tasks.md. Implementation was done without task breakdown."
+        },
+        {
+          "text": "Clarify was offered at Gate A",
+          "passed": false,
+          "evidence": "No clarify step \u2014 agent jumped straight to implementation"
+        },
+        {
+          "text": "Implementation was partial (skipped per user request)",
+          "passed": false,
+          "evidence": "Full implementation was done including all backend and frontend, contrary to user's 'skip implement' instruction"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 3,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.0,
+        "passed": 0,
+        "failed": 7,
+        "total": 7,
+        "time_seconds": 592.3,
+        "tokens": 83262,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "speckit-chain skill was invoked",
+          "passed": false,
+          "evidence": "Agent implemented share feature directly without any speckit workflow"
+        },
+        {
+          "text": "Constitution step was executed",
+          "passed": false,
+          "evidence": "No constitution step mentioned"
+        },
+        {
+          "text": "Specification file was created",
+          "passed": false,
+          "evidence": "No spec document created. Implementation was direct."
+        },
+        {
+          "text": "Implementation plan was created",
+          "passed": false,
+          "evidence": "No plan document created"
+        },
+        {
+          "text": "Implementation plan identifies this as frontend-only",
+          "passed": false,
+          "evidence": "No plan document exists to make this identification"
+        },
+        {
+          "text": "Task breakdown was created",
+          "passed": false,
+          "evidence": "No tasks.md created"
+        },
+        {
+          "text": "No backend tasks in task breakdown",
+          "passed": false,
+          "evidence": "No task breakdown exists"
+        }
+      ],
+      "notes": []
+    }
+  ],
+  "run_summary": {
+    "with_skill": {
+      "pass_rate": {
+        "mean": 1.0,
+        "stddev": 0.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "time_seconds": {
+        "mean": 529.5333,
+        "stddev": 218.0708,
+        "min": 324.3,
+        "max": 758.5
+      },
+      "tokens": {
+        "mean": 116939.0,
+        "stddev": 45338.974,
+        "min": 80457,
+        "max": 167698
+      }
+    },
+    "without_skill": {
+      "pass_rate": {
+        "mean": 0.0467,
+        "stddev": 0.0808,
+        "min": 0.0,
+        "max": 0.14
+      },
+      "time_seconds": {
+        "mean": 623.3333,
+        "stddev": 96.9496,
+        "min": 545.7,
+        "max": 732.0
+      },
+      "tokens": {
+        "mean": 108447.3333,
+        "stddev": 25574.5005,
+        "min": 83262,
+        "max": 134394
+      }
+    },
+    "delta": {
+      "pass_rate": "+0.95",
+      "time_seconds": "-93.8",
+      "tokens": "+8492"
+    }
+  },
+  "notes": []
+}
