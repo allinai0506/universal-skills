@@ -103,6 +103,7 @@ sync_projects() {
         "$HOME/PLM"
         "$HOME/zhitoujianli"
         "$HOME/liujie"
+        "$HOME/xiyu"
     )
 
     for project_dir in "${projects[@]}"; do
@@ -168,19 +169,87 @@ sync_gemini() {
     success "Gemini extension 已就绪"
 }
 
-# 同步到 Antigravity (通过 MCP)
+# 同步到 Antigravity (通过 Gemini Extension GEMINI.md)
 sync_antigravity() {
-    local mcp_config="$HOME/.gemini/mcp_config.json"
+    local extension_src="$UNIVERSAL_SKILLS/gemini-extension/universal-skills"
+    local extension_install="$HOME/.gemini/extensions/universal-skills"
+    local enablement_file="$HOME/.gemini/extensions/extension-enablement.json"
 
-    if [ ! -f "$mcp_config" ]; then
-        # 创建 MCP 配置目录
-        mkdir -p "$(dirname "$mcp_config")"
-        echo '{}' > "$mcp_config"
+    # 1. 检查 GEMINI.md 是否存在于 extension 源目录
+    if [ ! -f "$extension_src/GEMINI.md" ]; then
+        warn "Antigravity: GEMINI.md 缺失于 $extension_src"
+        return 1
     fi
 
-    # Antigravity 使用 annotations/brain 机制，不直接同步 skills
-    # 这里只确保 MCP 配置存在，便于未来集成
-    success "Antigravity MCP 配置已准备"
+    # 2. 检查 extension 是否已安装（symlink 到源目录）
+    if [ ! -d "$extension_install" ]; then
+        warn "Antigravity: universal-skills extension 未安装"
+        warn "  请运行: gemini extensions link \"$extension_src\""
+        return 1
+    fi
+
+    # 3. 检查 extension 是否为 symlink（链接式安装）
+    local install_json="$extension_install/.gemini-extension-install.json"
+    if [ -f "$install_json" ]; then
+        local install_type
+        install_type=$(python3 -c "import json,sys; d=json.load(open('$install_json')); print(d.get('type',''))" 2>/dev/null)
+        if [ "$install_type" = "link" ]; then
+            log "  Antigravity extension 为 link 模式，GEMINI.md 实时生效"
+        fi
+    fi
+
+    # 4. 确保 extension-enablement.json 包含 universal-skills
+    if [ -f "$enablement_file" ]; then
+        if ! python3 -c "import json,sys; d=json.load(open('$enablement_file')); sys.exit(0 if 'universal-skills' in d else 1)" 2>/dev/null; then
+            warn "Antigravity: universal-skills 未在 extension-enablement.json 中启用"
+            warn "  请在 Antigravity 中手动启用该 extension"
+        fi
+    fi
+
+    # 5. 统计技能数量
+    local skill_count
+    skill_count=$(find "$UNIVERSAL_SKILLS/categories" -name "SKILL.md" 2>/dev/null | wc -l | tr -d ' ')
+
+    success "Antigravity extension 已就绪 ($skill_count 个技能，通过 GEMINI.md 注入)"
+    log "  GEMINI.md: $extension_src/GEMINI.md"
+}
+
+# 同步到 Claude Code 插件 (Skill tool 需要)
+sync_plugin() {
+    local plugin_dir="$HOME/.claude/plugins/cache/local/universal-skills"
+    local version="1.0.0"
+
+    # 创建插件目录结构
+    mkdir -p "$plugin_dir/$version"
+
+    # 创建 .claude-plugin/plugin.json (如果不存在)
+    if [ ! -f "$UNIVERSAL_SKILLS/.claude-plugin/plugin.json" ]; then
+        mkdir -p "$UNIVERSAL_SKILLS/.claude-plugin"
+        cat > "$UNIVERSAL_SKILLS/.claude-plugin/plugin.json" << 'EOF'
+{
+  "name": "universal-skills",
+  "description": "Universal AI Coding Skills - synchronizes across Claude Code, Codex, and Gemini CLI. Covers languages (Python, Go, Swift, Java, C++), frameworks (Django, Spring Boot), patterns (TDD, E2E, API design), security, and deployment.",
+  "version": "1.0.0",
+  "author": {
+    "name": "universal-skills"
+  },
+  "keywords": ["skills", "tdd", "python", "golang", "swift", "django", "spring-boot", "security", "testing", "architecture"]
+}
+EOF
+    fi
+
+    # 创建 symlinks
+    rm -f "$plugin_dir/$version/.claude-plugin"
+    rm -f "$plugin_dir/$version/skills"
+
+    ln -sf "$UNIVERSAL_SKILLS/.claude-plugin" "$plugin_dir/$version/.claude-plugin"
+    ln -sf "$UNIVERSAL_SKILLS/categories" "$plugin_dir/$version/skills"
+
+    # 统计技能数量
+    local skill_count=$(find -L "$plugin_dir/$version/skills" -name "SKILL.md" 2>/dev/null | wc -l | tr -d ' ')
+
+    success "Claude Code 插件已同步 ($skill_count 个技能)"
+    log "  技能路径: $plugin_dir/$version/skills/"
 }
 
 # 创建本地覆盖目录
@@ -191,6 +260,7 @@ echo ""
 
 sync_claude
 sync_codex
+sync_plugin
 sync_gemini
 sync_antigravity
 sync_projects
@@ -201,10 +271,12 @@ echo ""
 echo "提示："
 echo "  - 本地自定义技能放在: $UNIVERSAL_SKILLS/local/"
 echo "  - 备份位置: $BACKUP_DIR"
-echo "  - 重启 AI Coding 工具以加载新 skills"
+echo "  - 重启 Claude Code 以加载新插件"
 echo ""
 echo "已同步的工具："
-echo "  ✓ Claude Code (~/.claude/skills/)"
+echo "  ✓ Claude Code 插件 (~/.claude/plugins/cache/local/universal-skills/)"
+echo "  ✓ Claude Code skills (~/.claude/skills/) - 兼容模式"
 echo "  ✓ Codex (~/.codex/skills/)"
 echo "  ✓ Gemini CLI (extension + project symlinks)"
-echo "  ✓ 项目级 (clawd, nexusarchive, etc.)"
+echo "  ✓ Antigravity (GEMINI.md 注入到 ~/.gemini/extensions/universal-skills/)"
+echo "  ✓ 项目级 (clawd, xiyu, etc.)"
