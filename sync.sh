@@ -156,7 +156,8 @@ sync_claude_projects() {
         for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
             if [ -d "$skill_dir" ] && [ -f "$skill_dir/SKILL.md" ]; then
                 local skill_name="$(basename "$skill_dir")"
-                cp -rn "$skill_dir" "$skills_dir/$skill_name" 2>/dev/null || true
+                rm -rf "$skills_dir/$skill_name"
+                cp -r "$skill_dir" "$skills_dir/$skill_name"
                 ((skill_count++))
             fi
         done
