@@ -1,0 +1,4 @@
+interface:
+  display_name: "XiYu Server Deploy"
+  short_description: "西域平台生产服务器部署验活回滚和发布报告完整流程指南"
+  default_prompt: "Use $xiyu-server-deploy to prepare, execute, verify, or document a XiYu production server deployment."

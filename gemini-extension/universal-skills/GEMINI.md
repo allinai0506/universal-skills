@@ -56,6 +56,14 @@ When the user invokes a skill by name (e.g. "use tdd-workflow", "用 security-re
 | `frontend-design` | Production-grade web UI — components, pages, applications |
 | `ui-ux-pro-max` | Design intelligence: 50+ styles, 97 palettes, 57 fonts, 99 UX guidelines |
 
+### 🚀 deployment
+| Skill | When to use |
+|-------|------------|
+| `deployment-patterns` | CI/CD pipelines, Docker, blue-green/canary/rolling deployments, health checks |
+| `docker-patterns` | Docker containerization best practices |
+| `database-migrations` | Database migration strategies and patterns |
+| `xiyu-server-deploy` | 西域数智化投标管理平台生产部署 — preflight、打包、部署、smoke验证、回滚 |
+
 ### 🌐 languages
 | Skill | When to use |
 |-------|------------|
