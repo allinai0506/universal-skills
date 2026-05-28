@@ -12,3 +12,6 @@ local/
 .idea/
 *.swp
 *.swo
+
+# 临时生成插件配置
+.claude-plugin/
