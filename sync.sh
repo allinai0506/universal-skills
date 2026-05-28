@@ -36,9 +36,53 @@ backup() {
     fi
 }
 
+# 扫描某个技能目录，把不在 categories/ 里的技能自动 import 到 categories/imported/
+# 用法: import_orphans <skills_dir> <source_label>
+import_orphans() {
+    local skills_dir="$1"
+    local source_label="$2"
+    local imported=0
+
+    [ -d "$skills_dir" ] || return 0
+
+    # 收集 categories/ 中所有已知技能名
+    local known_skills
+    known_skills=$(find "$UNIVERSAL_SKILLS/categories" -type f -name "SKILL.md" -exec dirname {} \; | xargs -I{} basename {} | sort)
+
+    # 遍历 skills_dir 中每个含 SKILL.md 的子目录
+    while IFS= read -r -d '' skill_md; do
+        local skill_dir skill_name
+        skill_dir="$(dirname "$skill_md")"
+        skill_name="$(basename "$skill_dir")"
+
+        # 如果 categories/ 里已有同名技能，跳过
+        if echo "$known_skills" | grep -qx "$skill_name"; then
+            continue
+        fi
+
+        # 否则 import 到 categories/imported/
+        local dest="$UNIVERSAL_SKILLS/categories/imported/$skill_name"
+        if [ ! -d "$dest" ]; then
+            mkdir -p "$UNIVERSAL_SKILLS/categories/imported"
+            cp -r "$skill_dir" "$dest"
+            warn "  ↑ 发现孤立技能 [$source_label] $skill_name → 已 import 到 categories/imported/"
+            imported=$((imported + 1))
+            # 更新 known_skills 避免重复 import
+            known_skills=$(printf '%s\n%s' "$known_skills" "$skill_name")
+        fi
+    done < <(find "$skills_dir" -maxdepth 2 -type f -name "SKILL.md" -print0)
+
+    if [ $imported -gt 0 ]; then
+        warn "  已自动 import $imported 个孤立技能到 categories/imported/，请 git add & commit"
+    fi
+}
+
 # 同步到 Claude Code
 sync_claude() {
     local target="$HOME/.claude/skills"
+
+    # 先扫描孤立技能，import 到 categories/ 再继续
+    import_orphans "$target" "Claude Code"
 
     if [ -d "$target" ] && [ ! -L "$target" ]; then
         backup "$target"
@@ -57,6 +101,9 @@ sync_claude() {
 # 同步到 Codex
 sync_codex() {
     local target="$HOME/.codex/skills"
+
+    # 先扫描孤立技能，import 到 categories/ 再继续
+    import_orphans "$target" "Codex"
 
     if [ -d "$target" ] && [ ! -L "$target" ]; then
         backup "$target"
@@ -83,7 +130,6 @@ sync_codex() {
 
         cp -r "$skill_dir" "$target/$skill_name"
         skill_count=$((skill_count + 1))
-        log "  → $skill_name"
     done < <(find "$UNIVERSAL_SKILLS/categories" -type f -name "SKILL.md" -print0)
 
     success "Codex skills 已同步 ($skill_count 个技能)"
