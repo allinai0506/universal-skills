@@ -1,6 +1,9 @@
 # 本地覆盖（不提交）
 local/
 
+# 自动导入的孤立技能（不提交）
+categories/imported/
+
 # 备份文件
 .backup/
 

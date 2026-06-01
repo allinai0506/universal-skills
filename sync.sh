@@ -21,7 +21,7 @@ warn() { echo -e "${YELLOW}⚠${NC} $1"; }
 error() { echo -e "${RED}✗${NC} $1"; }
 info() { echo -e "${CYAN}→${NC} $1"; }
 
-# 创建备份
+# 创建备份（自动清理旧备份，保留最新 2 份）
 backup() {
     local dir="$1"
     if [ -d "$dir" ] && [ ! -L "$dir" ]; then
@@ -29,14 +29,26 @@ backup() {
         local backup_name="$(basename "$dir")-$(date +%Y%m%d-%H%M%S)"
         log "备份 $dir 到 $BACKUP_DIR/$backup_name"
         cp -R "$dir" "$BACKUP_DIR/$backup_name"
+
+        # 自动清理：保留最新 2 份备份
+        local keep=2
+        local count=0
+        while IFS= read -r -d '' bak; do
+            count=$((count + 1))
+            if [ $count -gt $keep ]; then
+                rm -rf "$bak"
+                log "清理旧备份: $(basename "$bak")"
+            fi
+        done < <(find "$BACKUP_DIR" -maxdepth 1 -type d -name "skills-*" -print0 2>/dev/null | sort -zr)
     fi
 }
 
 # 扫描某个技能目录，把不在 categories/ 里的技能自动 import 到 categories/imported/
-# 用法: import_orphans <skills_dir> <source_label>
+# 用法: import_orphans <skills_dir> <source_label> [--scan-subdirs]
 import_orphans() {
     local skills_dir="$1"
     local source_label="$2"
+    local scan_subdirs="${3:-}"
     local imported=0
 
     [ -d "$skills_dir" ] || return 0
@@ -45,11 +57,24 @@ import_orphans() {
     local known_skills
     known_skills=$(find "$UNIVERSAL_SKILLS/categories" -type f -name "SKILL.md" -exec dirname {} \; | xargs -I{} basename {} | sort)
 
+    # 选择查找深度：单个目录或递归子目录
+    local find_cmd
+    if [ "$scan_subdirs" = "--scan-subdirs" ]; then
+        find_cmd="find \"$skills_dir\" -maxdepth 3 -type f -name \"SKILL.md\" -print0"
+    else
+        find_cmd="find \"$skills_dir\" -maxdepth 2 -type f -name \"SKILL.md\" -print0"
+    fi
+
     # 遍历 skills_dir 中每个含 SKILL.md 的子目录
     while IFS= read -r -d '' skill_md; do
         local skill_dir skill_name
         skill_dir="$(dirname "$skill_md")"
         skill_name="$(basename "$skill_dir")"
+
+        # 跳过自身和 system 内部技能
+        if [ "$skill_name" = "imported" ] || [ "$skill_name" = ".system" ]; then
+            continue
+        fi
 
         # 如果 categories/ 里已有同名技能，跳过
         if echo "$known_skills" | grep -qx "$skill_name"; then
@@ -66,7 +91,7 @@ import_orphans() {
             # 更新 known_skills 避免重复 import
             known_skills=$(printf '%s\n%s' "$known_skills" "$skill_name")
         fi
-    done < <(find "$skills_dir" -maxdepth 2 -type f -name "SKILL.md" -print0)
+    done < <(eval "$find_cmd")
 
     if [ $imported -gt 0 ]; then
         warn "  已自动 import $imported 个孤立技能到 categories/imported/，请 git add & commit"
@@ -148,34 +173,59 @@ sync_claude_projects() {
         # 创建 skills 目录
         mkdir -p "$skills_dir"
 
-        # 清理旧的分类目录 (若存在)
-        for category_dir in "$UNIVERSAL_SKILLS/categories"/*; do
-            if [ -d "$category_dir" ]; then
-                local category_name="$(basename "$category_dir")"
-                rm -rf "$skills_dir/$category_name"
+        # 第0步：发现并 import 项目独有的技能（不在 categories/ 中的）
+        import_orphans "$skills_dir" "$project_name" "--scan-subdirs"
+
+        # 第1步：清理旧的复制技能文件（转换为 symlink 前的遗留产物）
+        # 只删除已知 universal-skills 的旧 copy，保留 symlink 和项目自有技能
+        for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
+            if [ -d "$skill_dir" ] && [ -f "$skill_dir/SKILL.md" ]; then
+                local skill_name="$(basename "$skill_dir")"
+                local target="$skills_dir/$skill_name"
+                # 只删除非 symlink 的旧拷贝
+                if [ -d "$target" ] && [ ! -L "$target" ]; then
+                    rm -rf "$target"
+                fi
             fi
         done
 
-        # 同步技能 (扁平化复制，以兼容 Claude Code 技能解析)
+        # 清理旧分类目录（历史遗留）
+        for category_dir in "$UNIVERSAL_SKILLS/categories"/*; do
+            if [ -d "$category_dir" ]; then
+                local category_name="$(basename "$category_dir")"
+                if [ -d "$skills_dir/$category_name" ] && [ ! -L "$skills_dir/$category_name" ]; then
+                    rm -rf "$skills_dir/$category_name"
+                fi
+            fi
+        done
+
+        # 第2步：用 symlink 同步技能（零磁盘开销）
         local skill_count=0
         for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
             if [ -d "$skill_dir" ] && [ -f "$skill_dir/SKILL.md" ]; then
                 local skill_name="$(basename "$skill_dir")"
-                rm -rf "$skills_dir/$skill_name"
-                cp -r "$skill_dir" "$skills_dir/$skill_name"
+                local target="$skills_dir/$skill_name"
+                # 如果已存在同名 symlink，更新之；否则创建
+                if [ -L "$target" ]; then
+                    rm -f "$target"
+                elif [ -e "$target" ]; then
+                    # 项目自有技能与 universal 同名 — 跳过 universal 版本
+                    continue
+                fi
+                ln -sf "$skill_dir" "$target"
                 ((skill_count++))
             fi
         done
 
         if [ $skill_count -gt 0 ]; then
-            log "  → $project_name: $skill_count 个技能"
+            log "  → $project_name: $skill_count 个技能 (symlink)"
             synced_count=$((synced_count + 1))
             skill_count_total=$((skill_count_total + skill_count))
         fi
     done
 
     if [ $synced_count -gt 0 ]; then
-        success "已同步 $synced_count 个项目的 skills ($skill_count_total 个技能文件)"
+        success "已同步 $synced_count 个项目的 skills ($skill_count_total 个技能，均为 symlink)"
     else
         warn "未找到任何项目"
     fi
@@ -250,7 +300,7 @@ sync_codex() {
     for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
         if [ -d "$skill_dir" ] && [ -f "$skill_dir/SKILL.md" ]; then
             local skill_name="$(basename "$skill_dir")"
-            cp -r "$skill_dir" "$target/$skill_name"
+            ln -sf "$skill_dir" "$target/$skill_name"
             skill_count=$((skill_count + 1))
         fi
     done
@@ -258,14 +308,14 @@ sync_codex() {
     for skill_dir in "$UNIVERSAL_SKILLS/categories"/*; do
         if [ -d "$skill_dir" ] && [ -f "$skill_dir/SKILL.md" ]; then
             local skill_name="$(basename "$skill_dir")"
-            if [ ! -d "$target/$skill_name" ]; then
-                cp -r "$skill_dir" "$target/$skill_name"
+            if [ ! -d "$target/$skill_name" ] && [ ! -L "$target/$skill_name" ]; then
+                ln -sf "$skill_dir" "$target/$skill_name"
                 skill_count=$((skill_count + 1))
             fi
         fi
     done
 
-    success "Codex skills 已同步 ($skill_count 个技能)"
+    success "Codex skills 已同步 ($skill_count 个技能，均为 symlink)"
 }
 
 # 同步到项目级 skills（为 Gemini/Gemini in projects）
@@ -450,6 +500,7 @@ SKIP_GLOBAL=false
 SKIP_PROJECTS=false
 SKIP_CODEX=false
 SKIP_GEMINI=false
+DO_DISCOVER=false
 SPECIFIC_PROJECT=""
 
 while [[ $# -gt 0 ]]; do
@@ -459,6 +510,7 @@ while [[ $# -gt 0 ]]; do
         --no-codex) SKIP_CODEX=true ;;
         --no-gemini) SKIP_GEMINI=true ;;
         --project=*) SPECIFIC_PROJECT="$2"; shift ;;
+        --discover) DO_DISCOVER=true ;;
         --help)
             echo "用法: $0 [选项]"
             echo ""
@@ -468,6 +520,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --no-codex      跳过 Codex 同步"
             echo "  --no-gemini     跳过 Gemini 同步"
             echo "  --project NAME  只同步指定项目"
+            echo "  --discover      发现并索引项目中隐藏的技能"
             echo "  --help          显示此帮助"
             exit 0
             ;;
@@ -478,6 +531,33 @@ done
 
 log "开始同步 Universal Skills..."
 echo ""
+
+if [ "$DO_DISCOVER" = true ]; then
+    discover_projects
+
+    info "扫描项目中的隐藏技能..."
+    for project_dir in "${unique_projects[@]}"; do
+        project_name="$(basename "$project_dir")"
+        skills_dir="$project_dir/.claude/skills"
+        import_orphans "$skills_dir" "$project_name" "--scan-subdirs"
+    done
+
+    # 也扫描已知工作目录
+    for base_dir in "$HOME/xiyu" "$HOME/code" "$HOME/work"; do
+        if [ -d "$base_dir" ]; then
+            while IFS= read -r -d '' project_skills; do
+                if [ -d "$project_skills" ]; then
+                    pname=$(basename "$(dirname "$(dirname "$project_skills")")")
+                    import_orphans "$project_skills" "$pname" "--scan-subdirs"
+                fi
+            done < <(find "$base_dir" -maxdepth 3 -type d -name "skills" -path "*/.claude/skills" -print0 2>/dev/null)
+        fi
+    done
+
+    success "技能发现完成！"
+    echo "检查 categories/imported/ 中是否有新发现的技能。"
+    exit 0
+fi
 
 if [ "$SKIP_GLOBAL" = false ]; then
     sync_claude_global
@@ -507,7 +587,9 @@ success "同步完成！"
 echo ""
 echo "提示："
 echo "  - 本地自定义技能: $UNIVERSAL_SKILLS/local/"
-echo "  - 备份位置: $BACKUP_DIR"
+echo "  - 备份位置: $BACKUP_DIR (自动保留最新 2 份)"
+echo "  - 项目技能使用 symlink，零磁盘开销"
+echo "  - 发现项目中隐藏的技能: $0 --discover"
 [ "$SKIP_GLOBAL" = false ] && echo "  - ⚠️  重启 Claude Code 以加载新 skills / 插件"
 echo ""
 echo "已同步的目标："

@@ -19,12 +19,19 @@ Skills are modular, self-contained folders that extend AI capabilities with spec
 ```
 
 This script:
-1. Copies `categories/` contents to `~/.claude/skills/`
-2. Copies each skill (with `SKILL.md`) to `~/.codex/skills/`
-3. Creates symlinks in configured projects (`clawd`, `nexusarchive`, etc.)
-4. Manages Gemini extension and MCP configuration
+1. Symlinks skills from `categories/` to each project's `.claude/skills/`（零磁盘开销）
+2. Discovers project-unique hidden skills and imports them to `categories/imported/`
+3. Creates symlinks in configured projects (`clawd`, `xiyu`, etc.)
+4. Manages Gemini extension, Cursor rules, and MCP configuration
+5. Auto-cleans old backups（保留最新 2 份）
 
 **Run after:** Adding new skills, modifying existing skills, or pulling updates.
+
+### Discover Hidden Skills in Projects
+```bash
+./sync.sh --discover
+```
+Scans all known projects for skills not yet in `categories/` and imports them to `categories/imported/`. Run this periodically or when starting work in a new project.
 
 ### Test a Skill's Search Function (ui-ux-pro-max)
 ```bash
@@ -45,13 +52,14 @@ categories/
 ├── architecture/         # Architecture patterns (defense, strategic planning)
 ├── coding/              # Development patterns (TDD, standards, patterns)
 ├── debugging/           # Debugging methodologies (systematic, root-cause)
+├── imported/            # Auto-discovered skills from projects (gitignored)
 ├── refactoring/         # Refactoring practices (entropy reduction)
 ├── security-review/     # Security review checklist
 ├── ui-ux/              # Frontend design (frontend-design, ui-ux-pro-max)
 └── workflow/           # Development workflows (brainstorming, plans, TDD)
 
 local/                  # Local overrides (gitignored)
-skills/                 # Legacy directory (deprecated, use categories/)
+.backup/                # Timestamped backups (auto-cleaned, gitignored)
 ```
 
 ## Skill Anatomy
@@ -143,10 +151,33 @@ Meta-tool for creating new skills with:
 ## Sync Script Details
 
 The `sync.sh` script handles:
-- **Claude Code:** Full copy of `categories/` to `~/.claude/skills/`
-- **Codex:** Flat copy of all skills (deduplicated by name) to `~/.codex/skills/`
-- **Projects:** Creates `universal-skills` symlinks in configured projects
-- **Backups:** Stores backups in `.backup/` before overwriting
+- **Claude Code 项目级:** Symlink 所有技能到每个项目的 `.claude/skills/`（零磁盘开销）
+- **Codex:** 扁平化复制到 `~/.codex/skills/`
+- **Cursor:** 创建 `.mdc` 规则文件到 `.cursor/rules/`
+- **Project symlinks:** 在 xiyu worktrees 等项目下创建 `skills/universal-skills` symlink
+- **技能发现:** 自动扫描项目中的独有技能，import 到 `categories/imported/`
+- **备份:** 自动备份并在下次备份时清理旧版本（保留 2 份）
+- **Backups:** 自动备份 `target` 目录，然后在下次备份时清理旧版本
+
+### 清除垃圾文件
+
+```bash
+# 手动清理备份（保留最新 2 份，sync.sh 运行时会自动完成）
+ls -1t .backup/ | tail -n +3 | while read old; do rm -rf ".backup/$old"; done
+
+# 删除旧的已跟踪备份（如果曾提交过）
+git rm -r .backup/skills-*
+```
+
+### 技能发现
+
+```bash
+# 扫描所有项目，发现不在 categories/ 中的独有技能
+./sync.sh --discover
+
+# 手动列出项目中的技能
+find ~/xiyu ~/clawd -maxdepth 4 -name "SKILL.md" -path "*/.claude/skills/*" 2>/dev/null
+```
 
 ## File Naming Conventions
 
