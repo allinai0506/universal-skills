@@ -1,0 +1,32 @@
+{
+  "eval_id": 3,
+  "eval_name": "generate-slides-from-wiki",
+  "prompt": "帮我把 wiki 里关于 LLM 架构演变的研究整理成一个 Marp 幻灯片，放在 outputs/slides/ 下。大概 6-8 页，要有从 Transformer → MoE → 最新的趋势。如果 wiki/concepts/ 里有相关配图也嵌入进去。",
+  "assertions": [
+    {
+      "name": "creates-marp-file",
+      "text": "A Marp slide file is created under outputs/slides/",
+      "check": "file_exists_glob"
+    },
+    {
+      "name": "has-marp-frontmatter",
+      "text": "Slide file has marp: true frontmatter",
+      "check": "content_contains"
+    },
+    {
+      "name": "has-slide-separators",
+      "text": "Uses '---' slide separators (Marp format)",
+      "check": "content_contains_regex"
+    },
+    {
+      "name": "has-sufficient-slides",
+      "text": "Has at least 5 slides (reasonable for 6-8 range)",
+      "check": "content_contains_regex"
+    },
+    {
+      "name": "covers-transformer-to-moe",
+      "text": "Covers both Transformer and MoE topics",
+      "check": "content_contains"
+    }
+  ]
+}

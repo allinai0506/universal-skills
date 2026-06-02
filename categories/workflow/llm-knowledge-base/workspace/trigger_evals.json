@@ -1,0 +1,82 @@
+[
+  {
+    "query": "最近在追一篇关于 Scaling Law 的综述，想把它和我之前整理的所有 LLM 论文串起来做成一个知识库，放 Obsidian 里方便检索。能帮我把 raw/articles/ 里的几篇新文章 ingest 到 wiki 里吗？",
+    "should_trigger": true
+  },
+  {
+    "query": "帮我跑一下 wiki 健康检查，看看有没有孤立页面或者断裂的引用",
+    "should_trigger": true
+  },
+  {
+    "query": "我 Obsidian 里有个 research 目录，里面的笔记越堆越多，能不能帮我把它们整理成一个结构化的知识库？",
+    "should_trigger": true
+  },
+  {
+    "query": "从我的 wiki 知识库里把关于 Attention 机制和 MoE 架构的联系整理成一个 Marp 幻灯片，大概 8 页",
+    "should_trigger": true
+  },
+  {
+    "query": "刚用 Obsidian Web Clipper 抓了一篇文章到 raw/ 下面，帮我 summarize 一下然后加到 wiki 对应的分类里",
+    "should_trigger": true
+  },
+  {
+    "query": "我对 diffusion model 和 transformer 的关系很困惑，你读一下我 wiki 里相关的文章，帮我理清楚它们之间的联系，输出一份报告放到 outputs/reports/",
+    "should_trigger": true
+  },
+  {
+    "query": "帮我看看 wiki 里有哪些知识点之间可能有潜在关联但还没建立连接，提几个新文章的建议",
+    "should_trigger": true
+  },
+  {
+    "query": "在 tools/ 下面帮我写一个 wiki 搜索引擎，用 BM25 就行，能让 agent 后期用它做复杂查询",
+    "should_trigger": true
+  },
+  {
+    "query": "我最近在研究多模态模型，这篇论文的 PDF 放在 raw/papers/multimodal-2025.pdf，帮我提取核心概念然后更新 wiki",
+    "should_trigger": true
+  },
+  {
+    "query": "帮我用 matplotlib 把 wiki 各概念之间的引用关系画一个知识图谱放到 outputs/figures/",
+    "should_trigger": true
+  },
+  {
+    "query": "Wikipedia 上关于 Transformer 的页面有几个关键错误，帮我查一下源码交叉验证",
+    "should_trigger": false
+  },
+  {
+    "query": "客服知识库里有几个过期的 FAQ 需要更新，帮我查一下哪些需要修改",
+    "should_trigger": false
+  },
+  {
+    "query": "帮我查一下 Obsidian 矿物的硬度、解理和晶体结构，写一份矿物学报告",
+    "should_trigger": false
+  },
+  {
+    "query": "帮我整理一下这周的开发周报，按项目分类列出来",
+    "should_trigger": false
+  },
+  {
+    "query": "研究一下我们这个模块的代码结构，看看有没有循环依赖问题需要重构",
+    "should_trigger": false
+  },
+  {
+    "query": "我的 Obsidian 主题坏了，编辑器里显示不正常，帮我诊断一下是哪个 CSS 片段的问题",
+    "should_trigger": false
+  },
+  {
+    "query": "帮我搜一下这个项目 wiki 目录下有没有关于部署的文档",
+    "should_trigger": false
+  },
+  {
+    "query": "帮我用 Marp 做一份介绍我们团队的幻灯片，放 team-slides/ 目录下",
+    "should_trigger": false
+  },
+  {
+    "query": "把这份会议纪要整理一下，提取 action items 发给参会人员",
+    "should_trigger": false
+  },
+  {
+    "query": "帮我搜索一下知识蒸馏的相关论文，列出 5 篇影响力最大的",
+    "should_trigger": false
+  }
+]

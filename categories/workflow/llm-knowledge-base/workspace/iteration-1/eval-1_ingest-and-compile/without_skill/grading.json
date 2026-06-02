@@ -1,0 +1,170 @@
+{
+  "eval_id": "1_ingest",
+  "results": [
+    {
+      "name": "creates-wiki-article",
+      "text": "A wiki article about MoE is created under wiki/articles/ or wiki/concepts/",
+      "passed": true,
+      "evidence": [
+        "moe-2024.md",
+        "sparse-activation.md"
+      ]
+    },
+    {
+      "name": "creates-wiki-index",
+      "text": "A wiki index or table of contents is created (wiki/index.md or equivalent)",
+      "passed": true,
+      "evidence": [
+        "index.md"
+      ]
+    },
+    {
+      "name": "uses-wiki-links",
+      "text": "Articles use [[wiki-link]] syntax for cross-references",
+      "passed": true,
+      "evidence": [
+        "[[Mixture of Experts: Scaling Transformer Models Beyond Dense Limits]]",
+        "[[Soft MoE]]"
+      ]
+    },
+    {
+      "name": "has-provenance",
+      "text": "Wiki article links back to the raw source (moe-2024.md reference exists)",
+      "passed": true,
+      "evidence": [
+        "INGEST_LOG.md",
+        "index.md"
+      ]
+    },
+    {
+      "name": "structured-frontmatter",
+      "text": "Wiki article has YAML frontmatter with title and tags",
+      "passed": true,
+      "evidence": [
+        "index.md",
+        "moe-2024.md"
+      ]
+    },
+    {
+      "name": "creates-report",
+      "text": "A markdown report is generated under outputs/reports/",
+      "passed": false,
+      "evidence": [
+        "No report files found"
+      ]
+    },
+    {
+      "name": "has-citations",
+      "text": "Report cites specific wiki pages or concepts",
+      "passed": true,
+      "evidence": [
+        "index.md",
+        "moe-2024.md"
+      ]
+    },
+    {
+      "name": "creates-outputs-dir",
+      "text": "Outputs directory structure follows skill convention",
+      "passed": false,
+      "evidence": [
+        "No outputs/ directory found"
+      ]
+    },
+    {
+      "name": "adds-connections",
+      "text": "New connections or gaps are identified (wiki/connections/ or equivalent)",
+      "passed": true,
+      "evidence": [
+        "moe-timeline-2022-2024.md"
+      ]
+    },
+    {
+      "name": "synthesized-answer",
+      "text": "Report contains a synthesized answer, not just a list of sources",
+      "passed": true,
+      "evidence": [
+        "Longest file: 3696 chars"
+      ]
+    },
+    {
+      "name": "creates-marp-file",
+      "text": "A Marp slide file is created under outputs/slides/",
+      "passed": false,
+      "evidence": [
+        "No Marp files found"
+      ]
+    },
+    {
+      "name": "has-marp-frontmatter",
+      "text": "Slide file has marp: true frontmatter",
+      "passed": false,
+      "evidence": [
+        "No marp:true found"
+      ]
+    },
+    {
+      "name": "has-slide-separators",
+      "text": "Uses '---' slide separators (Marp format)",
+      "passed": true,
+      "evidence": [
+        "1 separators in index.md"
+      ]
+    },
+    {
+      "name": "has-sufficient-slides",
+      "text": "Has at least 5 slides",
+      "passed": false,
+      "evidence": [
+        "Only 1 separators found"
+      ]
+    },
+    {
+      "name": "covers-transformer-to-moe",
+      "text": "Covers both Transformer and MoE topics",
+      "passed": true,
+      "evidence": [
+        "Transformer: ✅, MoE: ✅"
+      ]
+    },
+    {
+      "name": "produces-lint-report",
+      "text": "A lint/health check report is produced",
+      "passed": false,
+      "evidence": [
+        "No lint report found"
+      ]
+    },
+    {
+      "name": "identifies-orphans",
+      "text": "Report checks for orphan pages",
+      "passed": false,
+      "evidence": [
+        "No orphan check found"
+      ]
+    },
+    {
+      "name": "checks-references",
+      "text": "Report checks for broken backlinks or references",
+      "passed": true,
+      "evidence": [
+        "INGEST_LOG.md"
+      ]
+    },
+    {
+      "name": "has-recommendations",
+      "text": "Report includes actionable recommendations",
+      "passed": true,
+      "evidence": [
+        "INGEST_LOG.md"
+      ]
+    },
+    {
+      "name": "prioritized-fixes",
+      "text": "Report has prioritized or categorized issue list",
+      "passed": false,
+      "evidence": [
+        "No prioritization found"
+      ]
+    }
+  ]
+}

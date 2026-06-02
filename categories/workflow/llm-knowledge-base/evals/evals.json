@@ -1,0 +1,141 @@
+{
+  "skill_name": "llm-knowledge-base",
+  "evals": [
+    {
+      "id": 1,
+      "name": "ingest-and-compile-article",
+      "prompt": "我最近在研究 transformer 架构的演进，刚读了一篇文章说 Google 的 Mixture of Experts (MoE) 在 2024 年的新变体实现了 3x 稀疏激活比。我想把这个加到我的知识库里。文章在我 evals/fixtures/raw/articles/moe-2024.md，帮我走一下完整的 ingest 和 compile 流程。",
+      "files": ["evals/fixtures/raw/articles/moe-2024.md"],
+      "expected_output": "Wiki articles for the MoE concept, updated index, backlinks, and provenance",
+      "assertions": [
+        {
+          "name": "creates-wiki-article",
+          "text": "A wiki article about MoE is created under wiki/articles/ or wiki/concepts/",
+          "check": "file_exists_glob"
+        },
+        {
+          "name": "creates-wiki-index",
+          "text": "A wiki index or table of contents is created (wiki/index.md or equivalent)",
+          "check": "file_exists"
+        },
+        {
+          "name": "uses-wiki-links",
+          "text": "Articles use [[wiki-link]] syntax for cross-references",
+          "check": "content_contains_regex"
+        },
+        {
+          "name": "has-provenance",
+          "text": "Wiki article links back to the raw source (moe-2024.md reference exists)",
+          "check": "content_contains"
+        },
+        {
+          "name": "structured-frontmatter",
+          "text": "Wiki article has YAML frontmatter with title and tags",
+          "check": "content_contains_regex"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "query-and-synthesize",
+      "prompt": "我的知识库在 wiki/ 目录下，已经有一些关于 ML 架构的研究笔记了。帮我查一下：我目前的研究里，attention mechanism 和 mixture of experts 之间有什么联系？有没有已知的交叉工作？输出一份 markdown 报告到 outputs/reports/ 下，同时看看有没有需要补充的连接。",
+      "files": [],
+      "expected_output": "Synthesized report with citations to wiki pages, plus new connections added",
+      "assertions": [
+        {
+          "name": "creates-report",
+          "text": "A markdown report is generated under outputs/reports/",
+          "check": "file_exists_glob"
+        },
+        {
+          "name": "has-citations",
+          "text": "Report cites specific wiki pages or concepts",
+          "check": "content_contains_regex"
+        },
+        {
+          "name": "creates-outputs-dir",
+          "text": "Outputs directory structure follows skill convention",
+          "check": "directory_exists"
+        },
+        {
+          "name": "adds-connections",
+          "text": "New connections or gaps are identified",
+          "check": "file_exists_glob"
+        },
+        {
+          "name": "synthesized-answer",
+          "text": "Report contains a synthesized answer, not just a list of sources",
+          "check": "content_length_min"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "generate-slides-from-wiki",
+      "prompt": "帮我把 wiki 里关于 LLM 架构演变的研究整理成一个 Marp 幻灯片，放在 outputs/slides/ 下。大概 6-8 页，要有从 Transformer → MoE → 最新的趋势。如果 wiki/concepts/ 里有相关配图也嵌入进去。",
+      "files": [],
+      "expected_output": "Marp-format slide deck with 6-8 slides, cross-referencing wiki articles",
+      "assertions": [
+        {
+          "name": "creates-marp-file",
+          "text": "A Marp slide file is created under outputs/slides/",
+          "check": "file_exists_glob"
+        },
+        {
+          "name": "has-marp-frontmatter",
+          "text": "Slide file has marp: true frontmatter",
+          "check": "content_contains"
+        },
+        {
+          "name": "has-slide-separators",
+          "text": "Uses '---' slide separators (Marp format)",
+          "check": "content_contains_regex"
+        },
+        {
+          "name": "has-sufficient-slides",
+          "text": "Has at least 5 slides",
+          "check": "content_contains_regex"
+        },
+        {
+          "name": "covers-transformer-to-moe",
+          "text": "Covers both Transformer and MoE topics",
+          "check": "content_contains"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "lint-health-check",
+      "prompt": "跑一下我的 wiki 健康检查。看看有没有孤立页面、断裂的引用、不一致的数据，还有哪些值得写的新主题方向。给我一份检查报告。",
+      "files": [],
+      "expected_output": "Health check report with prioritized issues and suggestions",
+      "assertions": [
+        {
+          "name": "produces-lint-report",
+          "text": "A lint/health check report is produced",
+          "check": "file_exists"
+        },
+        {
+          "name": "identifies-orphans",
+          "text": "Report checks for orphan pages",
+          "check": "content_contains"
+        },
+        {
+          "name": "checks-references",
+          "text": "Report checks for broken backlinks or references",
+          "check": "content_contains"
+        },
+        {
+          "name": "has-recommendations",
+          "text": "Report includes actionable recommendations",
+          "check": "content_contains"
+        },
+        {
+          "name": "prioritized-fixes",
+          "text": "Report has prioritized or categorized issue list",
+          "check": "content_contains"
+        }
+      ]
+    }
+  ]
+}
