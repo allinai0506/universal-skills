@@ -1,0 +1,66 @@
+# Skill Metadata — blueprint-driven-development
+# 平台兼容性、触发条件、工具依赖
+
+name: blueprint-driven-development
+version: "2.0"
+last_updated: "2026-06-06"
+
+# 支持的 AI 平台
+platforms:
+  - claude-code     # Claude Code (primary)
+  - cursor          # Cursor IDE
+  - codex           # Codex
+  - gemini          # Gemini CLI (via MCP symlink)
+
+# 触发关键词（description 的机器可读版本）
+trigger_keywords:
+  - 做标讯
+  - 按蓝图
+  - 产品蓝图
+  - 实现蓝图
+  - 对标蓝图
+  - 验证小节
+  - 推进标讯
+  - 接着上次
+  - 继续做
+  - 下一节
+  - 差距分析
+  - 对标
+  - 检查小节
+  - 蓝图书
+  - blueprint
+  - gap-analysis
+
+# 依赖的工具（按需按顺序使用）
+dependencies:
+  tools:
+    - lark-doc           # 读取飞书蓝图文档（Phase 1）
+    - lark-cli          # 飞书 CLI 工具
+    - playwright        # 浏览器自动化验证（Phase 4）
+    - git              # 分支管理、检查点持久化
+    - bash             # 脚本执行
+    - mcp:browser      # 浏览器操控（Cursor/CClaude 内置）
+    - mcp:filesystem   # 文件读写
+  languages:
+    - bash             # 脚本语言
+    - javascript       # verify-page.js
+  external_apis: []    # 无需外部 API
+
+# 持久化数据目录（用于记忆）
+data_dir: "${CLAUDE_PLUGIN_DATA:-./.blueprint-data}"
+
+# 约束条件
+constraints:
+  requires_worktree: true   # 需要 git worktree 环境
+  requires_mvn: true        # 需要 Maven（后端编译）
+  requires_npm: true        # 需要 npm/node（前端构建）
+  requires_mysql: true       # 需要 MySQL 8.0
+  requires_dev_server: true # 需要前后端服务运行
+
+# 版本兼容性
+compatibility:
+  backend: "xiyu-bid (Spring Boot)"
+  frontend: "Vue 3 + Vite"
+  database: "MySQL 8.0"
+  min_node: "18"
+  min_java: "17"

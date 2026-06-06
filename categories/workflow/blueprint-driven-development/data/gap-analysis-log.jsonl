@@ -1,0 +1,14 @@
+# Append-only gap-analysis log — one JSON line per completed Phase 2.
+# Managed by scripts/memory-log.sh. Do NOT edit manually.
+#
+# Schema:
+# {
+#   "timestamp": "ISO8601",
+#   "section": "4.2.1",
+#   "worktree": "/path/to/worktree",
+#   "gap_file": "gap-analysis.md",
+#   "implemented": 3,
+#   "gaps": 2,
+#   "partial": 1,
+#   "notes": "自由备注"
+# }

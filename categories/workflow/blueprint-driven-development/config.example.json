@@ -1,0 +1,46 @@
+# blueprint-driven-development 配置模板
+# 将此文件复制到 <worktree>/.blueprint-config.json 并填写实际值
+# 缺少配置时，Agent 会交互式询问用户
+
+{
+  "blueprint": {
+    "doc_url": "",
+    "doc_token": "",
+    "section": "",
+    "section_block_id": ""
+  },
+
+  "project": {
+    "worktree_root": "",
+    "backend_module": "backend/src/main/java/com/xiyu/bid",
+    "frontend_module": "src",
+    "migration_dir": "backend/src/main/resources/db/migration-mysql"
+  },
+
+  "dev": {
+    "backend_port": 18081,
+    "frontend_port": 3000,
+    "db_name": "xiyu_bid_claude",
+    "db_password": "XiyuDB!2026",
+    "jwt_secret": "xiyu-bid-poc-local-dev-secret-key-please-change-in-prod-32bytes-min"
+  },
+
+  "roles": {
+    "bid_admin": { "password": "Test@123" },
+    "bid_lead":  { "password": "Test@123" },
+    "sales":      { "password": "Test@123" },
+    "bid_specialist": { "password": "Test@123" }
+  },
+
+  "verification": {
+    "token_cache_file": "/tmp/blueprint-tokens.json",
+    "gap_analysis_file": "gap-analysis.md",
+    "checkpoint_file": ".blueprint-checkpoint.json",
+    "memory_log_file": ".blueprint-data/gap-analysis-log.jsonl"
+  },
+
+  "lark": {
+    "cli_path": "lark-cli",
+    "auth_verified": false
+  }
+}
