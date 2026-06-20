@@ -20,6 +20,7 @@ For detailed variables, scripts, and checklists, read `references/release-runboo
 
 1. Establish the target environment.
    - Confirm repository/worktree path, branch, commit, target host, public web URL, API URL, backend service name, app root, frontend public dir, and database name.
+   - To directly verify server access, use: `ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 jetty@172.16.38.78 'hostname; date; whoami'`.
    - Say clearly whether you are preparing a plan, editing release automation, executing a deployment, or diagnosing a failed deployment.
 
 2. Inspect the current release surface.

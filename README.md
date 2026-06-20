@@ -6,6 +6,7 @@
 
 - **Claude Code** - `~/.claude/skills/`
 - **Codex** - `~/.codex/skills/`
+- **Trae CN Agent** - `~/.trae-cn/skills/`
 - **Gemini** - 通过 MCP 服务器
 
 ## 目录结构

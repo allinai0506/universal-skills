@@ -463,6 +463,45 @@ sync_zcode() {
     fi
 }
 
+# 同步到 Trae CN Agent (~/.trae-cn/skills/)
+# Trae CN 在 ~/.trae-cn/skills/ 下管理 Agent skills，含 marketplace/builtin 技能。
+# 必须增量同步，不得 rm -rf，避免覆盖 Trae 自带或已安装的 marketplace 技能。
+sync_trae_cn() {
+    local target="$HOME/.trae-cn/skills"
+
+    if [ ! -d "$HOME/.trae-cn" ]; then
+        return
+    fi
+
+    mkdir -p "$target"
+
+    local skill_count=0
+    local refreshed=0
+    local skipped=0
+    for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
+        if [ -d "$skill_dir" ] && [ -f "$skill_dir/SKILL.md" ]; then
+            local skill_name="$(basename "$skill_dir")"
+            local link="$target/$skill_name"
+
+            if [ -L "$link" ]; then
+                rm -f "$link"
+                refreshed=$((refreshed + 1))
+            elif [ -e "$link" ]; then
+                skipped=$((skipped + 1))
+                continue
+            fi
+
+            ln -sf "$skill_dir" "$link"
+            skill_count=$((skill_count + 1))
+        fi
+    done
+
+    success "Trae CN Agent skills 已同步 ($skill_count 个技能，增量 symlink)"
+    [ $refreshed -gt 0 ] && log "  刷新 $refreshed 个已有 symlink"
+    [ $skipped -gt 0 ] && warn "  跳过 $skipped 个已存在的非 symlink 技能（保护 marketplace/builtin）"
+    log "  路径: ~/.trae-cn/skills/"
+}
+
 # 同步到 Kimi Code (~/.kimi-code/skills/)
 # Kimi Code 通过 config.toml 的 extra_skill_dirs 加载技能，并用
 # merge_all_available_skills = true 合并。需建扁平 skills 目录并注册。
@@ -686,6 +725,7 @@ SKIP_PROJECTS=false
 SKIP_CODEX=false
 SKIP_GEMINI=false
 SKIP_ZCODE=false
+SKIP_TRAE_CN=false
 SKIP_KIMI=false
 DO_DISCOVER=false
 SPECIFIC_PROJECT=""
@@ -697,6 +737,7 @@ while [[ $# -gt 0 ]]; do
         --no-codex) SKIP_CODEX=true ;;
         --no-gemini) SKIP_GEMINI=true ;;
         --no-zcode) SKIP_ZCODE=true ;;
+        --no-trae-cn) SKIP_TRAE_CN=true ;;
         --no-kimi) SKIP_KIMI=true ;;
         --project=*) SPECIFIC_PROJECT="$2"; shift ;;
         --discover) DO_DISCOVER=true ;;
@@ -709,6 +750,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --no-codex      跳过 Codex 同步"
             echo "  --no-gemini     跳过 Gemini 同步"
             echo "  --no-zcode      跳过 ZCode 同步"
+            echo "  --no-trae-cn    跳过 Trae CN Agent 同步"
             echo "  --no-kimi       跳过 Kimi Code 同步"
             echo "  --project NAME  只同步指定项目"
             echo "  --discover      发现并索引项目中隐藏的技能"
@@ -758,7 +800,8 @@ fi
 
 if [ "$SKIP_PROJECTS" = false ]; then
     sync_claude_projects
-    sync_cursor_projects
+    # Cursor .mdc rule generation is intentionally disabled.
+    # Skills are synced through symlinks for tools that support skill directories.
     sync_projects
     echo ""
 fi
@@ -776,6 +819,11 @@ fi
 
 if [ "$SKIP_ZCODE" = false ]; then
     sync_zcode
+    echo ""
+fi
+
+if [ "$SKIP_TRAE_CN" = false ]; then
+    sync_trae_cn
     echo ""
 fi
 
@@ -797,11 +845,11 @@ echo "已同步的目标："
 [ "$SKIP_GLOBAL" = false ] && echo "  ✓ Claude Code 插件 (~/.claude/plugins/cache/local/universal-skills/)"
 [ "$SKIP_GLOBAL" = false ] && echo "  ✓ Claude Code 全局 (~/.claude/skills/) ← symlink 参考"
 [ "$SKIP_PROJECTS" = false ] && echo "  ✓ Claude Code 项目级 (.claude/skills/) ← 主要"
-[ "$SKIP_PROJECTS" = false ] && echo "  ✓ Cursor 项目级 (.cursor/rules/) ← Cursor Rules"
 [ "$SKIP_CODEX" = false ] && echo "  ✓ Codex (~/.codex/skills/)"
 [ "$SKIP_GEMINI" = false ] && echo "  ✓ Gemini CLI (extension)"
 [ "$SKIP_GEMINI" = false ] && echo "  ✓ Antigravity (GEMINI.md 注入到 ~/.gemini/extensions/universal-skills/)"
 [ "$SKIP_ZCODE" = false ] && echo "  ✓ ZCode (~/.agents/skills/, ~/.zcode/skills/) ← 增量 symlink"
+[ "$SKIP_TRAE_CN" = false ] && echo "  ✓ Trae CN Agent (~/.trae-cn/skills/) ← 增量 symlink"
 [ "$SKIP_KIMI" = false ] && echo "  ✓ Kimi Code (~/.kimi-code/skills/ + config.toml)"
 [ "$SKIP_PROJECTS" = false ] && echo "  ✓ 项目级 symlinks (clawd, xiyu, etc.)"
 echo ""
