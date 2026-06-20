@@ -98,6 +98,74 @@ import_orphans() {
     fi
 }
 
+# 幂等地把一个目录注册到 TOML 配置文件的 extra_skill_dirs 数组中
+# 用法: register_extra_skill_dir <config_file> <dir>
+register_extra_skill_dir() {
+    local config_file="$1"
+    local dir="$2"
+
+    [ -f "$config_file" ] || return 0
+
+    # 已存在则跳过（精确匹配路径）
+    if grep -qE "extra_skill_dirs.*\"$dir\"" "$config_file"; then
+        return 0
+    fi
+
+    if grep -qE '^extra_skill_dirs\s*=\s*\[\s*\]' "$config_file"; then
+        # 空数组 → 替换为含目标路径
+        python3 - "$config_file" "$dir" << 'PYEOF'
+import io, re, sys
+path, new_dir = sys.argv[1], sys.argv[2]
+with open(path, 'r') as f:
+    content = f.read()
+content = re.sub(
+    r'^extra_skill_dirs\s*=\s*\[\s*\]',
+    f'extra_skill_dirs = ["{new_dir}"]',
+    content,
+    count=1,
+    flags=re.MULTILINE,
+)
+with open(path, 'w') as f:
+    f.write(content)
+PYEOF
+    else
+        # 非空数组 → 在 ] 前插入
+        python3 - "$config_file" "$dir" << 'PYEOF'
+import re, sys
+path, new_dir = sys.argv[1], sys.argv[2]
+with open(path, 'r') as f:
+    lines = f.readlines()
+out = []
+inserted = False
+for line in lines:
+    if not inserted and re.match(r'^extra_skill_dirs\s*=\s*\[', line):
+        out.append(line)
+        if ']' not in line:
+            # 多行数组：在闭合 ] 前插入
+            buf = [line]
+            for nxt in lines[len(out):]:
+                if ']' in nxt:
+                    out.append(f'    "{new_dir}",\n')
+                    out.append(nxt)
+                    inserted = True
+                    break
+                else:
+                    out.append(nxt)
+            # 跳过已消费的行
+            break
+        else:
+            # 单行数组：在 ] 前插入
+            out.append(re.sub(r'\]', f'    "{new_dir}",\n]', line, count=1))
+            inserted = True
+            break
+    else:
+        out.append(line)
+with open(path, 'w') as f:
+    f.writelines(out)
+PYEOF
+    fi
+}
+
 # 同步到全局 Claude（保留，用于某些情况）
 sync_claude_global() {
     local target="$HOME/.claude/skills"
@@ -116,7 +184,7 @@ sync_claude_global() {
     for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
         if [ -d "$skill_dir" ] && [ -f "$skill_dir/SKILL.md" ]; then
             local skill_name="$(basename "$skill_dir")"
-            cp -r "$skill_dir" "$target/$skill_name"
+            ln -sf "$skill_dir" "$target/$skill_name"
             skill_count=$((skill_count + 1))
         fi
     done
@@ -318,6 +386,123 @@ sync_codex() {
     success "Codex skills 已同步 ($skill_count 个技能，均为 symlink)"
 }
 
+# 同步到 ZCode (~/.agents/skills/)
+# ZCode 在 ~/.agents/skills/ 下管理技能，含 .skill-lock.json 锁定的 well-known
+# 技能（lark-*）和内置技能（gstack/autoplan 等）。必须增量同步，不得 rm -rf。
+sync_zcode() {
+    local target="$HOME/.agents/skills"
+
+    if [ ! -d "$HOME/.agents" ]; then
+        return
+    fi
+
+    mkdir -p "$target"
+
+    # 注意：不要对 ~/.agents/skills/ 调用 import_orphans。
+    # 该目录由 ZCode 管理，含大量内置/well-known 技能（lark-*, gstack, autoplan 等），
+    # import_orphans 会把它们误判为孤立技能并 cp -r 到 categories/imported/，造成污染。
+
+    # 增量同步：只处理 universal-skills 的技能，绝不删除其他技能
+    local skill_count=0
+    local skipped=0
+    for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
+        if [ -d "$skill_dir" ] && [ -f "$skill_dir/SKILL.md" ]; then
+            local skill_name="$(basename "$skill_dir")"
+            local link="$target/$skill_name"
+
+            # 已是指向同一目标的 symlink → 跳过
+            if [ -L "$link" ] && [ "$(readlink "$link")" = "$skill_dir" ]; then
+                continue
+            fi
+
+            # 已存在且非我们管理的 symlink（内置/well-known/项目自有） → 跳过
+            if [ -e "$link" ] || [ -L "$link" ]; then
+                skipped=$((skipped + 1))
+                continue
+            fi
+
+            ln -sf "$skill_dir" "$link"
+            skill_count=$((skill_count + 1))
+        fi
+    done
+
+    if [ $skill_count -gt 0 ]; then
+        success "ZCode skills 已同步 ($skill_count 个技能，增量 symlink)"
+        [ $skipped -gt 0 ] && warn "  跳过 $skipped 个已存在的非 universal-skills 技能（保护内置/well-known）"
+    else
+        log "ZCode skills 无需更新（全部已同步）"
+    fi
+    log "  路径: ~/.agents/skills/"
+
+    if [ -d "$HOME/.zcode" ]; then
+        local legacy_target="$HOME/.zcode/skills"
+        local legacy_count=0
+        local legacy_skipped=0
+        mkdir -p "$legacy_target"
+
+        for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
+            if [ -d "$skill_dir" ] && [ -f "$skill_dir/SKILL.md" ]; then
+                local skill_name="$(basename "$skill_dir")"
+                local link="$legacy_target/$skill_name"
+
+                if [ -L "$link" ]; then
+                    rm -f "$link"
+                elif [ -e "$link" ]; then
+                    legacy_skipped=$((legacy_skipped + 1))
+                    continue
+                fi
+
+                ln -sf "$skill_dir" "$link"
+                legacy_count=$((legacy_count + 1))
+            fi
+        done
+
+        success "ZCode legacy skills 已同步 ($legacy_count 个技能，直接 symlink)"
+        [ $legacy_skipped -gt 0 ] && warn "  跳过 $legacy_skipped 个 ~/.zcode/skills/ 中已存在的非 symlink 技能"
+        log "  路径: ~/.zcode/skills/"
+    fi
+}
+
+# 同步到 Kimi Code (~/.kimi-code/skills/)
+# Kimi Code 通过 config.toml 的 extra_skill_dirs 加载技能，并用
+# merge_all_available_skills = true 合并。需建扁平 skills 目录并注册。
+sync_kimi_code() {
+    local target="$HOME/.kimi-code/skills"
+    local config="$HOME/.kimi-code/config.toml"
+
+    if [ ! -d "$HOME/.kimi-code" ]; then
+        return
+    fi
+
+    mkdir -p "$target"
+
+    # 清理旧的 universal-skills symlink 后重建（目录为我们所有，安全）
+    for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
+        if [ -d "$skill_dir" ] && [ -f "$skill_dir/SKILL.md" ]; then
+            local skill_name="$(basename "$skill_dir")"
+            local link="$target/$skill_name"
+            if [ -L "$link" ]; then
+                rm -f "$link"
+            elif [ -e "$link" ]; then
+                # 非 symlink 的同名内容，跳过避免覆盖
+                continue
+            fi
+            ln -sf "$skill_dir" "$link"
+        fi
+    done
+
+    # 注册到 config.toml 的 extra_skill_dirs
+    if [ -f "$config" ]; then
+        register_extra_skill_dir "$config" "$target"
+    fi
+
+    local skill_count
+    skill_count=$(find "$target" -maxdepth 1 -type l 2>/dev/null | wc -l | tr -d ' ')
+
+    success "Kimi Code skills 已同步 ($skill_count 个技能，symlink)"
+    log "  路径: ~/.kimi-code/skills/ (已注册到 config.toml extra_skill_dirs)"
+}
+
 # 同步到项目级 skills（为 Gemini/Gemini in projects）
 sync_projects() {
     local synced_count=0
@@ -500,6 +685,8 @@ SKIP_GLOBAL=false
 SKIP_PROJECTS=false
 SKIP_CODEX=false
 SKIP_GEMINI=false
+SKIP_ZCODE=false
+SKIP_KIMI=false
 DO_DISCOVER=false
 SPECIFIC_PROJECT=""
 
@@ -509,6 +696,8 @@ while [[ $# -gt 0 ]]; do
         --no-projects) SKIP_PROJECTS=true ;;
         --no-codex) SKIP_CODEX=true ;;
         --no-gemini) SKIP_GEMINI=true ;;
+        --no-zcode) SKIP_ZCODE=true ;;
+        --no-kimi) SKIP_KIMI=true ;;
         --project=*) SPECIFIC_PROJECT="$2"; shift ;;
         --discover) DO_DISCOVER=true ;;
         --help)
@@ -519,6 +708,8 @@ while [[ $# -gt 0 ]]; do
             echo "  --no-projects   跳过项目级同步"
             echo "  --no-codex      跳过 Codex 同步"
             echo "  --no-gemini     跳过 Gemini 同步"
+            echo "  --no-zcode      跳过 ZCode 同步"
+            echo "  --no-kimi       跳过 Kimi Code 同步"
             echo "  --project NAME  只同步指定项目"
             echo "  --discover      发现并索引项目中隐藏的技能"
             echo "  --help          显示此帮助"
@@ -583,6 +774,16 @@ if [ "$SKIP_GEMINI" = false ]; then
     echo ""
 fi
 
+if [ "$SKIP_ZCODE" = false ]; then
+    sync_zcode
+    echo ""
+fi
+
+if [ "$SKIP_KIMI" = false ]; then
+    sync_kimi_code
+    echo ""
+fi
+
 success "同步完成！"
 echo ""
 echo "提示："
@@ -594,11 +795,13 @@ echo "  - 发现项目中隐藏的技能: $0 --discover"
 echo ""
 echo "已同步的目标："
 [ "$SKIP_GLOBAL" = false ] && echo "  ✓ Claude Code 插件 (~/.claude/plugins/cache/local/universal-skills/)"
-[ "$SKIP_GLOBAL" = false ] && echo "  ✓ Claude Code 全局 (~/.claude/skills/) ← 参考"
+[ "$SKIP_GLOBAL" = false ] && echo "  ✓ Claude Code 全局 (~/.claude/skills/) ← symlink 参考"
 [ "$SKIP_PROJECTS" = false ] && echo "  ✓ Claude Code 项目级 (.claude/skills/) ← 主要"
 [ "$SKIP_PROJECTS" = false ] && echo "  ✓ Cursor 项目级 (.cursor/rules/) ← Cursor Rules"
 [ "$SKIP_CODEX" = false ] && echo "  ✓ Codex (~/.codex/skills/)"
 [ "$SKIP_GEMINI" = false ] && echo "  ✓ Gemini CLI (extension)"
 [ "$SKIP_GEMINI" = false ] && echo "  ✓ Antigravity (GEMINI.md 注入到 ~/.gemini/extensions/universal-skills/)"
+[ "$SKIP_ZCODE" = false ] && echo "  ✓ ZCode (~/.agents/skills/, ~/.zcode/skills/) ← 增量 symlink"
+[ "$SKIP_KIMI" = false ] && echo "  ✓ Kimi Code (~/.kimi-code/skills/ + config.toml)"
 [ "$SKIP_PROJECTS" = false ] && echo "  ✓ 项目级 symlinks (clawd, xiyu, etc.)"
 echo ""
