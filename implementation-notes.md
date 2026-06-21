@@ -61,3 +61,17 @@ Branch: `chore/unify-global-skill-symlinks`
 - Used incremental symlink sync rather than deleting/recreating the directory, because Trae CN stores marketplace and built-in skills in the same area and those should not be overwritten.
 - Added `--no-trae-cn` for parity with other optional sync targets.
 - Existing Trae CN non-symlink skills with the same name as universal skills are skipped, so Trae-managed marketplace installs remain authoritative unless manually removed.
+
+## Task: remove duplicate Agent-visible skill copies
+
+## Findings
+
+- ZCode/Agent-visible skills were duplicated because both `~/.agents/skills/` and legacy `~/.zcode/skills/` contained universal-skills symlinks.
+- `~/.zcode/skills/` was entirely universal-skills symlinks, so it acted as a second copy of the same skill set for agents that scan both locations.
+- Some non-symlink skills remain under `~/.agents/skills/` and `~/.trae-cn/skills/`; those are tool-managed built-in/marketplace skills and are intentionally not removed automatically.
+
+## Decisions
+
+- Kept `~/.agents/skills/` as the single ZCode/Agent universal-skills sync target.
+- Changed sync to remove old universal-skills symlinks from `~/.zcode/skills/` instead of recreating them.
+- Did not delete non-symlink skills in `~/.agents/skills/` or `~/.trae-cn/skills/`, because those may be installed or managed by the tools themselves.

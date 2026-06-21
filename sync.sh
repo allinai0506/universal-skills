@@ -434,32 +434,31 @@ sync_zcode() {
     fi
     log "  路径: ~/.agents/skills/"
 
-    if [ -d "$HOME/.zcode" ]; then
+    if [ -d "$HOME/.zcode/skills" ]; then
         local legacy_target="$HOME/.zcode/skills"
-        local legacy_count=0
-        local legacy_skipped=0
-        mkdir -p "$legacy_target"
+        local legacy_removed=0
 
-        for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
+        # ZCode/Agent 现在会同时看到 ~/.agents/skills 和 ~/.zcode/skills。
+        # 为避免同一 universal skill 出现两份，只清理我们以前创建的 legacy symlink，
+        # 不再往 ~/.zcode/skills 写入新的 universal-skills 链接。
+        for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/* "$UNIVERSAL_SKILLS/categories"/*; do
             if [ -d "$skill_dir" ] && [ -f "$skill_dir/SKILL.md" ]; then
                 local skill_name="$(basename "$skill_dir")"
                 local link="$legacy_target/$skill_name"
 
                 if [ -L "$link" ]; then
                     rm -f "$link"
-                elif [ -e "$link" ]; then
-                    legacy_skipped=$((legacy_skipped + 1))
-                    continue
+                    legacy_removed=$((legacy_removed + 1))
                 fi
-
-                ln -sf "$skill_dir" "$link"
-                legacy_count=$((legacy_count + 1))
             fi
         done
 
-        success "ZCode legacy skills 已同步 ($legacy_count 个技能，直接 symlink)"
-        [ $legacy_skipped -gt 0 ] && warn "  跳过 $legacy_skipped 个 ~/.zcode/skills/ 中已存在的非 symlink 技能"
-        log "  路径: ~/.zcode/skills/"
+        if [ $legacy_removed -gt 0 ]; then
+            success "ZCode legacy duplicate symlinks 已清理 ($legacy_removed 个)"
+        else
+            log "ZCode legacy skills 无 universal-skills 重复 symlink"
+        fi
+        log "  legacy 路径: ~/.zcode/skills/ (不再同步 universal skills)"
     fi
 }
 
@@ -848,7 +847,7 @@ echo "已同步的目标："
 [ "$SKIP_CODEX" = false ] && echo "  ✓ Codex (~/.codex/skills/)"
 [ "$SKIP_GEMINI" = false ] && echo "  ✓ Gemini CLI (extension)"
 [ "$SKIP_GEMINI" = false ] && echo "  ✓ Antigravity (GEMINI.md 注入到 ~/.gemini/extensions/universal-skills/)"
-[ "$SKIP_ZCODE" = false ] && echo "  ✓ ZCode (~/.agents/skills/, ~/.zcode/skills/) ← 增量 symlink"
+[ "$SKIP_ZCODE" = false ] && echo "  ✓ ZCode (~/.agents/skills/) ← 增量 symlink; legacy ~/.zcode/skills/ 去重"
 [ "$SKIP_TRAE_CN" = false ] && echo "  ✓ Trae CN Agent (~/.trae-cn/skills/) ← 增量 symlink"
 [ "$SKIP_KIMI" = false ] && echo "  ✓ Kimi Code (~/.kimi-code/skills/ + config.toml)"
 [ "$SKIP_PROJECTS" = false ] && echo "  ✓ 项目级 symlinks (clawd, xiyu, etc.)"

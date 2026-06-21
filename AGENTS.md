@@ -155,6 +155,7 @@ The `sync.sh` script handles:
 - **Codex 项目级:** Symlink 所有技能到每个项目的 `.Codex/skills/`（零磁盘开销）
 - **Codex:** Symlink 到 `~/.codex/skills/`
 - **Trae CN Agent:** 增量 symlink 到 `~/.trae-cn/skills/`，保护 marketplace/builtin 技能
+- **ZCode/Agent:** 增量 symlink 到 `~/.agents/skills/`，清理旧 `~/.zcode/skills/` universal symlink 避免重复加载
 - **Cursor:** 不再生成 `.cursor/rules/*.mdc` 技能规则
 - **Project symlinks:** 在 xiyu worktrees 等项目下创建 `skills/universal-skills` symlink
 - **技能发现:** 自动扫描项目中的独有技能，import 到 `categories/imported/`
