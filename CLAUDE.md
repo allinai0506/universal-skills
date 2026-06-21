@@ -7,6 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Universal Skills is a unified AI coding skills repository that synchronizes across multiple AI development tools:
 - **Claude Code** (`~/.claude/skills/`)
 - **Codex** (`~/.codex/skills/`)
+- **Trae CN Agent** (`~/.trae-cn/skills/`)
 - **Gemini CLI** (via MCP extension and project symlinks)
 
 Skills are modular, self-contained folders that extend AI capabilities with specialized knowledge, workflows, and tool integrations.
@@ -22,7 +23,7 @@ This script:
 1. Symlinks skills from `categories/` to each project's `.claude/skills/`（零磁盘开销）
 2. Discovers project-unique hidden skills and imports them to `categories/imported/`
 3. Creates symlinks in configured projects (`clawd`, `xiyu`, etc.)
-4. Manages Gemini extension, Cursor rules, and MCP configuration
+4. Manages Gemini extension and MCP configuration
 5. Auto-cleans old backups（保留最新 2 份）
 
 **Run after:** Adding new skills, modifying existing skills, or pulling updates.
@@ -152,8 +153,9 @@ Meta-tool for creating new skills with:
 
 The `sync.sh` script handles:
 - **Claude Code 项目级:** Symlink 所有技能到每个项目的 `.claude/skills/`（零磁盘开销）
-- **Codex:** 扁平化复制到 `~/.codex/skills/`
-- **Cursor:** 创建 `.mdc` 规则文件到 `.cursor/rules/`
+- **Codex:** Symlink 到 `~/.codex/skills/`
+- **Trae CN Agent:** 增量 symlink 到 `~/.trae-cn/skills/`，保护 marketplace/builtin 技能
+- **Cursor:** 不再生成 `.cursor/rules/*.mdc` 技能规则
 - **Project symlinks:** 在 xiyu worktrees 等项目下创建 `skills/universal-skills` symlink
 - **技能发现:** 自动扫描项目中的独有技能，import 到 `categories/imported/`
 - **备份:** 自动备份并在下次备份时清理旧版本（保留 2 份）

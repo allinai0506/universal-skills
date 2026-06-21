@@ -69,6 +69,47 @@ export CORS_ALLOWED_ORIGINS=<production-web-origin>
 
 Do not write real secret values into repo files, skill files, release docs, or chat.
 
+## Known Winbid Test Server
+
+Use these concrete values when the target is `winbid-01.test` / `172.16.38.78` and the user has authorized direct server work:
+
+- Host: `172.16.38.78`
+- SSH user: `jetty`
+- Direct access probe: `ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 jetty@172.16.38.78 'hostname; date; whoami'`
+- Legacy deploy key path, when present: `/tmp/xiyu-prod-deploy-crm-test`
+- App root: `/opt/xiyu-bid`
+- Incoming artifacts: `/opt/xiyu-bid/incoming/app.jar.new`, `/opt/xiyu-bid/incoming/frontend-dist.tar.gz`
+- Backend runtime jar: `/opt/xiyu-bid/shared/backend/app.jar`
+- Backend service: `xiyu-bid-backend`
+- Backend port: `18080`
+- Frontend public dir: `/srv/www/xiyu-bid/`
+- Backend env file: `/etc/xiyu-bid/backend.env` (`sudo` required to read)
+- MySQL: `winbid-01.test.rds.ehsy.com:3306`, database `winbid`, user `ea_bid`
+- Redis: `winbid-01.test.redis.ehsy.com:6379`
+- Browser-facing API base URL for local frontend packaging: `http://172.16.38.78:8080`
+
+Never record the smoke account password, DB password, Redis password, private key, or copied `backend.env` contents in docs, skill files, chat, or committed files.
+
+Useful server-side checks:
+
+```bash
+sudo journalctl -u xiyu-bid-backend --since "5 min ago" --no-pager
+sudo systemctl status xiyu-bid-backend --no-pager
+curl -s http://localhost:18080/actuator/health
+```
+
+If login smoke is blocked by test-environment rate limiting, clear only the exact confirmed Redis key with a placeholder password:
+
+```bash
+redis-cli -h winbid-01.test.redis.ehsy.com -a '<redis-password>' DEL '<confirmed-rate-limit-key>'
+```
+
+If the deployed frontend appears stale, verify the active nginx assets contain the expected build text or API URL:
+
+```bash
+strings /srv/www/xiyu-bid/assets/*.js | rg '<expected-code-keyword>|172.16.38.78:8080' -m 3
+```
+
 ## Manual Deployment Skeleton
 
 Prefer GitHub Actions when configured. For a controlled manual deployment, adapt this shape:
@@ -76,6 +117,8 @@ Prefer GitHub Actions when configured. For a controlled manual deployment, adapt
 ```bash
 bash scripts/release/preflight.sh
 rm -rf backend/target
+PRODUCTION_API_BASE_URL=<browser-facing-api-url> \
+VITE_API_BASE_URL=<browser-facing-api-url> \
 bash scripts/release/package-release.sh
 
 jar tf .release/<release-id>/backend/app.jar \
@@ -102,6 +145,8 @@ The duplicate-version check must print nothing. If it prints a version such as `
 - `release-metadata.json`
 
 It activates the frontend directory, copies the backend jar, writes `deployed-release.json`, restarts systemd, and waits for health.
+
+When automation is unavailable and the user explicitly approves a manual `scp`/SSH deployment, keep the same safety shape: upload a new jar and frontend tarball into `incoming`, stop the backend service, backup the previous jar with a timestamp, activate the new jar and frontend assets, start the backend service, reload nginx, then verify health before smoke. Prefer `StrictHostKeyChecking=accept-new`; only use legacy `-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /tmp/xiyu-prod-deploy-crm-test` if that is the only authorized access path for the environment.
 
 ## Local Packaging Hygiene
 
