@@ -75,3 +75,17 @@ Branch: `chore/unify-global-skill-symlinks`
 - Kept `~/.agents/skills/` as the single ZCode/Agent universal-skills sync target.
 - Changed sync to remove old universal-skills symlinks from `~/.zcode/skills/` instead of recreating them.
 - Did not delete non-symlink skills in `~/.agents/skills/` or `~/.trae-cn/skills/`, because those may be installed or managed by the tools themselves.
+
+## Task: hide near-duplicate skills from sync targets
+
+## Findings
+
+- `categories/workflow/google-code-review/SKILL.md` and `categories/coding/google-style-code-review/SKILL.md` both declare `name: google-code-review` and contain highly overlapping Google-style review guidance.
+- Frontmatter-name duplicate scan also reports `skill-creator` and `skill-installer` under both workflow and `.system`; those `.system` copies are not currently synced by the `categories/*/*` loops, so they are not part of the visible duplicate issue.
+
+## Decisions
+
+- Added an explicit `DUPLICATE_SKILL_NAMES` list in `sync.sh` instead of trying fuzzy matching at sync time. This keeps the behavior deterministic and avoids accidentally hiding unrelated skills with similar words.
+- Added `google-style-code-review` to that list, keeping `workflow/google-code-review` as the canonical visible skill because both files use that canonical frontmatter name.
+- Kept the duplicate source directory in the repository for now rather than deleting it automatically; sync targets now skip it and clean old universal-skills symlinks pointing to it.
+- Applied the filter to Claude global/project/plugin, Codex, ZCode, Trae CN, and Kimi symlink sync paths.
