@@ -3,7 +3,7 @@
 # Git post-commit hook for universal-skills
 # 每次 commit 后自动：
 #   1. 运行 sync.sh 将技能同步到所有本地 Agent（Claude/Cursor/Codex/Gemini）
-#   2. Push 到 GitHub
+#   2. Push 到远端（自动探测上游远端，不硬编码 origin）
 # =============================================================================
 
 REPO_DIR="$(git rev-parse --show-toplevel)"
@@ -43,15 +43,29 @@ else
     echo "  ⚠️  sync.sh 不可执行，跳过本地同步"
 fi
 
-# ─── 步骤 3: Push 到 GitHub ──────────────────────────────────────────────────
-echo -e "${CYAN}  ☁️  步骤 2/2: 推送到 GitHub...${RESET}"
+# ─── 步骤 3: Push 到远端（自动探测上游远端，不硬编码 origin）─────────────
+echo -e "${CYAN}  ☁️  步骤 2/2: 推送到远端...${RESET}"
 
 CURRENT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "main")
 
-if git push origin "$CURRENT_BRANCH" 2>&1; then
-    echo -e "${GREEN}  ✅ 已推送到 origin/$CURRENT_BRANCH${RESET}"
+# 探测策略：当前分支上游远端 → 仓库第一个远端 → 跳过
+REMOTE=""
+UPSTREAM=$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null | sed 's@/.*@@' || true)
+if [ -n "$UPSTREAM" ]; then
+    REMOTE="$UPSTREAM"
 else
-    echo -e "${YELLOW}  ⚠️  Push 失败（可能无网络或需要认证），请手动执行: git push${RESET}"
+    # 无上游绑定时，取仓库配置里的第一个远端
+    REMOTE=$(git remote | head -n1 || true)
+fi
+
+if [ -z "$REMOTE" ]; then
+    echo -e "${YELLOW}  ⚠️  未配置任何 git 远端，跳过 push${RESET}"
+else
+    if git push "$REMOTE" "$CURRENT_BRANCH" 2>&1; then
+        echo -e "${GREEN}  ✅ 已推送到 $REMOTE/$CURRENT_BRANCH${RESET}"
+    else
+        echo -e "${YELLOW}  ⚠️  Push 到 $REMOTE/$CURRENT_BRANCH 失败（可能无网络或需要认证），请手动执行: git push $REMOTE $CURRENT_BRANCH${RESET}"
+    fi
 fi
 
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"

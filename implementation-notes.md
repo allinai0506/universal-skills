@@ -89,3 +89,11 @@ Branch: `chore/unify-global-skill-symlinks`
 - Added `google-style-code-review` to that list, keeping `workflow/google-code-review` as the canonical visible skill because both files use that canonical frontmatter name.
 - Kept the duplicate source directory in the repository for now rather than deleting it automatically; sync targets now skip it and clean old universal-skills symlinks pointing to it.
 - Applied the filter to Claude global/project/plugin, Codex, ZCode, Trae CN, and Kimi symlink sync paths.
+
+## Task: fix post-commit hook hardcoded origin
+
+## Decisions
+
+- Hook step 3 hardcoded `git push origin "$branch"`, but this repo's remote is named `gitee` (no `origin`), so every commit's push step failed with "fatal: 'origin' does not appear to be a git repository".
+- Replaced with upstream-aware detection: `git rev-parse --abbrev-ref @{u}` → fall back to first remote in `git remote` → skip if none. Works regardless of remote name.
+- Updated wording from "推送到 GitHub" to "推送到远端" since the actual remote is Gitee, not GitHub.
