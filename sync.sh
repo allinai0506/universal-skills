@@ -21,6 +21,58 @@ warn() { echo -e "${YELLOW}⚠${NC} $1"; }
 error() { echo -e "${RED}✗${NC} $1"; }
 info() { echo -e "${CYAN}→${NC} $1"; }
 
+# 已合并/别名技能：保留源码目录，但不同步为独立入口，避免工具侧重复触发。
+DUPLICATE_SKILL_NAMES=(
+    "google-style-code-review"
+)
+
+is_duplicate_skill_name() {
+    local skill_name="$1"
+    local duplicate
+
+    for duplicate in "${DUPLICATE_SKILL_NAMES[@]}"; do
+        if [ "$skill_name" = "$duplicate" ]; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+is_syncable_skill_dir() {
+    local skill_dir="$1"
+    local skill_name
+
+    [ -d "$skill_dir" ] && [ -f "$skill_dir/SKILL.md" ] || return 1
+
+    skill_name="$(basename "$skill_dir")"
+    ! is_duplicate_skill_name "$skill_name"
+}
+
+cleanup_duplicate_skill_links() {
+    local target="$1"
+    local removed=0
+    local skill_name link dest
+
+    [ -d "$target" ] || {
+        echo 0
+        return 0
+    }
+
+    for skill_name in "${DUPLICATE_SKILL_NAMES[@]}"; do
+        link="$target/$skill_name"
+        if [ -L "$link" ]; then
+            dest="$(readlink "$link")"
+            if [[ "$dest" == "$UNIVERSAL_SKILLS/categories/"* ]]; then
+                rm -f "$link"
+                removed=$((removed + 1))
+            fi
+        fi
+    done
+
+    echo "$removed"
+}
+
 # 创建备份（自动清理旧备份，保留最新 2 份）
 backup() {
     local dir="$1"
@@ -179,10 +231,13 @@ sync_claude_global() {
     fi
 
     mkdir -p "$target"
-    
+    local duplicate_removed
+    duplicate_removed=$(cleanup_duplicate_skill_links "$target")
+    [ "$duplicate_removed" -gt 0 ] && log "  清理 Claude 全局重复技能 symlink: $duplicate_removed 个"
+
     local skill_count=0
     for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
-        if [ -d "$skill_dir" ] && [ -f "$skill_dir/SKILL.md" ]; then
+        if is_syncable_skill_dir "$skill_dir"; then
             local skill_name="$(basename "$skill_dir")"
             ln -sf "$skill_dir" "$target/$skill_name"
             skill_count=$((skill_count + 1))
@@ -240,6 +295,9 @@ sync_claude_projects() {
 
         # 创建 skills 目录
         mkdir -p "$skills_dir"
+        local duplicate_removed
+        duplicate_removed=$(cleanup_duplicate_skill_links "$skills_dir")
+        [ "$duplicate_removed" -gt 0 ] && log "  → $project_name: 清理 $duplicate_removed 个重复技能 symlink"
 
         # 第0步：发现并 import 项目独有的技能（不在 categories/ 中的）
         import_orphans "$skills_dir" "$project_name" "--scan-subdirs"
@@ -247,7 +305,7 @@ sync_claude_projects() {
         # 第1步：清理旧的复制技能文件（转换为 symlink 前的遗留产物）
         # 只删除已知 universal-skills 的旧 copy，保留 symlink 和项目自有技能
         for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
-            if [ -d "$skill_dir" ] && [ -f "$skill_dir/SKILL.md" ]; then
+            if is_syncable_skill_dir "$skill_dir"; then
                 local skill_name="$(basename "$skill_dir")"
                 local target="$skills_dir/$skill_name"
                 # 只删除非 symlink 的旧拷贝
@@ -270,7 +328,7 @@ sync_claude_projects() {
         # 第2步：用 symlink 同步技能（零磁盘开销）
         local skill_count=0
         for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
-            if [ -d "$skill_dir" ] && [ -f "$skill_dir/SKILL.md" ]; then
+            if is_syncable_skill_dir "$skill_dir"; then
                 local skill_name="$(basename "$skill_dir")"
                 local target="$skills_dir/$skill_name"
                 # 如果已存在同名 symlink，更新之；否则创建
@@ -281,7 +339,7 @@ sync_claude_projects() {
                     continue
                 fi
                 ln -sf "$skill_dir" "$target"
-                ((skill_count++))
+                skill_count=$((skill_count + 1))
             fi
         done
 
@@ -317,7 +375,7 @@ sync_cursor_projects() {
 
         # 清理旧的 .mdc 技能文件
         for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
-            if [ -d "$skill_dir" ] && [ -f "$skill_dir/SKILL.md" ]; then
+            if is_syncable_skill_dir "$skill_dir"; then
                 local skill_name="$(basename "$skill_dir")"
                 rm -f "$cursor_rules_dir/$skill_name.mdc"
             fi
@@ -326,7 +384,7 @@ sync_cursor_projects() {
         # 拷贝扁平化的技能并重命名为 .mdc 格式
         local skill_count=0
         for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
-            if [ -d "$skill_dir" ] && [ -f "$skill_dir/SKILL.md" ]; then
+            if is_syncable_skill_dir "$skill_dir"; then
                 local skill_name="$(basename "$skill_dir")"
                 cat "$skill_dir/SKILL.md" > "$cursor_rules_dir/$skill_name.mdc"
                 ((skill_count++))
@@ -366,7 +424,7 @@ sync_codex() {
     local skill_count=0
 
     for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
-        if [ -d "$skill_dir" ] && [ -f "$skill_dir/SKILL.md" ]; then
+        if is_syncable_skill_dir "$skill_dir"; then
             local skill_name="$(basename "$skill_dir")"
             ln -sf "$skill_dir" "$target/$skill_name"
             skill_count=$((skill_count + 1))
@@ -374,7 +432,7 @@ sync_codex() {
     done
 
     for skill_dir in "$UNIVERSAL_SKILLS/categories"/*; do
-        if [ -d "$skill_dir" ] && [ -f "$skill_dir/SKILL.md" ]; then
+        if is_syncable_skill_dir "$skill_dir"; then
             local skill_name="$(basename "$skill_dir")"
             if [ ! -d "$target/$skill_name" ] && [ ! -L "$target/$skill_name" ]; then
                 ln -sf "$skill_dir" "$target/$skill_name"
@@ -397,6 +455,9 @@ sync_zcode() {
     fi
 
     mkdir -p "$target"
+    local duplicate_removed
+    duplicate_removed=$(cleanup_duplicate_skill_links "$target")
+    [ "$duplicate_removed" -gt 0 ] && log "  清理 ZCode 重复技能 symlink: $duplicate_removed 个"
 
     # 注意：不要对 ~/.agents/skills/ 调用 import_orphans。
     # 该目录由 ZCode 管理，含大量内置/well-known 技能（lark-*, gstack, autoplan 等），
@@ -406,7 +467,7 @@ sync_zcode() {
     local skill_count=0
     local skipped=0
     for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
-        if [ -d "$skill_dir" ] && [ -f "$skill_dir/SKILL.md" ]; then
+        if is_syncable_skill_dir "$skill_dir"; then
             local skill_name="$(basename "$skill_dir")"
             local link="$target/$skill_name"
 
@@ -434,32 +495,34 @@ sync_zcode() {
     fi
     log "  路径: ~/.agents/skills/"
 
-    if [ -d "$HOME/.zcode" ]; then
+    if [ -d "$HOME/.zcode/skills" ]; then
         local legacy_target="$HOME/.zcode/skills"
-        local legacy_count=0
-        local legacy_skipped=0
-        mkdir -p "$legacy_target"
+        local legacy_removed=0
+        local legacy_duplicate_removed
+        legacy_duplicate_removed=$(cleanup_duplicate_skill_links "$legacy_target")
 
-        for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
-            if [ -d "$skill_dir" ] && [ -f "$skill_dir/SKILL.md" ]; then
+        # ZCode/Agent 现在会同时看到 ~/.agents/skills 和 ~/.zcode/skills。
+        # 为避免同一 universal skill 出现两份，只清理我们以前创建的 legacy symlink，
+        # 不再往 ~/.zcode/skills 写入新的 universal-skills 链接。
+        for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/* "$UNIVERSAL_SKILLS/categories"/*; do
+            if is_syncable_skill_dir "$skill_dir"; then
                 local skill_name="$(basename "$skill_dir")"
                 local link="$legacy_target/$skill_name"
 
                 if [ -L "$link" ]; then
                     rm -f "$link"
-                elif [ -e "$link" ]; then
-                    legacy_skipped=$((legacy_skipped + 1))
-                    continue
+                    legacy_removed=$((legacy_removed + 1))
                 fi
-
-                ln -sf "$skill_dir" "$link"
-                legacy_count=$((legacy_count + 1))
             fi
         done
 
-        success "ZCode legacy skills 已同步 ($legacy_count 个技能，直接 symlink)"
-        [ $legacy_skipped -gt 0 ] && warn "  跳过 $legacy_skipped 个 ~/.zcode/skills/ 中已存在的非 symlink 技能"
-        log "  路径: ~/.zcode/skills/"
+        legacy_removed=$((legacy_removed + legacy_duplicate_removed))
+        if [ $legacy_removed -gt 0 ]; then
+            success "ZCode legacy duplicate symlinks 已清理 ($legacy_removed 个)"
+        else
+            log "ZCode legacy skills 无 universal-skills 重复 symlink"
+        fi
+        log "  legacy 路径: ~/.zcode/skills/ (不再同步 universal skills)"
     fi
 }
 
@@ -474,12 +537,15 @@ sync_trae_cn() {
     fi
 
     mkdir -p "$target"
+    local duplicate_removed
+    duplicate_removed=$(cleanup_duplicate_skill_links "$target")
+    [ "$duplicate_removed" -gt 0 ] && log "  清理 Trae CN 重复技能 symlink: $duplicate_removed 个"
 
     local skill_count=0
     local refreshed=0
     local skipped=0
     for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
-        if [ -d "$skill_dir" ] && [ -f "$skill_dir/SKILL.md" ]; then
+        if is_syncable_skill_dir "$skill_dir"; then
             local skill_name="$(basename "$skill_dir")"
             local link="$target/$skill_name"
 
@@ -514,10 +580,13 @@ sync_kimi_code() {
     fi
 
     mkdir -p "$target"
+    local duplicate_removed
+    duplicate_removed=$(cleanup_duplicate_skill_links "$target")
+    [ "$duplicate_removed" -gt 0 ] && log "  清理 Kimi Code 重复技能 symlink: $duplicate_removed 个"
 
     # 清理旧的 universal-skills symlink 后重建（目录为我们所有，安全）
     for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
-        if [ -d "$skill_dir" ] && [ -f "$skill_dir/SKILL.md" ]; then
+        if is_syncable_skill_dir "$skill_dir"; then
             local skill_name="$(basename "$skill_dir")"
             local link="$target/$skill_name"
             if [ -L "$link" ]; then
@@ -703,7 +772,7 @@ EOF
 
     # 为每个技能创建单独的 symlink
     for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
-        if [ -d "$skill_dir" ] && [ -f "$skill_dir/SKILL.md" ]; then
+        if is_syncable_skill_dir "$skill_dir"; then
             local skill_name="$(basename "$skill_dir")"
             ln -sf "$skill_dir" "$plugin_dir/$version/skills/$skill_name"
         fi
@@ -848,7 +917,7 @@ echo "已同步的目标："
 [ "$SKIP_CODEX" = false ] && echo "  ✓ Codex (~/.codex/skills/)"
 [ "$SKIP_GEMINI" = false ] && echo "  ✓ Gemini CLI (extension)"
 [ "$SKIP_GEMINI" = false ] && echo "  ✓ Antigravity (GEMINI.md 注入到 ~/.gemini/extensions/universal-skills/)"
-[ "$SKIP_ZCODE" = false ] && echo "  ✓ ZCode (~/.agents/skills/, ~/.zcode/skills/) ← 增量 symlink"
+[ "$SKIP_ZCODE" = false ] && echo "  ✓ ZCode (~/.agents/skills/) ← 增量 symlink; legacy ~/.zcode/skills/ 去重"
 [ "$SKIP_TRAE_CN" = false ] && echo "  ✓ Trae CN Agent (~/.trae-cn/skills/) ← 增量 symlink"
 [ "$SKIP_KIMI" = false ] && echo "  ✓ Kimi Code (~/.kimi-code/skills/ + config.toml)"
 [ "$SKIP_PROJECTS" = false ] && echo "  ✓ 项目级 symlinks (clawd, xiyu, etc.)"
