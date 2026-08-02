@@ -1,0 +1,6 @@
+display_name: PSEO 程序化SEO
+short_description: 批量生成结构化SEO页面——关键词矩阵、内容模板、CMS导入一体化管道
+default_prompt: >
+  围绕主词簇批量生成信息增量高的结构化SEO页面。
+  请提供 seed keyword 和目标领域，我会按 Config→Keywords→Schema→Render→Review 管道逐步推进。
+  适用 B2B SaaS 服务类（ERP/MES/WMS），先小样本验证再规模化。

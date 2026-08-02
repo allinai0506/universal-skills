@@ -89,3 +89,14 @@
 ```
 
 必须逐字保留，防止品牌漂移。
+
+## 常见错误与修复
+
+| 错误 | 结果 | 修复 |
+|------|------|------|
+| 只替换关键词的空壳模板 | Review Template Shell FAIL | schema 按关键词类型差异化模块，提供真实信息增量 |
+| 编造客户/数字/竞品参数 | Review Hallucination FAIL | 无数据用通用原理；对比对象固定 Traditional Method |
+| 写"在当今数字化时代"空话 | No-Fluff 扣分 | 删空话，直给步骤输入/输出、交付物、检查项 |
+| schema 与 mock 字段不一致 | Render missing_fields | 二者字段路径保持一致 |
+| 直接批量 1000 页未先验证 | 质量失控 | 先 10 样本验证再 SCALE |
+| 高转化 Money Page 无人审 | 质量风险 | SCALE 时 money_page 必须人审 |
