@@ -73,12 +73,13 @@ pnpm pseo:import --page output/<batch>/page.md --schema output/<batch>/schema.ya
 **必须输出 mock_data.json**，required_fields 与 mock_data 字段路径一致。
 
 ### Render
-五条硬规则（详见 [reference.md](reference.md)）：
+六条硬规则（详见 [reference.md](reference.md)）：
 1. Format-stable：标题层级、模块顺序、表格列数与 schema 严格一致
 2. No Fluff：禁止"在当今数字化时代..."等空话
 3. No Hallucination：无竞品→对比对象固定 `Traditional Method`；禁止编造客户/数字/竞品参数
 4. Information Gain：每个模块必须有具体信息点
 5. Fallback：raw_data → mock → 类型特定通用原理
+6. **No Duplicate H1**：若目标 CMS/布局已渲染 `<h1>`（如从 frontmatter `title` 取），markdown 正文不得以 `# ` 开头，直接从内容正文开始
 
 ### Review
 检查 Format / Hallucination / No-Fluff / 品牌一致性 / 禁词 / Information Gain / Template Shell。
