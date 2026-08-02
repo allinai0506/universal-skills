@@ -59,13 +59,15 @@
 
 结构化内容（`h2+structure`）支持复杂嵌套：`measures`、`multi_tenant_shared`、`multi_tenant_exclusive` 等。
 
-## 渲染五条硬规则
+## 渲染六条硬规则
 
 1. **Format-stable**：标题层级、模块顺序、表格列数与 schema 严格一致。
 2. **No Fluff**：禁止"在当今数字化时代..."等空话套话。
 3. **No Hallucination**：无竞品→对比对象固定 `Traditional Method`；无 UGC/截图→不提"如图所示"，改菜单路径/通用描述；禁止编造客户名、数字、竞品参数。
 4. **Information Gain**：每个模块必须有具体信息点（步骤输入/输出、交付物、检查项、FAQ 直答）。
 5. **Fallback**：raw_data 缺字段→从 mock_data 补充→类型特定通用原理；不因缺字段报错退出。
+6. **No Duplicate H1**：渲染前确认目标 CMS 的布局层是否已渲染 `<h1>`（如 React 的 `BlogLayout`、WordPress 主题、Hugo 模板等）。若布局已提供标题 `<h1>`，markdown 正文**不得**以 `# ` 开头——直接从内容正文（`##` 或段落）开始。重复 H1 会损伤 SEO 并被搜索引擎视为内容结构混乱。
+7. **Frontmatter 数组用内联格式**：目标 CMS 的 frontmatter 解析器若不支持多行 YAML 块（如 `tags:\n  - a`），标签会静默丢失。先确认 loader 解析逻辑（本项目 `loader.ts` 只解析 `["a", "b"]` 内联数组），再决定 frontmatter 的 tags/categories 写法。生成前检查 loader 源码，避免交付后才发现标签缺失。
 
 ## Review 评分规则
 
