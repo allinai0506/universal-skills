@@ -526,46 +526,51 @@ sync_zcode() {
     fi
 }
 
-# 同步到 Trae CN Agent (~/.trae-cn/skills/)
-# Trae CN 在 ~/.trae-cn/skills/ 下管理 Agent skills，含 marketplace/builtin 技能。
+# 同步到 Trae CN Agent (~/.trae-cn/skills/) 和 Trae Work (~/.trae/skills/)
+# 两者都管理 Agent skills，含 marketplace/builtin 技能。
 # 必须增量同步，不得 rm -rf，避免覆盖 Trae 自带或已安装的 marketplace 技能。
 sync_trae_cn() {
-    local target="$HOME/.trae-cn/skills"
+    local trae_dirs=("$HOME/.trae-cn" "$HOME/.trae")
 
-    if [ ! -d "$HOME/.trae-cn" ]; then
-        return
-    fi
-
-    mkdir -p "$target"
-    local duplicate_removed
-    duplicate_removed=$(cleanup_duplicate_skill_links "$target")
-    [ "$duplicate_removed" -gt 0 ] && log "  清理 Trae CN 重复技能 symlink: $duplicate_removed 个"
-
-    local skill_count=0
-    local refreshed=0
-    local skipped=0
-    for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
-        if is_syncable_skill_dir "$skill_dir"; then
-            local skill_name="$(basename "$skill_dir")"
-            local link="$target/$skill_name"
-
-            if [ -L "$link" ]; then
-                rm -f "$link"
-                refreshed=$((refreshed + 1))
-            elif [ -e "$link" ]; then
-                skipped=$((skipped + 1))
-                continue
-            fi
-
-            ln -sf "$skill_dir" "$link"
-            skill_count=$((skill_count + 1))
+    for trae_home in "${trae_dirs[@]}"; do
+        if [ ! -d "$trae_home" ]; then
+            continue
         fi
-    done
 
-    success "Trae CN Agent skills 已同步 ($skill_count 个技能，增量 symlink)"
-    [ $refreshed -gt 0 ] && log "  刷新 $refreshed 个已有 symlink"
-    [ $skipped -gt 0 ] && warn "  跳过 $skipped 个已存在的非 symlink 技能（保护 marketplace/builtin）"
-    log "  路径: ~/.trae-cn/skills/"
+        local target="$trae_home/skills"
+        local label="$(basename "$trae_home")"
+
+        mkdir -p "$target"
+        local duplicate_removed
+        duplicate_removed=$(cleanup_duplicate_skill_links "$target")
+        [ "$duplicate_removed" -gt 0 ] && log "  清理 $label 重复技能 symlink: $duplicate_removed 个"
+
+        local skill_count=0
+        local refreshed=0
+        local skipped=0
+        for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
+            if is_syncable_skill_dir "$skill_dir"; then
+                local skill_name="$(basename "$skill_dir")"
+                local link="$target/$skill_name"
+
+                if [ -L "$link" ]; then
+                    rm -f "$link"
+                    refreshed=$((refreshed + 1))
+                elif [ -e "$link" ]; then
+                    skipped=$((skipped + 1))
+                    continue
+                fi
+
+                ln -sf "$skill_dir" "$link"
+                skill_count=$((skill_count + 1))
+            fi
+        done
+
+        success "$label skills 已同步 ($skill_count 个技能，增量 symlink)"
+        [ $refreshed -gt 0 ] && log "  刷新 $refreshed 个已有 symlink"
+        [ $skipped -gt 0 ] && warn "  跳过 $skipped 个已存在的非 symlink 技能（保护 marketplace/builtin）"
+        log "  路径: $target/"
+    done
 }
 
 # 同步到 Kimi Code (~/.kimi-code/skills/)
@@ -882,7 +887,7 @@ fi
 
 if [ "$SKIP_GEMINI" = false ]; then
     sync_gemini
-    sync_antigravity
+    sync_antigravity || true
     echo ""
 fi
 
