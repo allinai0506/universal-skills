@@ -1,11 +1,13 @@
 ---
 name: xiyu-server-deploy
-description: XiYu server deployment workflow for the 西域数智化投标管理平台 (test & prod dual-env). Use when preparing, executing, verifying, documenting, or troubleshooting server deployments, production release pipelines, MySQL 8.0 prod profile rollout, API-only smoke checks, rollback planning, or post-deploy release reports for this project.
+description: 西域数智化投标管理平台（XiYu）服务器部署工作流 — 在西域项目内（~/xiyu/** 任意目录、xiyu worktrees 如 trae/zcode/cursor/claude/gemini/mimo/minimax/grok/qoder/kimi 下）触发。触发词：部署服务器、发布上线、生产部署、prod rollout、服务器更新、西域部署、xiyu deploy、部署前后检查、部署报告、回滚预案、数据库迁移 MySQL 8.0、smoke 检查 API、服务器验证、服务器故障排查。调用时机：部署前预检（preflight）、备份旧版 artifact、激活新 jar/docker、执行健康检查 + API smokes、生成发布报告、回滚规划、排查上线异常。⚠ 仅西域项目可用：若当前工作区不在 ~/xiyu/ 下或不处于 xiyu* 目录族（含 xiyu/worktrees/*），必须自抑制（SELF-INHIBIT）：禁止执行任何 ssh/scp/curl 服务器命令，并立即告知用户「本技能只在西域数智化投标管理平台 (XiYu) 项目内可用」。
 ---
 
-# XiYu Server Deploy
+# XiYu Server Deploy (XiYu Project Exclusive)
 
 ## Operating Contract
+
+> **PROJECT GATE (HARD):** This skill is exclusively locked to xiyu* projects. Before taking ANY action, verify that the current workspace/project path is under `~/xiyu/` or the project directory name starts with `xiyu`. If NOT, immediately STOP and respond that this skill can only be used within the 西域数智化投标管理平台 (XiYu) project. No ssh/scp/curl to any server is permitted outside of XiYu.
 
 Treat the 西域数智化投标管理平台 deployment path as real API only:
 

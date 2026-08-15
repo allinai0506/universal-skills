@@ -1,0 +1,5 @@
+interface:
+  display_name: "AI Release Engineer"
+  short_description: "Evidence-driven release gates: verify, promote one artifact, observe, roll back."
+  brand_color: "#16A34A"
+  default_prompt: "Use $ai-release-engineer to verify and release this change: run required gates, promote one immutable artifact, and confirm rollback readiness before production."
