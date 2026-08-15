@@ -59,7 +59,7 @@
 
 结构化内容（`h2+structure`）支持复杂嵌套：`measures`、`multi_tenant_shared`、`multi_tenant_exclusive` 等。
 
-## 渲染六条硬规则
+## 渲染七条硬规则
 
 1. **Format-stable**：标题层级、模块顺序、表格列数与 schema 严格一致。
 2. **No Fluff**：禁止"在当今数字化时代..."等空话套话。

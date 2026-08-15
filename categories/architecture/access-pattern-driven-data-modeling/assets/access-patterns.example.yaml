@@ -1,0 +1,38 @@
+operations:
+  - name: recent_unpaid_invoices_by_customer
+    type: read
+    purpose: Show the customer's latest unpaid invoices
+    filters:
+      - customer_id
+      - status
+    sort:
+      - due_date DESC
+    joins: []
+    returned_fields:
+      - id
+      - invoice_no
+      - amount
+      - due_date
+    pagination:
+      mode: limit
+      size: 20
+    frequency: high
+    expected_result_size: "<=20"
+    expected_data_volume: UNKNOWN
+    freshness: immediate
+    consistency: read-your-writes
+
+  - name: create_invoice
+    type: write
+    purpose: Create an invoice
+    filters: []
+    sort: []
+    joins: []
+    returned_fields:
+      - id
+    pagination: none
+    frequency: medium
+    expected_result_size: "1"
+    expected_data_volume: UNKNOWN
+    freshness: immediate
+    consistency: strong

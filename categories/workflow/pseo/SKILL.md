@@ -3,7 +3,7 @@ name: pseo
 description: >
   程序化SEO内容管道（PSEO）——围绕主词簇，用模板+结构化数据批量生成信息增量高的SEO页面。
   触发：批量生成SEO页面、关键词矩阵、内容模板设计、SEO内容策略、程序化SEO、pSEO、
-  长尾词覆盖、CMS批量导入、落地页规模化、ERP/MES/WMS实施服务内容。
+  长尾词覆盖、CMS批量导入、落地页规模化、内容工厂、ERP/MES/WMS/集成开发/协同实施服务内容。
   适用 B2B SaaS 服务类内容，不适用单篇一次性文章或AI洗稿。
 ---
 
@@ -17,7 +17,7 @@ description: >
 [Config] → [Keywords] → [Schema] → [Render] → [Review] → [Validate Sample] → Scale → [Import CMS]
 ```
 
-所有步骤通过 `pnpm pseo:*` 脚本执行（`tsx scripts/pseo-*.ts`）。
+所有步骤通过 `pnpm pseo:*` 脚本执行（`tsx scripts/pseo-*.ts`）。`pseo:publish` 将全流程一键编排（快速起步或小批量试跑时使用，规模化前仍需走样本验证）。
 
 ## 快速开始
 
@@ -73,13 +73,14 @@ pnpm pseo:import --page output/<batch>/page.md --schema output/<batch>/schema.ya
 **必须输出 mock_data.json**，required_fields 与 mock_data 字段路径一致。
 
 ### Render
-六条硬规则（详见 [reference.md](reference.md)）：
+七条硬规则（详见 [reference.md](reference.md)）：
 1. Format-stable：标题层级、模块顺序、表格列数与 schema 严格一致
 2. No Fluff：禁止"在当今数字化时代..."等空话
 3. No Hallucination：无竞品→对比对象固定 `Traditional Method`；禁止编造客户/数字/竞品参数
 4. Information Gain：每个模块必须有具体信息点
 5. Fallback：raw_data → mock → 类型特定通用原理
 6. **No Duplicate H1**：若目标 CMS/布局已渲染 `<h1>`（如从 frontmatter `title` 取），markdown 正文不得以 `# ` 开头，直接从内容正文开始
+7. **Frontmatter 数组用内联格式**：生成前检查目标 CMS loader 是否支持多行 YAML 数组（只支持 `["a","b"]` 内联时，tags/categories 必须用内联写法，否则标签静默丢失）
 
 ### Review
 检查 Format / Hallucination / No-Fluff / 品牌一致性 / 禁词 / Information Gain / Template Shell。
@@ -107,7 +108,7 @@ pnpm pseo:import --page output/<batch>/page.md --schema output/<batch>/schema.ya
 - 关键词类型识别顺序与反例
 - 各产品/主题差异化模块模板
 - schema.yaml format 类型表与字段名映射
-- 渲染五条硬规则详解
+- 渲染七条硬规则详解
 - Review 评分规则与判定表
 - Validation 判定表
 - 品牌锚点模板

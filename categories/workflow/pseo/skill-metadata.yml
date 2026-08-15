@@ -1,0 +1,51 @@
+# Skill Metadata — pseo
+# 平台兼容性、触发条件、工具依赖
+
+name: pseo
+version: "1.0"
+last_updated: "2026-08-14"
+
+# 支持的 AI 平台
+platforms:
+  - claude-code     # Claude Code (primary)
+  - cursor          # Cursor IDE
+  - codex           # Codex
+  - trae            # Trae CN Agent
+  - gemini          # Gemini CLI (via MCP symlink)
+
+# 触发关键词（description 的机器可读版本）
+trigger_keywords:
+  - 批量生成SEO页面
+  - 关键词矩阵
+  - 内容模板设计
+  - SEO内容策略
+  - 程序化SEO
+  - pSEO
+  - 长尾词覆盖
+  - CMS批量导入
+  - 落地页规模化
+  - ERP实施
+  - MES实施
+  - WMS实施
+  - 集成开发服务
+  - 协同实施服务
+  - money_page
+  - guide_page
+
+# 依赖的工具
+dependencies:
+  tools:
+    - pnpm             # pseo:* 脚本执行
+    - tsx              # TypeScript 脚本运行器
+    - node             # scripts/pseo-*.ts 运行环境
+  languages:
+    - typescript       # pseo-*.ts 管道脚本
+    - bash             # 命令执行
+  external_apis: []    # 无需外部 API
+
+# 约束条件
+constraints:
+  no_fake_stats: true       # 禁止编造搜索量/难度/客户数据
+  money_pages_need_review: true  # Money Pages 必须人审
+  validate_before_scale: true    # 10 样本验证后再规模化
+  b2b_scope: true           # 适用 B2B SaaS 服务类内容
