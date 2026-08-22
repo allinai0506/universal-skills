@@ -1,0 +1,3 @@
+interface:
+  display_name: "Unified Dev Flow"
+  short_description: "Route dev tasks through the unified gated lifecycle"
