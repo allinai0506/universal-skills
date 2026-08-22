@@ -37,7 +37,6 @@ _编码规范与模式_
 | `coding-standards` | TS、JS、React、Node 通用编码规范与最佳实践 |
 | `content-hash-cache-pattern` | 用 SHA-256 内容哈希缓存昂贵的文件处理结果 |
 | `frontend-patterns` | React 与 Next.js 前端开发、状态管理与性能优化 |
-| `google-style-code-review` | 遵循 Google 风格约束的代码审查流程 |
 | `performance-tuning` | 针对高 CPU、内存与锁竞争场景做性能优化 |
 | `regex-vs-llm-structured-text` | 在正则与 LLM 之间选择结构化文本解析方案 |
 | `self-verifying-tests` | 编写跨层自验证测试核对 UI、数据库与代码一致性 |
@@ -160,7 +159,6 @@ _自动发现的第三方技能_
 | `autopilot` | 从想法到可运行代码的全自主执行 |
 | `autoresearch` | 带严格评估合约的单任务持续改进循环 |
 | `blueprint-e2e` | 为飞书产品蓝图每小节独立编写并执行 E2E 测试 |
-| `code-review` | 按西域投标平台规范审查 PR 的架构与安全 |
 | `configure-notifications` | 用自然语言配置 Telegram、Discord 与 Slack 通知 |
 | `create-migration` | 生成 Flyway 迁移脚本并做格式校验 |
 | `deep-dive` | 两阶段管线做因果追踪与需求澄清的深度调查 |
@@ -168,6 +166,7 @@ _自动发现的第三方技能_
 | `deepinit` | 用分层 AGENTS.md 文档深度初始化代码库 |
 | `external-context` | 并行调用文档专家代理做外部检索与查询 |
 | `github-sync` | 在 GitHub 与 Gitee 之间双向同步西域项目代码 |
+| `gstack` | Router for the gstack skill suite. (gstack) |
 | `hud` | 配置 HUD 显示布局、预设与元素 |
 | `impeccable` | 全面设计、审查并打磨各种前端界面 |
 | `knowledge-capture` | 捕获并沉淀开发过程中的知识与经验 |
@@ -345,6 +344,7 @@ _开发流程_
 | `speckit-chain` | 串联执行多个 Spec Kit 命令 |
 | `standard-workflow` | 四阶段标准作业流程规划开发质检维护 |
 | `subagent-driven-development` | 用子代理执行相互独立的实现计划 |
+| `unified-dev-flow` | Use when starting a non-trivial feature, bugfix, refactor, or migration and need to decide which stages and skills apply at what depth; when the user asks which workflow or skills to follow; or says 统一流程 / 完整流程 / 走流程. |
 | `using-git-worktrees` | 用 git worktree 创建隔离的开发工作区 |
 | `using-superpowers` | 开启会话时先调用技能再回应的流程 |
 | `verification-before-completion` | 声明完成前先运行验证命令并确认结果 |

@@ -1,6 +1,6 @@
 ---
 name: tdd-workflow
-description: Use this skill when writing new features, fixing bugs, or refactoring code. Enforces test-driven development with 80%+ coverage including unit, integration, and E2E tests.
+description: Coverage-gated TDD workflow enforcing 80%+ coverage across unit, integration, and E2E layers. Use only when the user explicitly requires a coverage threshold or full test pyramid; use test-driven-development for the standard TDD flow.
 ---
 
 # Test-Driven Development Workflow

@@ -1,6 +1,6 @@
 ---
 name: tdd
-description: Test-driven development. Use when the user wants to build features or fix bugs test-first, mentions "red-green-refactor", or wants integration tests.
+description: TDD reference on test quality, seams, and mocking. Use only when the user explicitly mentions "red-green-refactor", asks what makes a good test, where tests go (seams), or mocking guidelines; defer general feature/bugfix TDD to test-driven-development.
 ---
 
 # Test-Driven Development
