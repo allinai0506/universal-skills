@@ -129,6 +129,7 @@ sudo chown -R jetty:jetty /opt/xiyu-bid
 sudo chown -R nginx:nginx /srv/www/xiyu-bid
 
 # 4. 配置 Nginx（将前端请求代理到后端 18080）
+# 注意：必须包含 gzip + /assets/ 强缓存（2026-08-17 P0 性能优化，缺失会导致页面切换全量重传 JS）
 sudo tee /etc/nginx/conf.d/xiyu-bid.conf << 'NGINXEOF'
 server {
     listen 80;
@@ -136,26 +137,58 @@ server {
     server_name _;
     root /srv/www/xiyu-bid;
     index index.html;
+    client_max_body_size 3g;
+
+    # gzip 压缩（无此项 vendor 960KB 全量传输，开启后 ~300KB）
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_comp_level 5;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml text/javascript image/svg+xml;
+
+    # index.html 不缓存，保证部署后立即拿到新入口
+    location = /index.html {
+        add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+        add_header Pragma "no-cache" always;
+        add_header Expires "0" always;
+    }
+
+    # hash 化静态资源强缓存 1 年（文件名含 hash，内容不可变）
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable" always;
+    }
+
+    # 无 hash 文件名的静态文件不缓存
+    location = /favicon.ico { expires -1; add_header Cache-Control "no-cache, no-store, must-revalidate"; }
+
+    # SPA fallback（回退 index.html，随其 no-cache 语义）
+    location / {
+        add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+        try_files $uri $uri/ /index.html;
+    }
 
     location /api/ {
-        proxy_pass http://127.0.0.1:18080;
+        proxy_pass http://127.0.0.1:18080/api/;
+        proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
     }
 
     location /actuator/ {
-        proxy_pass http://127.0.0.1:18080;
+        proxy_pass http://127.0.0.1:18080/actuator/;
+        proxy_http_version 1.1;
         proxy_set_header Host $host;
-    }
-
-    location / {
-        try_files $uri $uri/ /index.html;
     }
 }
 NGINXEOF
-sudo systemctl restart nginx
+sudo nginx -t && sudo systemctl reload nginx
+# ⚠️ 禁止添加全局 `location ~* \.(js|css)$ { no-cache }` 之类的 TEMP 块：
+#    正则 location 优先级高于 /assets/ 前缀块，会导致 hash 资源强缓存失效（2026-08-17 修复的历史事故）
 
 # 5. 创建 backend.env 模板（实际值需从生产环境获取）
 sudo tee /etc/xiyu-bid/backend.env << 'ENVEOF'
@@ -549,6 +582,28 @@ curl --noproxy '*' http://${TARGET_HOST}:8080/actuator/health
 2. **Nginx 回退策略（不推荐作首选）**：对 `/assets/*` 的 404 回退到 `index.html`。风险：会掩盖真实 404，影响前端资源缺失监控。
 
 3. **前端容错（补充手段）**：对 `<link rel="preload">` 增加 `onerror` 降级处理，避免未处理异常进入 Sentry。只能减少噪声，不能解决资源缺失。
+
+### 19. Nginx TEMP no-cache 块导致页面切换全量重传（2026-08-17 修复）
+
+**根因**：服务器 `/etc/nginx/conf.d/xiyu-bid.conf` 中遗留一段 "TEMP: disable JS/CSS cache for deployment refresh" 的临时配置——`location ~* \.(js|css)$ { no-cache, no-store }`，且全局未开 gzip。两个因素叠加：每次页面切换，所有 hash 化 chunk 全量重新下载（vendor 960KB + echarts 822KB + 页面 chunk），无压缩传输。这是"页面切换内容展示慢"的第一根因（占比远超 API 耗时）。
+
+**Nginx 陷阱**：正则 location（`~*`）优先级高于前缀 location（`/assets/`）。只要存在全局 JS/CSS 正则 no-cache 块，`/assets/` 里配置的强缓存永远不会生效——删掉正则块是强缓存生效的前提。
+
+**修复（双环境已落地，2026-08-17）**：
+- 顶层加 `gzip on` + 8 类 MIME（JS/CSS/JSON/SVG 等）
+- 删除 TEMP 正则 no-cache 块
+- `/assets/`（hash 资源）→ `expires 1y` + `Cache-Control: public, immutable`
+- `index.html` 保持 no-cache（保证部署刷新入口）；favicon 等无 hash 文件保持 no-cache
+
+**实测收益**：vendor chunk 传输 960KB → 300KB（gzip，-69%）；二次访问 chunk 命中强缓存零传输。回滚锚点：`/etc/nginx/conf.d/xiyu-bid.conf.bak-20260817`（双环境均保留）。
+
+**验证命令**：
+```bash
+curl --noproxy '*' -sI -H 'Accept-Encoding: gzip' https://winbid.ehsy.com/assets/<vendor-chunk>.js | grep -iE 'content-encoding|cache-control'
+# 期望：Content-Encoding: gzip + Cache-Control: public, immutable
+```
+
+**防复发**：skill 初始化模板已含 gzip + 强缓存；禁止再引入全局 JS/CSS no-cache 正则块（部署刷新需求由 index.html no-cache 满足，hash 资源无需 no-cache）。
 
 ## 部署历史 commit 链（第 3-35 次，全部为测试环境）
 
