@@ -46,7 +46,7 @@ Load only the canonical skill per stage you actually enter:
 | S4 Implement | Build it | `test-driven-development` loop via `subagent-driven-development` (fallback: `executing-plans`) | Code + tests per plan |
 | S5 Verify | Prove it works | `verification-before-completion` (+ `principle-prove-it-works`) | Real command output as evidence |
 | S6 Review | Find flaws | `code-review`; adversarial: `interrogate`; security: `security-review` | Findings addressed |
-| S7 Ship | Integrate & deploy | `finishing-a-development-branch` → `ship`; post-deploy: `canary` | Merged, versioned, PR opened |
+| S7 Ship | Integrate & deploy | `finishing-a-development-branch` → `ship`; AI-authored code: `ai-release-engineer`; post-deploy: `canary` | Merged, versioned, PR opened |
 | S8 Capture | Get smarter | `knowledge-capture` | Reusable knowledge filed |
 
 One-shot alternative for large features: `speckit-chain`.
@@ -57,6 +57,7 @@ One-shot alternative for large features: `speckit-chain`.
 - **S3 → S4**: no written plan, no code — except the micro-change fast path.
 - **S4 → S5**: completion claims require real verification evidence (ran commands, saw output).
 - **S5 → S7**: PRs touching a live/production system MUST pass `production-risk-review` instead of a plain code review.
+- **S5 → S7 (AI-authored release)**: AI-generated changes MUST pass `ai-release-engineer` gates before merge or production promotion; a failed gate means STOP.
 
 ## Cross-cutting (enter at any stage)
 
