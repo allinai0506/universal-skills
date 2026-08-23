@@ -68,6 +68,7 @@ S0 准备 → S1 意图 → S2 规格 → S3 规划 → S4 实现 → S5 验证 
 | 计划评审 | `gstack-plan-eng-review` / `plan-ceo-review` / `plan-design-review` | 仅大型/高风险特性启用多视角会审 |
 | 一致性检查 | `speckit-analyze` / `speckit-checklist` | 规格-计划-任务交叉校验 |
 | 原型探路 | `prototype` / `arena` / `principle-exhaust-the-design-space` | 无先例的交互或设计决策，先对比再定案 |
+| 数据建模 | `access-pattern-driven-data-modeling` | 涉及建表/改表、加索引、列表/搜索/报表查询路径、反规范化或读模型设计时；从访问模式倒推 schema，每个索引对应具体查询 |
 
 ### S4 实现执行（动手做）
 
@@ -131,7 +132,8 @@ S0 准备 → S1 意图 → S2 规格 → S3 规划 → S4 实现 → S5 验证 
 systematic-debugging（canonical 入口）
   └─ 升级 root-cause-hunter（逆向追踪证明根因）
        └─ 升级 paranoid-debugging（生产关键代码的证据级再验证）
-其他工具：diagnosing-bugs（HITL 循环）/ trace（竞争假设）/ deep-dive / gstack-investigate
+其他工具：diagnosing-bugs（HITL 循环）/ trace（竞争假设）/ deep-dive / gstack-investigate；
+数据访问性能排查（慢查询、索引未命中）走 `access-pattern-driven-data-modeling` 的验证环节（EXPLAIN + 访问模式对照）
 ```
 
 ### 🧠 上下文管理

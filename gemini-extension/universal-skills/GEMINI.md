@@ -350,6 +350,7 @@ _开发流程_
 | `writing-plans` | 动代码前为多步任务编写实现计划 |
 | `writing-skills` | 创建、编辑并在部署前验证技能 |
 | `xiyu-code-review` | 按西域投标平台规范审查 PR 的架构与安全 |
+| `xiyu-mode` | 西域投标管理平台专属模式（质疑复用优先+SpecKit流程+FP-Java+多Agent收尾） |
 ---
 
 ## How to Use a Skill
