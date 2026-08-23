@@ -34,10 +34,13 @@ echo "$CHANGED_SKILLS" | while read -r f; do
 done
 echo ""
 
-# ─── 步骤 2: 运行 sync.sh 同步到所有本地 Agent ─────────────────────────────
+# ─── 步骤 2: 运行 sync.sh 同步到本地 Agent ─────────────────────────────
+# --no-projects：项目级全量重建（40+ 项目 × 4 目录 × 230 技能 ≈ 3-5 分钟）是
+# post-commit 挂起的根因；SKILL.md 内容变更经 symlink 即时生效，无需重建。
+# 全局同步（含 TraeCode 真实副本）保留。新增/删除技能目录时手动跑 ./sync.sh。
 if [ -x "$SYNC_SCRIPT" ]; then
-    echo -e "${CYAN}  🚀 步骤 1/2: 同步到本地 Agents...${RESET}"
-    cd "$REPO_DIR" && bash "$SYNC_SCRIPT" 2>&1 | grep -E "(✓|✗|→|ERROR|已同步|警告|success)" | sed 's/^/    /'
+    echo -e "${CYAN}  🚀 步骤 1/2: 同步到本地 Agents（跳过项目级）...${RESET}"
+    cd "$REPO_DIR" && bash "$SYNC_SCRIPT" --no-projects 2>&1 | grep -E "(✓|✗|→|ERROR|已同步|警告|success)" | sed 's/^/    /'
     echo ""
 else
     echo "  ⚠️  sync.sh 不可执行，跳过本地同步"
