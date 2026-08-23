@@ -48,14 +48,14 @@ echo -e "${CYAN}  ☁️  步骤 2/2: 推送到远端...${RESET}"
 
 CURRENT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "main")
 
-# 探测策略：当前分支上游远端 → 仓库第一个远端 → 跳过
-REMOTE=""
-UPSTREAM=$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null | sed 's@/.*@@' || true)
-if [ -n "$UPSTREAM" ]; then
-    REMOTE="$UPSTREAM"
+# 探测策略：分支绑定的远端（直接读配置）→ 仓库第一个远端 → 跳过
+# 不用 @{u}：分支无上游时解析不可靠，可能把字面量当远端名传给 git push
+_cfg_remote=$(git config "branch.$CURRENT_BRANCH.remote" 2>/dev/null || true)
+if [ -n "$_cfg_remote" ] && git remote 2>/dev/null | grep -qx "$_cfg_remote"; then
+    REMOTE="$_cfg_remote"
 else
     # 无上游绑定时，取仓库配置里的第一个远端
-    REMOTE=$(git remote | head -n1 || true)
+    REMOTE=$(git remote 2>/dev/null | head -n1 || true)
 fi
 
 if [ -z "$REMOTE" ]; then
