@@ -7,14 +7,11 @@ description: Use when starting a non-trivial feature, bugfix, refactor, or migra
 
 ## Overview
 
-A **thin router**: it selects and chains existing skills — it never re-implements them.
-Each stage names one canonical skill to load for that phase. Alternatives live in
-`WORKFLOW-MAP.md` at the universal-skills repo root.
+A **thin router**: selects and chains existing skills by name, never re-implements them.
+Alternatives live in `WORKFLOW-MAP.md` at the repo root.
 
-Two rules govern every route:
-
-1. **Gates before stages.** A gate that fails stops progression until resolved (see Gates).
-2. **Scale decides depth.** Classify the task FIRST — most tasks skip several stages; only large ones walk all 9.
+1. **Gates before stages** — a failed gate stops progression until resolved.
+2. **Scale decides depth** — classify FIRST; only large tasks walk all 9 stages.
 
 ## Step 1 — Classify the task
 
@@ -27,47 +24,48 @@ Two rules govern every route:
 | Large feature / new system | Cross-layer, high risk, vague requirements | Full flow S0→S8 with speckit spec + `architect` plan review + `interrogate` + `production-risk-review` + `ship` |
 | Intractable / big migration | Multi-week, needs audit trail | `figure-it-out` or `blueprint-driven-development` playbook mode |
 
-## When NOT to use this skill
+## When NOT to use
 
-- Trivial fix one skill already covers (typo, rename, one-line tweak) — just do it.
-- Already mid-flight in a structured flow (`speckit-chain`, active plan file) — finish that; don't re-route.
-- The user explicitly named the workflow they want.
+- Trivial fix one skill covers (typo, rename, one-liner) — just do it.
+- Already mid-flight in a structured flow (`speckit-chain`, active plan file) — finish it.
+- User named the workflow they want.
 
-## Step 2 — Walk only the stages your route includes
+## Step 2 — Walk only your route's stages
 
-Load only the canonical skill per stage you actually enter:
+Load stage skills for your route, plus any domain specialist (see Cross-cutting):
 
-| Stage | Question | Canonical skill | Exit condition |
+| Stage | Question | Canonical skill | Exit when |
 |---|---|---|---|
-| S0 Prepare | Isolated workspace? | `using-git-worktrees` (resume work: `recall`) | Worktree/session ready |
-| S1 Intent | Why do this? | `brainstorming` | User confirms intent & scope |
-| S2 Spec | What exactly? | `speckit-specify` → `speckit-clarify`; light path: `to-spec` | Written spec, ambiguities resolved |
+| S0 Prepare | Isolated workspace? | `using-git-worktrees` (resume: `recall`) | Workspace ready |
+| S1 Intent | Why do this? | `brainstorming` | User confirms scope |
+| S2 Spec | What exactly? | `speckit-specify` → `speckit-clarify`; light path: `to-spec` | Spec written |
 | S3 Plan | How, in what order? | `writing-plans`; architecture-first: `architect`; schema/index/query-path changes: `access-pattern-driven-data-modeling` | Plan with verification points |
-| S4 Implement | Build it | `test-driven-development` loop via `subagent-driven-development` (fallback: `executing-plans`) | Code + tests per plan |
-| S5 Verify | Prove it works | `verification-before-completion` (+ `principle-prove-it-works`) | Real command output as evidence |
+| S4 Implement | Build it | `test-driven-development` via `subagent-driven-development` (fallback: `executing-plans`) | Code + tests per plan |
+| S5 Verify | Prove it works | `verification-before-completion` (+ `principle-prove-it-works`) | Real command evidence |
 | S6 Review | Find flaws | `code-review`; adversarial: `interrogate`; security: `security-review` | Findings addressed |
-| S7 Ship | Integrate & deploy | `finishing-a-development-branch` → `ship`; AI-authored code: `ai-release-engineer`; post-deploy: `canary` | Merged, versioned, PR opened |
-| S8 Capture | Get smarter | `knowledge-capture` | Reusable knowledge filed |
+| S7 Ship | Integrate & deploy | `finishing-a-development-branch` → `ship`; AI-authored code: `ai-release-engineer`; post-deploy: `canary` | Merged, PR opened |
+| S8 Capture | Get smarter | `knowledge-capture` | Knowledge filed |
 
-One-shot alternative for large features: `speckit-chain`.
+Large-feature one-shot: `speckit-chain`.
 
 ## Gates (hard stops)
 
 - **S1 → S2**: unclear intent blocks spec writing — clarify first.
-- **S3 → S4**: no written plan, no code — except the micro-change fast path.
-- **S4 → S5**: completion claims require real verification evidence (ran commands, saw output).
+- **S3 → S4**: no written plan, no code — micro-change fast path exempt.
+- **S4 → S5**: completion claims need real command evidence.
 - **S5 → S7**: PRs touching a live/production system MUST pass `production-risk-review` instead of a plain code review.
-- **S5 → S7 (AI-authored release)**: AI-generated changes MUST pass `ai-release-engineer` gates before merge or production promotion; a failed gate means STOP.
+- **S5 → S7 (AI-authored release)**: AI-generated changes MUST pass `ai-release-engineer` gates before merge or production promotion; failure = STOP.
 
 ## Cross-cutting (enter at any stage)
 
-- **Debugging escalation**: `systematic-debugging` → `root-cause-hunter` → `paranoid-debugging`.
-- **Data modeling & query performance**: `access-pattern-driven-data-modeling` when work touches tables, indexes, list/search/report queries, denormalization/read models, or data-access perf (e.g. slow query found at S5).
-- **Context management**: `principle-guard-the-context-window` (route bulk to subagents), `strategic-compact` (compress at milestones), `context-save`/`context-restore` (across sessions).
-- **Principles layer**: pstack `principle-*` skills constrain every stage (e.g. `principle-subtract-before-you-add`, `principle-fix-root-causes`, `principle-sequence-verifiable-units`).
+- **Domain specialists** (load alongside any route; pure non-code tasks run them alone): UI build/polish → `frontend-design` / `ui-ux-pro-max`; CPU/memory/lock perf → `performance-tuning`; behavior-preserving refactor → `clean-code-behavior-preserving-refactoring` / `entropy-reduction`; research/selection → `research`; customer-facing docs → `technical-writing` / `html-first-workflow`.
+- **Debug escalation**: `systematic-debugging` → `root-cause-hunter` → `paranoid-debugging`.
+- **Data modeling & query perf**: `access-pattern-driven-data-modeling` for tables, indexes, list/search/report queries, denormalization/read models, slow-query diagnosis.
+- **Context**: `principle-guard-the-context-window`, `strategic-compact`, `context-save`/`context-restore`.
+- **Principles**: pstack `principle-*` constrain every stage (e.g. subtract-before-you-add, fix-root-causes).
 
 ## Common mistakes
 
-- Walking all 9 stages for a small/medium task. Classification decides the route — re-check Step 1 before entering any stage.
-- Skipping gates under time pressure. A waived gate must be explicit with the user.
-- Copying skill bodies into plans or prompts. Reference by name, load on demand; default to canonical skills, switch to `WORKFLOW-MAP.md` alternatives only when their stated condition applies.
+- Walking all 9 stages for a small/medium task — re-check Step 1 first.
+- Skipping gates under time pressure; a waived gate must be explicit with the user.
+- Copying skill bodies into plans — reference by name, load on demand; switch to `WORKFLOW-MAP.md` alternatives only when their stated condition applies.
