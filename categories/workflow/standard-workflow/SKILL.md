@@ -159,5 +159,5 @@ RED → GREEN → REFACTOR → REPEAT
 
 - **tdd-workflow** - TDD 详细工作流
 - **security-review** - 安全审查技能
-- **minimalist-refactorer** - 极简重构
-- **entropy-reduction** - 熵减重构
+- **clean-code-behavior-preserving-refactoring** - 行为保持重构（含极简删减策略，已并入原 minimalist-refactorer）
+- **entropy-reduction** - 熵减重构（架构级模块边界）

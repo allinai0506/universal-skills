@@ -1,0 +1,3 @@
+interface:
+  display_name: "Clean Code Behavior Preserving Refactoring"
+  short_description: "Refactor code while proving behavior unchanged"

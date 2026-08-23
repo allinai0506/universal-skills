@@ -60,7 +60,7 @@
 | Skill | 说明 |
 |-------|------|
 | **entropy-reduction** | 熵减，模块化设计，处理循环依赖 |
-| **minimalist-refactorer** | 极简重构，降低复杂度 |
+| **clean-code-behavior-preserving-refactoring** | 行为保持重构：删减优先、合并重复并证明行为未变（原 minimalist-refactorer 已并入） |
 
 ---
 

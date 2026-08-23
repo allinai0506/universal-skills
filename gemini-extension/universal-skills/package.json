@@ -27,9 +27,9 @@
         "category": "debugging"
       },
       {
-        "id": "minimalist-refactorer",
-        "name": "Minimalist Refactorer",
-        "description": "Simplify and clean code with minimal changes",
+        "id": "clean-code-behavior-preserving-refactoring",
+        "name": "Clean Code Behavior Preserving Refactoring",
+        "description": "Refactor code cleaner and smaller while proving behavior unchanged",
         "category": "refactoring"
       },
       {

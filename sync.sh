@@ -851,6 +851,66 @@ sync_grok() {
     log "  路径: ~/.grok/skills/"
 }
 
+# 同步到 Qoder (~/.qoder/skills/)
+# Qoder 从 ~/.qoder/skills/ 加载用户级技能。
+# 这里显式增量 symlink，保证不依赖任何兼容开关即可注册，
+# 并保护已有的非 universal-skills 技能（如 lark-*）。
+sync_qoder() {
+    local target="$HOME/.qoder/skills"
+
+    if [ ! -d "$HOME/.qoder" ]; then
+        return
+    fi
+
+    mkdir -p "$target"
+    local duplicate_removed
+    duplicate_removed=$(cleanup_duplicate_skill_links "$target")
+    [ "$duplicate_removed" -gt 0 ] && log "  清理 Qoder 重复技能 symlink: $duplicate_removed 个"
+
+    local skill_count=0
+    local skipped=0
+    for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
+        if is_syncable_skill_dir "$skill_dir"; then
+            local skill_name="$(basename "$skill_dir")"
+            # 全局同步：跳过项目专用技能，清理遗留 symlink
+            if is_project_only_skill "$skill_name"; then
+                local link="$target/$skill_name"
+                if [ -L "$link" ]; then
+                    local dest
+                    dest="$(readlink "$link")"
+                    if [[ "$dest" == "$UNIVERSAL_SKILLS/categories/"* ]]; then
+                        rm -f "$link"
+                    fi
+                fi
+                continue
+            fi
+            local link="$target/$skill_name"
+
+            # 已是指向同一目标的 symlink → 跳过
+            if [ -L "$link" ] && [ "$(readlink "$link")" = "$skill_dir" ]; then
+                continue
+            fi
+
+            # 已存在且非我们管理的技能（Qoder bundled/plugin/用户自有） → 跳过
+            if [ -e "$link" ] || [ -L "$link" ]; then
+                skipped=$((skipped + 1))
+                continue
+            fi
+
+            ln -sf "$skill_dir" "$link"
+            skill_count=$((skill_count + 1))
+        fi
+    done
+
+    if [ $skill_count -gt 0 ]; then
+        success "Qoder skills 已同步 ($skill_count 个技能，增量 symlink)"
+        [ $skipped -gt 0 ] && warn "  跳过 $skipped 个已存在的非 universal-skills 技能"
+    else
+        log "Qoder skills 无需更新（全部已同步）"
+    fi
+    log "  路径: ~/.qoder/skills/"
+}
+
 # 同步到 Trae CN Agent (~/.trae-cn/skills/) 和 Trae Work (~/.trae/skills/)
 # 两者都管理 Agent skills，含 marketplace/builtin 技能。
 # 必须增量同步，不得 rm -rf，避免覆盖 Trae 自带或已安装的 marketplace 技能。
@@ -1302,6 +1362,7 @@ SKIP_ZCODE=false
 SKIP_TRAE_CN=false
 SKIP_KIMI=false
 SKIP_GROK=false
+SKIP_QODER=false
 SKIP_CURSOR=false
 DO_DISCOVER=false
 SPECIFIC_PROJECT=""
@@ -1316,6 +1377,7 @@ while [[ $# -gt 0 ]]; do
         --no-trae-cn) SKIP_TRAE_CN=true ;;
         --no-kimi) SKIP_KIMI=true ;;
         --no-grok) SKIP_GROK=true ;;
+        --no-qoder) SKIP_QODER=true ;;
         --no-cursor) SKIP_CURSOR=true ;;
         --project=*) SPECIFIC_PROJECT="$2"; shift ;;
         --discover) DO_DISCOVER=true ;;
@@ -1419,6 +1481,11 @@ if [ "$SKIP_KIMI" = false ]; then
     echo ""
 fi
 
+if [ "$SKIP_QODER" = false ]; then
+    sync_qoder
+    echo ""
+fi
+
 update_skills_index
 
 success "同步完成！"
@@ -1443,5 +1510,6 @@ echo "已同步的目标："
 [ "$SKIP_TRAE_CN" = false ] && echo "  ✓ TraeWork (~/.trae/skills/) ← 增量 symlink"
 [ "$SKIP_GROK" = false ] && echo "  ✓ Grok Build (~/.grok/skills/) ← 增量 symlink"
 [ "$SKIP_KIMI" = false ] && echo "  ✓ Kimi Code (~/.kimi-code/skills/ + config.toml)"
+[ "$SKIP_QODER" = false ] && echo "  ✓ Qoder (~/.qoder/skills/) ← 增量 symlink"
 [ "$SKIP_PROJECTS" = false ] && echo "  ✓ 项目级 symlinks (clawd, xiyu, etc.)"
 echo ""

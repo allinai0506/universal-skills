@@ -198,7 +198,7 @@ pstack,typescript-best-practices,读写 TS 与 TSX 文件时的最佳实践
 pstack,unslop,从任何写作中去掉 AI 腔调并随时应用
 pstack,why,解释为何这样设计并查询证据得出结论
 refactoring,entropy-reduction,设计边界清晰且低复杂度的模块化代码
-refactoring,minimalist-refactorer,删除优先并合并重复的极简重构且保持行为
+coding,clean-code-behavior-preserving-refactoring,行为保持重构：删减优先、合并重复并证明行为未变（含原极简重构策略）
 testing,e2e-testing,Playwright 端到端测试与页面对象模型实践
 testing,eval-harness,实现评估驱动开发的正式评估框架
 tools,chronicle,查看用户屏幕与近期历史以消除歧义

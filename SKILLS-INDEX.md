@@ -1,6 +1,6 @@
 # SKILLS-INDEX
 
-> 技能来源速查表 · 自动生成于 2026-08-22 19:12 · 共 235 个一级技能。
+> 技能来源速查表 · 自动生成于 2026-08-23 11:29 · 共 234 个一级技能。
 > 按「来源」检索：公开技能包（外部大神编写的成套技能） / 自建・单个技能。
 > 技能由 AI 按 description 自动触发，无需记住名字。
 
@@ -197,6 +197,7 @@ _编码规范与模式_
 | `ai-release-engineer` | Use when AI-generated code is ready for validation, merge, release, or production deployment; before PR merge verification, test/UAT/production promotion, canary or full rollout, or post-release rollback decisions. |
 | `api-design` | 设计生产级 REST API 并规范命名、状态码与分页 |
 | `backend-patterns` | Node.js、Express、Next.js 后端架构与 API 最佳实践 |
+| `clean-code-behavior-preserving-refactoring` | 行为保持重构：删减优先、合并重复并证明行为未变（含原极简重构策略） |
 | `coding-standards` | TS、JS、React、Node 通用编码规范与最佳实践 |
 | `content-hash-cache-pattern` | 用 SHA-256 内容哈希缓存昂贵的文件处理结果 |
 | `frontend-patterns` | React 与 Next.js 前端开发、状态管理与性能优化 |
@@ -304,7 +305,6 @@ _其他_
 | 技能 | 用途 |
 | --- | --- |
 | `configure-ecc` | 交互式安装 Everything Claude Code 技能与规则 |
-| `continuous-learning` | 从会话中自动提取可复用模式存为技能 |
 | `continuous-learning-v2` | 基于本能观察会话并演化为技能的学习系统 |
 | `nutrient-document-processing` | 用 Nutrient API 处理转换 OCR 各种文档 |
 | `project-guidelines-example` | 基于真实应用的示例项目级技能模板 |
@@ -320,7 +320,6 @@ _重构实践_
 | 技能 | 用途 |
 | --- | --- |
 | `entropy-reduction` | 设计边界清晰且低复杂度的模块化代码 |
-| `minimalist-refactorer` | 删除优先并合并重复的极简重构且保持行为 |
 
 ### security-review
 _安全审查_
