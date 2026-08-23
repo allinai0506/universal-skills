@@ -42,7 +42,7 @@ Load only the canonical skill per stage you actually enter:
 | S0 Prepare | Isolated workspace? | `using-git-worktrees` (resume work: `recall`) | Worktree/session ready |
 | S1 Intent | Why do this? | `brainstorming` | User confirms intent & scope |
 | S2 Spec | What exactly? | `speckit-specify` → `speckit-clarify`; light path: `to-spec` | Written spec, ambiguities resolved |
-| S3 Plan | How, in what order? | `writing-plans`; architecture-first: `architect` | Plan with verification points |
+| S3 Plan | How, in what order? | `writing-plans`; architecture-first: `architect`; schema/index/query-path changes: `access-pattern-driven-data-modeling` | Plan with verification points |
 | S4 Implement | Build it | `test-driven-development` loop via `subagent-driven-development` (fallback: `executing-plans`) | Code + tests per plan |
 | S5 Verify | Prove it works | `verification-before-completion` (+ `principle-prove-it-works`) | Real command output as evidence |
 | S6 Review | Find flaws | `code-review`; adversarial: `interrogate`; security: `security-review` | Findings addressed |
@@ -61,6 +61,7 @@ One-shot alternative for large features: `speckit-chain`.
 ## Cross-cutting (enter at any stage)
 
 - **Debugging escalation**: `systematic-debugging` → `root-cause-hunter` → `paranoid-debugging`.
+- **Data modeling & query performance**: `access-pattern-driven-data-modeling` when work touches tables, indexes, list/search/report queries, denormalization/read models, or data-access perf (e.g. slow query found at S5).
 - **Context management**: `principle-guard-the-context-window` (route bulk to subagents), `strategic-compact` (compress at milestones), `context-save`/`context-restore` (across sessions).
 - **Principles layer**: pstack `principle-*` skills constrain every stage (e.g. `principle-subtract-before-you-add`, `principle-fix-root-causes`, `principle-sequence-verifiable-units`).
 
