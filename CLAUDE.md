@@ -105,7 +105,7 @@ description: Use when [clear trigger conditions]. Describe what the skill does.
 | `architecture/` | System design, constraints | architecture-defense |
 | `coding/` | Development patterns | tdd-workflow, self-verifying-tests |
 | `debugging/` | Debugging methodologies | systematic-debugging, root-cause-hunter |
-| `refactoring/` | Code cleanup | entropy-reduction, minimalist-refactorer |
+| `refactoring/` | Code cleanup | entropy-reduction |
 | `ui-ux/` | Frontend design | ui-ux-pro-max, frontend-design |
 | `workflow/` | Process management | brainstorming, writing-plans, skill-creator |
 
