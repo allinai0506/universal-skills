@@ -17,7 +17,7 @@ S0 准备 → S1 意图 → S2 规格 → S3 规划 → S4 实现 → S5 验证 
  worktree  为什么做   做什么    怎么做    动手做    证明对    挑毛病    上上线    变聪明
 
 横切关注点（任何阶段可介入）：
-  🔍 调试诊断   🧠 上下文管理   📐 工程原则约束（pstack principle-*）
+  🎯 领域专项   🔍 调试诊断   🧠 上下文管理   📐 工程原则约束（pstack principle-*）
 ```
 
 **门禁规则**（借鉴各范式之长）：
@@ -126,6 +126,21 @@ S0 准备 → S1 意图 → S2 规格 → S3 规划 → S4 实现 → S5 验证 
 
 ## 三、横切关注点
 
+### 🎯 领域专项（Domain Specialists）
+
+任务命中领域信号时**与任意路由并行加载**；纯非代码任务（调研、文档）单独运行、免走开发流程。
+SKILL.md 只保留压缩版，本表是完整数据基础。路由器现含三分派轴：**规模 × 阶段 × 领域**。
+
+| 领域信号 | 首选 | 备选/说明 |
+|---|---|---|
+| UI 构建/打磨、看板/落地页 | `frontend-design` | `ui-ux-pro-max`（BM25 检索引擎：50+ 风格 / 97 色板 / 57 字体 / 99 UX 准则 / 25 图表） |
+| CPU/内存/GC/锁竞争、慢接口 | `performance-tuning` | 内置 profiling 工作流；数据访问慢查询另走 `access-pattern-driven-data-modeling` |
+| 行为保持重构（清理/精简/拆分/降嵌套） | `clean-code-behavior-preserving-refactoring` | `entropy-reduction`（模块化熵减：循环依赖、边界重划） |
+| 调研/选型，先不写代码 | `research`（一手资料 → Markdown 备忘） | `search-first`（写码前先找现成轮子） |
+| 客户交付/正式文档 | `html-first-workflow` | `technical-writing`（Diátaxis 分层规范）/ `gstack-make-pdf` |
+| API 设计/改造 | `api-design` | 自触发强，暂不进 SKILL.md 压缩版 |
+| 数据库方言专项 | `postgres-patterns` / `clickhouse-io` | 同上；漏派证据出现再升级 |
+
 ### 🔍 调试诊断（升级路径）
 
 ```
@@ -197,8 +212,10 @@ pstack 的 21 条 `principle-*` 不属于任何阶段，是**所有阶段共享�
 3. **对照指标**：返工次数、验证证据完整度、context 消耗，与传统单技能方式对比。
 4. **迭代门槛**：只有实战出现失败证据，才允许增加复杂度（新增阶段/新部门禁）；否则冻结当前粒度。
 
-## 八、下一步（2026-08-22 更新）
+## 八、下一步（2026-08-23 更新）
 
 1. ✅ 薄 router 元技能已创建：`workflow/unified-dev-flow`——39 个被引用技能名全部机器校验存在，quick_validate 结构验证通过，sync.sh 已传播到全部同步目标（SKILLS-INDEX / GEMINI.md 均收录）；
 2. ✅ 第五节去重清单已执行完毕（结果见第五节表格）；
-3. ⬜ 用第七节实战校验跑 3 个真实任务并记录结果（微改动 / 中型功能 / 大型特性各一）。
+3. ✅ 领域分派轴上线（2026-08-23）：SKILL.md Cross-cutting 新增 Domain specialists（UI / 性能 / 重构 / 调研 / 文档），Step 2 指令改为"阶段技能 + 领域专项"并行加载，"Load only" 眼罩指令移除；路由测试 7 场景全 PASS——规模轴 3（建表中型功能、AI 发布双门禁、错别字豁免）+ 领域轴 4（重构 / UI 看板 / CPU 内存性能 / 纯调研，修复前全 GAP、修复后全 PASS）；
+4. ⬜ 用第七节实战校验跑 3 个真实任务并记录结果（微改动 / 中型功能 / 大型特性各一）；
+5. ⬜ map 领域表中"自触发"行（`api-design` / `postgres-patterns` / `clickhouse-io`）仅在实战出现漏派证据时升级进 SKILL.md。
