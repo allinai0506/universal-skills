@@ -313,7 +313,9 @@ pull_from_projects() {
                     diff_list="${diff_list}${skill_name}|${project_name}|${dir_name}|${project_skill_dir}|${repo_dir}
 "
                     warn "[$project_name/$dir_name] $skill_name"
-                    diff "$repo_md" "$skill_md" | head -20
+                    local dlines
+                    dlines=$(diff "$repo_md" "$skill_md" 2>/dev/null | grep -c '^[<>]')
+                    echo "  差异行数: ${dlines:-0} (完整 diff 见确认时展示)"
                     echo "  ---"
                 fi
             done
@@ -333,15 +335,34 @@ pull_from_projects() {
         return 0
     fi
 
-    # 逐个确认回流
+    # 逐个确认回流；每个技能先展示完整 diff，明示覆盖语义
     local pulled=0
+    local skipped=0
     while IFS='|' read -r skill_name project_name dir_name project_skill_dir repo_dir; do
         [ -z "$skill_name" ] && continue
 
         echo ""
         echo -e "${CYAN}==> $skill_name${NC} (来自 $project_name/$dir_name)"
+
+        # 判断差异方向：仓库是否已有项目版没有的内容
+        local repo_only anchor
+        repo_only=$(diff --old-line-format='%<' --new-line-format='' --unchanged-line-format='' \
+                    "$repo_dir/SKILL.md" "$project_skill_dir/SKILL.md" 2>/dev/null)
+        if [ -n "$repo_only" ]; then
+            warn "  注意: 仓库版包含项目版没有的内容，整份覆盖将丢弃这些行！"
+            anchor="双向差异(部分覆盖有风险)"
+        else
+            anchor="仅项目版新增(可安全合并)"
+        fi
+
+        echo "  [$anchor] 以下为 仓库版< 项目版> 差异:"
+        diff "$repo_dir/SKILL.md" "$project_skill_dir/SKILL.md" 2>/dev/null | while IFS= read -r l; do
+            echo "    $l"
+        done
+        echo ""
+
         local answer=""
-        read -p "  回流此技能到仓库？[y/N/a(全部回流)/q(退出)] " -r answer
+        read -p "  回流此技能到仓库？[y/N/a(全部采用项目版)/m(行级合并)/q(退出)] " -r answer
         case "$answer" in
             [Qq]) break ;;
             [Aa])
@@ -352,10 +373,22 @@ pull_from_projects() {
                         [ "$(basename "$f")" = "SKILL.md" ] && continue
                         cp -R "$f" "$rd/"
                     done
-                    success "  已回流 $sn"
+                    success "  已回流(整份覆盖) $sn"
                     pulled=$((pulled + 1))
                 done <<< "$diff_list"
                 break
+                ;;
+            [Mm])
+                if merge_skill_file "$repo_dir/SKILL.md" "$project_skill_dir/SKILL.md"; then
+                    for f in "$project_skill_dir"/*; do
+                        [ "$(basename "$f")" = "SKILL.md" ] && continue
+                        cp -R "$f" "$repo_dir/" 2>/dev/null
+                    done
+                    success "  已行级合并 $skill_name"
+                    pulled=$((pulled + 1))
+                else
+                    skipped=$((skipped + 1))
+                fi
                 ;;
             [Yy])
                 cp "$project_skill_dir/SKILL.md" "$repo_dir/SKILL.md"
@@ -363,7 +396,7 @@ pull_from_projects() {
                     [ "$(basename "$f")" = "SKILL.md" ] && continue
                     cp -R "$f" "$repo_dir/"
                 done
-                success "  已回流 $skill_name"
+                success "  已回流(整份覆盖) $skill_name"
                 pulled=$((pulled + 1))
                 ;;
         esac
@@ -375,6 +408,86 @@ pull_from_projects() {
     else
         log "未回流任何技能"
     fi
+    [ $skipped -gt 0 ] && warn "$skipped 个技能因合并冲突被跳过，请手动处理"
+}
+
+# 行级合并：以仓库 git 历史为 base 做三向合并
+# 返回 0 = 合并成功写入 repo_md；1 = 冲突需人工（已保留仓库版不动）
+# 用法: merge_skill_file <repo_sk.md> <project_sk.md>
+merge_skill_file() {
+    local repo_md="$1"
+    local project_md="$2"
+
+    # 三向合并需要 diff3
+    if ! command -v diff3 > /dev/null 2>&1; then
+        warn "  diff3 不可用，无法行级合并；请改用整份覆盖或手动处理"
+        return 1
+    fi
+
+    # base: 仓库版在 git 中的版本。若文件未跟踪，用仓库版本地内容作为 base
+    local base_md=""
+    if [ -n "$UNIVERSAL_SKILLS" ] && git -C "$UNIVERSAL_SKILLS" rev-parse -q --verify HEAD > /dev/null 2>&1; then
+        local rel
+        rel=$(git -C "$UNIVERSAL_SKILLS" ls-files "$repo_md")
+        if [ -n "$rel" ]; then
+            base_md=$(git -C "$UNIVERSAL_SKILLS" show "HEAD:$rel" 2>/dev/null)
+        fi
+    fi
+    [ -z "$base_md" ] && base_md=$(cat "$repo_md")
+
+    # 三向合并。合并源文本需要文件路径，用临时目录
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    printf '%s\n' "$base_md" > "$tmpdir/base"
+    cat "$repo_md" > "$tmpdir/ours"
+    cat "$project_md" > "$tmpdir/theirs"
+
+    # 三向合并前，先记录两边「独有行」集合，供合并后校验（diff3 对相邻改动会静默丢行）
+    # 兼容 BSD/macOS diff: diff base ours 中 "> " 开头是 ours 独有（相对 base 新增）
+    local ours_only theirs_only
+    ours_only=$(diff "$tmpdir/base" "$tmpdir/ours" 2>/dev/null | sed -n 's/^> //p')
+    theirs_only=$(diff "$tmpdir/base" "$tmpdir/theirs" 2>/dev/null | sed -n 's/^> //p')
+
+    # 生成带冲突标记的合并结果
+    local merged
+    merged=$(diff3 -m -L "仓库版(HEAD)" -L "仓库版(当前)" -L "项目版" "$tmpdir/ours" "$tmpdir/base" "$tmpdir/theirs" 2>/dev/null)
+    rm -rf "$tmpdir"
+
+    # diff3 -m 退出码: 0=无冲突, 1=有冲突仍输出
+    if grep -q '^<<<<<<<\|^=======\|^>>>>>>>' <<< "$merged" 2>/dev/null; then
+        warn "  检测到合并冲突，不会覆盖；请手动处理 $repo_md"
+        echo "  冲突区段预览（前20行）:"
+        echo "$merged" | grep -n '^<<<<<<<\|^>>>>>>>' | head -5 -A0
+        return 1
+    fi
+
+    # 校验：our 独有行与项目独有行在结果中都必须保留，否则拒绝写入
+    if [ -n "$ours_only" ]; then
+        while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            grep -Fqx -- "$line" <<< "$merged" || {
+                warn "  合并丢掉了仓库独有行: \"$line\"，已拒绝写入（建议改用整份覆盖或手动处理）"
+                return 1
+            }
+        done <<< "$ours_only"
+    fi
+    if [ -n "$theirs_only" ]; then
+        while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            grep -Fqx -- "$line" <<< "$merged" || {
+                warn "  合并丢掉了项目独有行: \"$line\"，已拒绝写入（建议改用整份覆盖或手动处理）"
+                return 1
+            }
+        done <<< "$theirs_only"
+    fi
+
+    if [ -z "$merged" ]; then
+        warn "  合并结果为空，跳过 $repo_md"
+        return 1
+    fi
+
+    printf '%s\n' "$merged" > "$repo_md"
+    return 0
 }
 
 # 幂等地把一个目录注册到 TOML 配置文件的 extra_skill_dirs 数组中
@@ -1682,6 +1795,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --project NAME  只同步指定项目"
             echo "  --discover      发现并索引项目中隐藏的技能"
             echo "  --pull          反向回流：扫描项目副本与仓库的差异，逐个确认后回流"
+            echo "                 确认选项: y=整份覆盖  m=行级合并(diff3,含防丢行校验)  a=全部整份覆盖  N/q=跳过"
             echo "  --pull --dry-run  只展示差异，不回流"
             echo "  --help          显示此帮助"
             exit 0
