@@ -188,3 +188,13 @@ find ~/xiyu ~/clawd -maxdepth 4 -name "SKILL.md" -path "*/.claude/skills/*" 2>/d
 - SKILL.md: Always exactly `SKILL.md` (uppercase)
 - Scripts: `snake_case.py` for Python
 - Data files: `kebab-case.csv` for structured data
+
+## 开发流程断点恢复
+
+开发任务开始前，必须先检查当前 worktree 是否存在未完成的开发流程状态：
+
+1. 检查 `.superpowers/sdd/` 目录下是否有 ledger 文件（`progress.md`）
+2. 若存在，读取 ledger 首行确认所属计划文件，再按 `Task <N>: complete` 行确定断点位置
+3. 从断点处的下一个任务继续执行，不重新建计划、不重新分级
+
+只有在确认没有未完成的 ledger 或计划文件后，才走 unified-dev-flow 的正常分级路由。
