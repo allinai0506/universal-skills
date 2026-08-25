@@ -1,6 +1,6 @@
 # SKILLS-INDEX
 
-> 技能来源速查表 · 自动生成于 2026-08-25 14:26 · 共 233 个一级技能。
+> 技能来源速查表 · 自动生成于 2026-08-25 21:59 · 共 234 个一级技能。
 > 按「来源」检索：公开技能包（外部大神编写的成套技能） / 自建・单个技能。
 > 技能由 AI 按 description 自动触发，无需记住名字。
 
@@ -317,6 +317,7 @@ _重构实践_
 
 | 技能 | 用途 |
 | --- | --- |
+| `ai-slop-cleaner` | Clean AI-generated code slop with a regression-safe, deletion-first workflow and optional reviewer-only mode |
 | `entropy-reduction` | 设计边界清晰且低复杂度的模块化代码 |
 
 ### security-review

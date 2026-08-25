@@ -285,6 +285,7 @@ _重构实践_
 
 | 技能 | 用途 |
 | --- | --- |
+| `ai-slop-cleaner` | Clean AI-generated code slop with a regression-safe, deletion-first workflow and optional reviewer-only mode |
 | `entropy-reduction` | 设计边界清晰且低复杂度的模块化代码 |
 
 ### 🔒 security-review
