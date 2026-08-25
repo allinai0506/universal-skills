@@ -1,18 +1,26 @@
 ---
 name: xiyu-code-review
-description: "按西域投标平台项目规范审查 PR 改动：架构边界（ArchUnit 11条规则）、安全配置、Design Token 一致性、Mock 残留检查、迁移合规性。当用户要求代码审查或 PR 审查时使用。"
+description: "按西域投标平台项目规范审查 PR 改动：三透镜审查（行为正确性/结构健康/交付就绪）、状态快照前置、架构边界（ArchUnit）、安全配置、Design Token 一致性、Mock 残留检查、迁移合规性。当用户要求代码审查或 PR 审查时使用。"
 ---
 
 # xiyu-code-review
 
 按西域数智化投标管理平台项目规范审查代码改动。适用于 PR 审查或提交前的自审。
 
+> 本技能源自 PR !2399 四轮审查复盘（详见 `docs/lessons/lessons-learned.md` §154/§155）：
+> 历次漏检集中在"行为正确性之外的平面"——依赖方向、全局常量影响面、交付就绪度。
+> 因此本技能强制三透镜全覆盖，且任何一轮（含修复轮/复审轮）都从全量 diff 起步。
+
 ## 审查原则
 
 1. **证据优先** — 每个 issue 都要给出具体文件:行号，不允许"可能有问题"
 2. **分级处理** — Critical/Major 必须修复，Minor 建议修复，Info 供参考
-3. **命令验证** — 所有规则都有对应的自动化验证命令，优先跑命令再读代码
-4. **架构先行** — ArchUnit 违规是 CI 红线，必须在代码质量检查之前阻断
+3. **命令验证** — 所有规则都有对应的自动化验证命令，优先跑命令再读代码；**但自动化结果不得替代判断性结论**（见原则 8）
+4. **架构先行** — ArchUnit 违规是 CI 红线，必须在代码质量检查之前阻断；**ArchUnit 全绿 ≠ 架构合理**（见 §7.1）
+5. **全量 diff 原则** — 任何一轮审查（含修复轮/复审轮）必须从 `origin/main...branch` 全量 diff 起步；前轮 findings 清单只作附件、不作审查范围，防止清单继承盲区（PR !2399 教训：四轮审查全在行为平面，依赖方向/影响面/交付就绪从未进入检查面）
+6. **三透镜独立否决** — 每个 PR 必须走完三透镜：A 行为正确性（代码对不对、测试够不够）/ B 结构健康（依赖方向、影响面、复杂度、耦合形态，见 §7）/ C 交付就绪（能不能合、卫生与契约，见 §8）。透镜 B 的发现不允许用"测试全绿"驳回，透镜 C 的发现不允许用"行为正确"驳回，各透镜有独立否决权；每轮报告必须声明"本轮新视角"
+7. **审查独立性契约** — 派发 CodeReview 子代理时，prompt 中**禁止**包含修复意图、"本轮修了什么"、预期语义、"验证已通过"等作者解释；只允许给 diff 范围 + 项目标准 + 要回答的问题。让审查者从代码推断意图，而不是从作者嘴里接受意图（防确认偏误）
+8. **判据分离** — 报告中"自动化结论"（ArchUnit/测试/lint 的 PASS/FAIL，命令证据）与"判断性结论"（依赖方向、影响面、复杂度、设计合理性，附推理文字）必须分栏陈述，禁止用前者顶替后者
 
 ---
 
@@ -30,13 +38,40 @@ description: "按西域投标平台项目规范审查 PR 改动：架构边界�
 
 ---
 
-## 前置：获取改动范围
+## 第 0 步：状态快照（审代码之前必做）
+
+先拍 PR 状态快照再进入代码审查。**任一项异常即为交付阻塞项（透镜 C），写入报告的"合入前必做清单"**：
 
 ```bash
-# 当前分支 vs main
-git log origin/main..HEAD --oneline
-git diff origin/main..HEAD --stat
+# 1. mergeable / 冲突状态（Gitee API；PR !2399 教训：四轮审查无人查 mergeable，合入时才发现冲突）
+curl -s "https://gitee.com/api/v5/repos/<owner>/<repo>/pulls/<num>?access_token=$GITEE_TOKEN" \
+  | python3 -c "import json,sys; d=json.load(sys.stdin); print('mergeable:', d.get('mergeable'), '| head:', d['head']['sha'])"
+# 本地等价检测（无 token 时）：
+git merge-tree $(git merge-base origin/main <branch>) origin/main <branch> | grep -A3 "changed in both"
+
+# 2. commit 结构与规模
+git log origin/main..<branch> --oneline
+git diff origin/main...<branch> --stat | tail -5
+
+# 3. 生成物/产物文件卫生（不应入库的笔记/产物文件被改动时标记，见 §8.3）
+git diff --name-only origin/main...<branch> | grep -E '^(implementation-notes\.html|ui_mvp_preview\.html)$' || true
+
+# 4. 跨语言关键词契约（改动触及契约两侧文件时执行）
+node scripts/check-keyword-sync.mjs
 ```
+
+---
+
+## 前置：获取改动范围（全量优先）
+
+```bash
+# 当前分支 vs main（三点语义：分支独立改动）
+git log origin/main..HEAD --oneline
+git diff origin/main...HEAD --stat
+```
+
+- **修复轮/复审轮同样必须全量起步**——增量审查（只看上轮到本轮的改动）仅允许作为补充手段，不得作为唯一范围。
+- 派发子代理时按"审查独立性契约"（审查原则 7）构造 prompt。
 
 ---
 
@@ -239,28 +274,118 @@ npm run lint --if-present
 
 ---
 
+## 7. 结构健康（透镜 B — 不可用"测试全绿"驳回）
+
+### 7.1 依赖方向与分层合理性（ArchUnit 绿 ≠ 方向合理）
+
+- **MAJOR** 新增跨模块引用（尤其 domain→domain）时，必须在报告中给出方向选择的推理：
+  - 反向引用是否会形成循环（`git grep "com.xiyu.bid.<对端模块>"` 查既有方向）？
+  - 共享常量/类型放在哪一侧是最优解？有没有第三方共享位？
+  - 该方向是否有既有先例（方向约定本身可能是历史决策，先例≠免审）？
+- ArchUnit 只编码"禁止什么"，回答不了"这个位置/方向是否最优"——后者是判断题，必须附推理文字。
+- **注意**：对"已被 wiki/lessons 正当化的历史决策"也要保留质疑权——先例是证据，不是豁免。
+
+### 7.2 常量/全局参数影响面（命令模板，不靠自觉）
+
+- **MAJOR** PR 改动任何 `static final` 常量、全局参数（如 `CONTEXT_AFTER_LINES`）、关键词表、阈值时，必须列出全部使用方并逐一评估非目标场景：
+
+```bash
+# 改动的常量/参数逐个跑：
+git grep -n "<常量名>" -- backend/src/main/java
+git grep -n "<常量名>" -- document-converter-sidecar src/
+```
+
+- 评估问题：该参数是否只影响目标场景？非目标场景（其他模块/其他业务路径）受不受影响？影响多大（如 token 消耗、召回率、误报率）？是否需要差异化策略（目标场景局部放宽、其余保持不变）？
+
+### 7.3 复杂度与可读性（轻量判据，不引重型工具）
+
+- **MAJOR** 单个方法分支点（`continue`/`break`/`return`/`throw` 合计）> 5 或嵌套 > 3 层 → 必须提出"提取方法"建议（如返回枚举 `KEEP/SKIP/PASSTHROUGH` 的分类方法）。
+- **MAJOR** 循环体内含 3 个以上 `if-continue` 隐式编码的优先级判据 → 建议显式化（分类函数/策略表）。
+- **MINOR** 魔法数哨兵值（如 `return -1000`）应提取为具名常量或改用 `Optional` 表达。
+- **MINOR** 嵌套遍历消除算法（O(n²) `stream().noneMatch(...contains...)`）在数据增长前可读性优先：注释写清"保留不被更长词包含的词"语义。
+- **MINOR** 多个常量词表高度重叠（>50% 交集）时，要求 Javadoc 明确各自职责边界，或用组合/差集定义消除重复。
+
+### 7.4 "两层互救"反模式检测（PR !2399 教训）
+
+- **MAJOR** A 层"跳过/过滤"、B 层"守卫抢救"的耦合结构必须标出：正则判跳过 + 提取器守卫捞回、拦截器丢弃 + 下游重试兜底等。特征：注释中出现"已知误杀面""兼容保留""由 X 侧守卫保留"字样。
+- 要求：优先在单层内消除误杀（收窄判据）；确需两层协作时，两端必须各有锚定测试，且在两处代码注释中互相指向。
+- **MINOR** 同一文件内风格改动（for→stream、多行→单行）与功能改动混排（特征：大行数变动但净增 ≈ 0）→ 建议拆独立 commit。
+- **MINOR** 跨语言/跨进程契约（Java ↔ Python 关键词表等）若仅靠注释约束 → **MAJOR**，必须有自动化校验（如 `scripts/check-keyword-sync.mjs`）。
+
+---
+
+## 8. 交付就绪（透镜 C — 不可用"行为正确"驳回）
+
+### 8.1 合入状态硬清单（第 0 步快照异常项在此收口）
+
+- **CRITICAL** `mergeable: false` → 阻断合入，提示 rebase 并列出冲突文件（`git merge-tree` 定位）。
+- **CRITICAL** CI 未通过 / 未跑完 → 阻断。
+- **MAJOR** PR body 项目复选框（知识沉淀 / wiki 回填 / 测试证据）未勾选且对应改动缺失。
+- 工具：`scripts/gitee-pr-helper.sh check <num>`（打印 mergeable）；`scripts/gitee-pr-helper.sh merge <num>` 合入前会强制断言 `mergeable=true`（逃生阀 `GITEE_PR_FORCE_MERGE=1`）。
+
+### 8.2 commit 卫生
+
+- **MINOR** 风格改动与功能改动混在同一 commit（见 §7.4 特征）。
+- **MINOR** commit 数量与改动规模不匹配（单个巨型 commit 无法分域审查）。
+- **MINOR** 误用旧提交消息（`git commit -C` 复用）→ 检查最新 commit message 与实际改动匹配。
+
+### 8.3 仓库卫生
+
+- **MAJOR** 生成物/笔记类文件（`implementation-notes.html`、`ui_mvp_preview.html` 等）被改动或新增入库 → 提示迁移到 `docs/` 或加入 `.gitignore`。
+- **MINOR** 根目录新增游离 `*.md` 笔记（应进 `docs/` 对应目录，见知识沉淀纪律）。
+- **MINOR** 追踪的符号链接/文件被本地删除（会挡住 rebase）→ `git checkout -- <path>` 恢复。
+
+### 8.4 跨语言契约自动化（§7.4 的工程化配套）
+
+```bash
+node scripts/check-keyword-sync.mjs
+# 契约两侧（Java PriceScoringKeywords ↔ Python converter.py 关键词元组）不一致即失败；
+# 仅一侧存在（单边新增契约）同样失败，防"加了 Java 忘加 Python"的静默回退。
+```
+
+---
+
 ## 审查结论模板
 
 ```
 ## Code Review 结论
 
+### 状态快照（第 0 步）
+- mergeable: true / false（冲突文件: ...）
+- commits: N | 文件数: N | +N / -N
+- 生成物文件卫生: 通过 / 异常（列出）
+- 跨语言契约检查: 通过 / 失败 / 不适用（未触及契约文件）
+- 本轮新视角: <本轮看了哪些上轮没看的维度>
+
 ### 改动摘要
-- 文件数: N
 - 新增: N / 修改: N / 删除: N
 
 ### 严重问题（必须修复）
-- [CRITICAL] ...
+- [CRITICAL] ...（标注所属透镜 A/B/C）
 
 ### 重要问题（建议修复）
-- [MAJOR] ...
+- [MAJOR] ...（标注所属透镜 A/B/C）
 
 ### 轻微问题（可选修复）
-- [MINOR] ...
+- [MINOR] ...（标注所属透镜 A/B/C）
 
-### 验证命令执行结果
-- ArchUnit: PASS / FAIL（附截图）
-- mvn test: PASS / FAIL（附截图）
-- npm run build: PASS / FAIL（附截图）
+### 自动化结论（命令证据）
+- ArchUnit: PASS / FAIL（附输出）
+- mvn test: PASS / FAIL（附输出）
+- npm run build: PASS / FAIL（附输出）
+- check-keyword-sync: PASS / FAIL / N/A
+
+### 判断性结论（附推理，不得用自动化结果顶替）
+- 依赖方向: ...
+- 影响面: ...
+- 复杂度: ...
+- 设计合理性: ...
+
+### 重新设计建议（必填，允许"无"，不允许跳过——对抗补丁式收敛）
+- ...
+
+### 合入前必做清单（透镜 C）
+- [ ] ...
 
 ### 最终结论
 ✅ 可合并 / ❌ 需修复后重审 / ⚠️ 需人工确认
