@@ -223,6 +223,160 @@ import_orphans() {
     fi
 }
 
+# 反向回流：扫描各项目 skills 目录，找出与 categories/ 同名但有差异的技能
+# 用法: pull_from_projects [--dry-run]
+# --dry-run: 只展示差异，不回流
+
+# 查找 categories/ 中的同名技能目录（兼容 bash 3.x）
+# 如果有多个同名技能，选 diff 行数最少（内容最接近）的那个
+find_repo_skill_dir() {
+    local skill_name="$1"
+    local best_dir=""
+    local best_diff_lines=999999
+    local project_md="$2"  # 可选：项目版路径，用于选最接近的
+
+    for cat_dir in "$UNIVERSAL_SKILLS/categories"/*/; do
+        local candidate="${cat_dir}${skill_name}"
+        [ -f "$candidate/SKILL.md" ] || continue
+
+        if [ -z "$project_md" ]; then
+            # 没提供项目版，返回第一个匹配
+            echo "$candidate"
+            return 0
+        fi
+
+        # 有项目版，选 diff 行数最少的
+        local lines
+        lines=$(diff "$candidate/SKILL.md" "$project_md" 2>/dev/null | grep -c '^[<>]')
+        if [ "$lines" -lt "$best_diff_lines" ]; then
+            best_diff_lines=$lines
+            best_dir="$candidate"
+        fi
+    done
+
+    if [ -n "$best_dir" ]; then
+        echo "$best_dir"
+        return 0
+    fi
+    return 1
+}
+
+pull_from_projects() {
+    local dry_run="${1:-}"
+    local local_dir_names=(".claude" ".trae" ".trae-cn" ".agents")
+
+    # 收集项目列表（复用 discover_projects + sync_projects 的项目列表）
+    local projects=()
+    discover_projects
+    for project_dir in "${unique_projects[@]}"; do
+        projects+=("$project_dir")
+    done
+    for base in "$HOME/clawd" "$HOME/clawd-work" "$HOME/nexusarchive" \
+                "$HOME/everything-claude-code" "$HOME/JLAF" "$HOME/PLM" \
+                "$HOME/zhitoujianli" "$HOME/liujie" "$HOME/mimo" \
+                "$HOME/xiyu/xiyu-bid-poc"; do
+        [ -d "$base" ] && projects+=("$base")
+    done
+    if [ -d "$HOME/xiyu/worktrees" ]; then
+        while IFS= read -r -d '' wt; do
+            projects+=("$wt")
+        done < <(find "$HOME/xiyu/worktrees" -maxdepth 1 -mindepth 1 -type d -print0 2>/dev/null)
+    fi
+
+    # 去重
+    local unique_pjs=($(printf '%s\n' "${projects[@]}" | sort -u))
+
+    # 扫描
+    local diffs=0
+    local diff_list=""  # 换行分隔的记录
+
+    for project_dir in "${unique_pjs[@]}"; do
+        local project_name="$(basename "$project_dir")"
+        for dir_name in "${local_dir_names[@]}"; do
+            local skills_dir="$project_dir/$dir_name/skills"
+            [ -d "$skills_dir" ] || continue
+
+            for skill_md in "$skills_dir"/*/SKILL.md; do
+                [ -f "$skill_md" ] || continue
+                local skill_name="$(basename "$(dirname "$skill_md")")"
+
+                # 查找 categories/ 中的同名技能（选内容最接近的）
+                local repo_dir
+                repo_dir=$(find_repo_skill_dir "$skill_name" "$skill_md") || continue
+
+                local repo_md="$repo_dir/SKILL.md"
+
+                # 比较
+                if ! diff -q "$repo_md" "$skill_md" > /dev/null 2>&1; then
+                    diffs=$((diffs + 1))
+                    local project_skill_dir="$(dirname "$skill_md")"
+                    diff_list="${diff_list}${skill_name}|${project_name}|${dir_name}|${project_skill_dir}|${repo_dir}
+"
+                    warn "[$project_name/$dir_name] $skill_name"
+                    diff "$repo_md" "$skill_md" | head -20
+                    echo "  ---"
+                fi
+            done
+        done
+    done
+
+    if [ $diffs -eq 0 ]; then
+        success "没有发现同名技能差异，所有项目副本与仓库一致"
+        return 0
+    fi
+
+    warn "共发现 $diffs 个同名技能有差异"
+    echo ""
+
+    if [ "$dry_run" = "--dry-run" ]; then
+        log "（--dry-run 模式，不回流）"
+        return 0
+    fi
+
+    # 逐个确认回流
+    local pulled=0
+    while IFS='|' read -r skill_name project_name dir_name project_skill_dir repo_dir; do
+        [ -z "$skill_name" ] && continue
+
+        echo ""
+        echo -e "${CYAN}==> $skill_name${NC} (来自 $project_name/$dir_name)"
+        local answer=""
+        read -p "  回流此技能到仓库？[y/N/a(全部回流)/q(退出)] " -r answer
+        case "$answer" in
+            [Qq]) break ;;
+            [Aa])
+                while IFS='|' read -r sn pn dn psd rd; do
+                    [ -z "$sn" ] && continue
+                    cp "$psd/SKILL.md" "$rd/SKILL.md"
+                    for f in "$psd"/*; do
+                        [ "$(basename "$f")" = "SKILL.md" ] && continue
+                        cp -R "$f" "$rd/"
+                    done
+                    success "  已回流 $sn"
+                    pulled=$((pulled + 1))
+                done <<< "$diff_list"
+                break
+                ;;
+            [Yy])
+                cp "$project_skill_dir/SKILL.md" "$repo_dir/SKILL.md"
+                for f in "$project_skill_dir"/*; do
+                    [ "$(basename "$f")" = "SKILL.md" ] && continue
+                    cp -R "$f" "$repo_dir/"
+                done
+                success "  已回流 $skill_name"
+                pulled=$((pulled + 1))
+                ;;
+        esac
+    done <<< "$diff_list"
+
+    if [ $pulled -gt 0 ]; then
+        success "已回流 $pulled 个技能到仓库"
+        warn "请运行: git diff 检查变更，然后 git add & commit"
+    else
+        log "未回流任何技能"
+    fi
+}
+
 # 幂等地把一个目录注册到 TOML 配置文件的 extra_skill_dirs 数组中
 # 用法: register_extra_skill_dir <config_file> <dir>
 register_extra_skill_dir() {
@@ -412,7 +566,7 @@ sync_claude_projects() {
                 import_orphans "$skills_dir" "$project_name" "--scan-subdirs"
             fi
 
-            # 第1步：清理旧的复制技能文件（转换为 symlink 前的遗留产物）
+            # 第1步：清理旧 symlink 和旧拷贝（symlink -> 实体文件迁移）
             # 同时清理「以前是全局、现在变为 project-only」技能的遗留 symlink/copy
             for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
                 if is_syncable_skill_dir "$skill_dir"; then
@@ -429,8 +583,10 @@ sync_claude_projects() {
                             continue
                         fi
                     fi
-                    # 只删除非 symlink 的旧拷贝
-                    if [ -d "$target" ] && [ ! -L "$target" ]; then
+                    # 清除旧 symlink 和旧拷贝
+                    if [ -L "$target" ]; then
+                        rm -f "$target"
+                    elif [ -d "$target" ] && [ ! -L "$target" ]; then
                         rm -rf "$target"
                     fi
                 fi
@@ -446,7 +602,7 @@ sync_claude_projects() {
                 fi
             done
 
-            # 第2步：用 symlink 同步技能（零磁盘开销）
+            # 第2步：用实体文件同步技能（避免 git 追踪绝对路径 symlink 死链接）
             local skill_count=0
             for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
                 if is_syncable_skill_dir "$skill_dir"; then
@@ -458,20 +614,18 @@ sync_claude_projects() {
                         fi
                     fi
                     local target="$skills_dir/$skill_name"
-                    # 如果已存在同名 symlink，更新之；否则创建
-                    if [ -L "$target" ]; then
-                        rm -f "$target"
-                    elif [ -e "$target" ]; then
-                        # 项目自有技能与 universal 同名 — 跳过 universal 版本
+                    # 已存在非 symlink 的同名技能（marketplace/项目自有）- 跳过保护
+                    if [ -e "$target" ] && [ ! -L "$target" ]; then
                         continue
                     fi
-                    ln -sf "$skill_dir" "$target"
+                    rm -f "$target" 2>/dev/null
+                    cp -R "$skill_dir" "$target"
                     skill_count=$((skill_count + 1))
                 fi
             done
 
             if [ $skill_count -gt 0 ]; then
-                log "  → [$dir_name] $project_name: $skill_count 个技能 (symlink)"
+                log "  -> [$dir_name] $project_name: $skill_count 个技能 (实体文件)"
                 any_done=true
                 skill_count_total=$((skill_count_total + skill_count))
             fi
@@ -483,7 +637,7 @@ sync_claude_projects() {
     done
 
     if [ $synced_count -gt 0 ]; then
-        success "已同步 $synced_count 个项目的 skills ($skill_count_total 个技能，均为 symlink，覆盖 .claude / .trae / .trae-cn / .agents)"
+        success "已同步 $synced_count 个项目的 skills ($skill_count_total 个技能，实体文件，覆盖 .claude / .trae / .trae-cn / .agents)"
     else
         warn "未找到任何项目"
     fi
@@ -550,7 +704,7 @@ sync_cursor_projects() {
 
 # 同步到 Cursor (.cursor/skills/)
 # 现代 Cursor 支持 .cursor/skills/<skill>/SKILL.md 格式（替代旧的 .cursor/rules/*.mdc）。
-# 与 sync_cursor_projects（.mdc，已废弃）不同，这里用逐技能 symlink + project-only 过滤。
+# 与 sync_cursor_projects（.mdc，已废弃）不同，这里用逐技能同步（全局 symlink + 项目级实体文件）+ project-only 过滤。
 # 同时同步全局 ~/.cursor/skills 与各项目 .cursor/skills，覆盖任意目录下的 Cursor 会话。
 sync_cursor() {
     local synced_count=0
@@ -631,12 +785,11 @@ sync_cursor() {
                     fi
                 fi
                 local target="$skills_dir/$skill_name"
-                if [ -L "$target" ]; then
-                    rm -f "$target"
-                elif [ -e "$target" ]; then
+                if [ -e "$target" ] && [ ! -L "$target" ]; then
                     continue
                 fi
-                ln -sf "$skill_dir" "$target"
+                rm -f "$target" 2>/dev/null
+                cp -R "$skill_dir" "$target"
                 skill_count=$((skill_count + 1))
             fi
         done
@@ -649,7 +802,7 @@ sync_cursor() {
     done
 
     if [ $synced_count -gt 0 ]; then
-        success "已同步 Cursor skills ($skill_count_total 个技能，symlink，覆盖全局 ~/.cursor/skills 与项目级 .cursor/skills)"
+        success "已同步 Cursor skills ($skill_count_total 个技能，全局 symlink + 项目级实体文件)"
     fi
 }
 
@@ -911,6 +1064,126 @@ sync_qoder() {
     log "  路径: ~/.qoder/skills/"
 }
 
+# 同步到 OpenCode (~/.config/opencode/skills/)
+# OpenCode 从 ~/.config/opencode/skills/ 加载全局技能，
+# 同时也兼容读取 ~/.claude/skills/ 和 ~/.agents/skills/。
+# 这里显式增量 symlink，保证不依赖兼容层即可注册。
+sync_opencode() {
+    local target="$HOME/.config/opencode/skills"
+
+    if [ ! -d "$HOME/.config/opencode" ]; then
+        return
+    fi
+
+    mkdir -p "$target"
+    local duplicate_removed
+    duplicate_removed=$(cleanup_duplicate_skill_links "$target")
+    [ "$duplicate_removed" -gt 0 ] && log "  清理 OpenCode 重复技能 symlink: $duplicate_removed 个"
+
+    local skill_count=0
+    local skipped=0
+    for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
+        if is_syncable_skill_dir "$skill_dir"; then
+            local skill_name="$(basename "$skill_dir")"
+            # 全局同步：跳过项目专用技能，清理遗留 symlink
+            if is_project_only_skill "$skill_name"; then
+                local link="$target/$skill_name"
+                if [ -L "$link" ]; then
+                    local dest
+                    dest="$(readlink "$link")"
+                    if [[ "$dest" == "$UNIVERSAL_SKILLS/categories/"* ]]; then
+                        rm -f "$link"
+                    fi
+                fi
+                continue
+            fi
+            local link="$target/$skill_name"
+
+            # 已是指向同一目标的 symlink -> 跳过
+            if [ -L "$link" ] && [ "$(readlink "$link")" = "$skill_dir" ]; then
+                continue
+            fi
+
+            # 已存在且非我们管理的技能（OpenCode plugin/builtin/用户自有） -> 跳过
+            if [ -e "$link" ] || [ -L "$link" ]; then
+                skipped=$((skipped + 1))
+                continue
+            fi
+
+            ln -sf "$skill_dir" "$link"
+            skill_count=$((skill_count + 1))
+        fi
+    done
+
+    if [ $skill_count -gt 0 ]; then
+        success "OpenCode skills 已同步 ($skill_count 个技能，增量 symlink)"
+        [ $skipped -gt 0 ] && warn "  跳过 $skipped 个已存在的非 universal-skills 技能"
+    else
+        log "OpenCode skills 无需更新（全部已同步）"
+    fi
+    log "  路径: ~/.config/opencode/skills/"
+}
+
+# 同步到 PI Agent (~/.pi/agent/skills/)
+# PI 从 ~/.pi/agent/skills/ 加载全局技能，
+# 同时也兼容读取 ~/.agents/skills/。
+# 这里显式增量 symlink，保证不依赖兼容层即可注册。
+sync_pi() {
+    local target="$HOME/.pi/agent/skills"
+
+    if [ ! -d "$HOME/.pi" ]; then
+        return
+    fi
+
+    mkdir -p "$target"
+    local duplicate_removed
+    duplicate_removed=$(cleanup_duplicate_skill_links "$target")
+    [ "$duplicate_removed" -gt 0 ] && log "  清理 PI Agent 重复技能 symlink: $duplicate_removed 个"
+
+    local skill_count=0
+    local skipped=0
+    for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
+        if is_syncable_skill_dir "$skill_dir"; then
+            local skill_name="$(basename "$skill_dir")"
+            # 全局同步：跳过项目专用技能，清理遗留 symlink
+            if is_project_only_skill "$skill_name"; then
+                local link="$target/$skill_name"
+                if [ -L "$link" ]; then
+                    local dest
+                    dest="$(readlink "$link")"
+                    if [[ "$dest" == "$UNIVERSAL_SKILLS/categories/"* ]]; then
+                        rm -f "$link"
+                    fi
+                fi
+                continue
+            fi
+            local link="$target/$skill_name"
+
+            # 已是指向同一目标的 symlink -> 跳过
+            if [ -L "$link" ] && [ "$(readlink "$link")" = "$skill_dir" ]; then
+                continue
+            fi
+
+            # 已存在且非我们管理的技能（PI builtin/用户自有） -> 跳过
+            if [ -e "$link" ] || [ -L "$link" ]; then
+                skipped=$((skipped + 1))
+                continue
+            fi
+
+            ln -sf "$skill_dir" "$link"
+            skill_count=$((skill_count + 1))
+        fi
+    done
+
+    if [ $skill_count -gt 0 ]; then
+        success "PI Agent skills 已同步 ($skill_count 个技能，增量 symlink)"
+        [ $skipped -gt 0 ] && warn "  跳过 $skipped 个已存在的非 universal-skills 技能"
+    else
+        log "PI Agent skills 无需更新（全部已同步）"
+    fi
+    log "  路径: ~/.pi/agent/skills/"
+}
+
 # 同步到 Trae CN Agent (~/.trae-cn/skills/) 和 Trae Work (~/.trae/skills/)
 # 两者都管理 Agent skills，含 marketplace/builtin 技能。
 # 必须增量同步，不得 rm -rf，避免覆盖 Trae 自带或已安装的 marketplace 技能。
@@ -1116,7 +1389,7 @@ sync_projects() {
             continue
         fi
 
-        # 目标目录：$skills_dir/universal-skills（改为真实目录，内部放扁平 symlink）
+        # 目标目录：$skills_dir/universal-skills（真实目录，内部放实体文件，非 symlink）
         local target_dir="$skills_dir/universal-skills"
 
         # 清理旧的整目录 symlink（以前指向 $UNIVERSAL_SKILLS/categories）
@@ -1153,7 +1426,7 @@ sync_projects() {
 
         mkdir -p "$target_dir"
 
-        # 逐技能创建扁平 symlink，过滤 project-only
+        # 逐技能复制实体文件，过滤 project-only（不使用 symlink，避免 git 追踪死链接）
         local skill_count=0
         for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
             if is_syncable_skill_dir "$skill_dir"; then
@@ -1164,13 +1437,15 @@ sync_projects() {
                         continue
                     fi
                 fi
-                ln -sf "$skill_dir" "$target_dir/$skill_name"
+                # 清除旧 symlink 或旧拷贝，写入实体文件
+                rm -rf "$target_dir/$skill_name"
+                cp -R "$skill_dir" "$target_dir/$skill_name"
                 skill_count=$((skill_count + 1))
             fi
         done
 
         if [ "$skill_count" -gt 0 ]; then
-            log "✓ $project_name: universal-skills 已同步 ($skill_count 个，逐技能过滤 symlink)"
+            log "✓ $project_name: universal-skills 已同步 ($skill_count 个，实体文件)"
             synced_count=$((synced_count + 1))
         fi
     done
@@ -1364,7 +1639,11 @@ SKIP_KIMI=false
 SKIP_GROK=false
 SKIP_QODER=false
 SKIP_CURSOR=false
+SKIP_OPENCODE=false
+SKIP_PI=false
 DO_DISCOVER=false
+DO_PULL=false
+DO_DRY_RUN=false
 SPECIFIC_PROJECT=""
 
 while [[ $# -gt 0 ]]; do
@@ -1379,8 +1658,12 @@ while [[ $# -gt 0 ]]; do
         --no-grok) SKIP_GROK=true ;;
         --no-qoder) SKIP_QODER=true ;;
         --no-cursor) SKIP_CURSOR=true ;;
+        --no-opencode) SKIP_OPENCODE=true ;;
+        --no-pi) SKIP_PI=true ;;
         --project=*) SPECIFIC_PROJECT="$2"; shift ;;
         --discover) DO_DISCOVER=true ;;
+        --pull) DO_PULL=true ;;
+        --dry-run) DO_DRY_RUN=true ;;
         --help)
             echo "用法: $0 [选项]"
             echo ""
@@ -1394,8 +1677,12 @@ while [[ $# -gt 0 ]]; do
             echo "  --no-kimi       跳过 Kimi Code 同步"
             echo "  --no-grok       跳过 Grok Build 同步"
             echo "  --no-cursor     跳过 Cursor skills 同步"
+            echo "  --no-opencode   跳过 OpenCode 同步"
+            echo "  --no-pi         跳过 PI Agent 同步"
             echo "  --project NAME  只同步指定项目"
             echo "  --discover      发现并索引项目中隐藏的技能"
+            echo "  --pull          反向回流：扫描项目副本与仓库的差异，逐个确认后回流"
+            echo "  --pull --dry-run  只展示差异，不回流"
             echo "  --help          显示此帮助"
             exit 0
             ;;
@@ -1431,6 +1718,17 @@ if [ "$DO_DISCOVER" = true ]; then
 
     success "技能发现完成！"
     echo "检查 categories/imported/ 中是否有新发现的技能。"
+    exit 0
+fi
+
+if [ "$DO_PULL" = true ]; then
+    log "扫描项目副本与仓库的差异..."
+    echo ""
+    if [ "$DO_DRY_RUN" = true ]; then
+        pull_from_projects --dry-run
+    else
+        pull_from_projects
+    fi
     exit 0
 fi
 
@@ -1486,6 +1784,16 @@ if [ "$SKIP_QODER" = false ]; then
     echo ""
 fi
 
+if [ "$SKIP_OPENCODE" = false ]; then
+    sync_opencode
+    echo ""
+fi
+
+if [ "$SKIP_PI" = false ]; then
+    sync_pi
+    echo ""
+fi
+
 update_skills_index
 
 success "同步完成！"
@@ -1493,7 +1801,7 @@ echo ""
 echo "提示："
 echo "  - 本地自定义技能: $UNIVERSAL_SKILLS/local/"
 echo "  - 备份位置: $BACKUP_DIR (自动保留最新 2 份)"
-echo "  - 项目技能使用 symlink，零磁盘开销"
+echo "  - 项目级技能使用实体文件（可安全提交到 git）"
 echo "  - 发现项目中隐藏的技能: $0 --discover"
 [ "$SKIP_GLOBAL" = false ] && echo "  - ⚠️  重启 Claude Code 以加载新 skills / 插件"
 echo ""
@@ -1511,5 +1819,7 @@ echo "已同步的目标："
 [ "$SKIP_GROK" = false ] && echo "  ✓ Grok Build (~/.grok/skills/) ← 增量 symlink"
 [ "$SKIP_KIMI" = false ] && echo "  ✓ Kimi Code (~/.kimi-code/skills/ + config.toml)"
 [ "$SKIP_QODER" = false ] && echo "  ✓ Qoder (~/.qoder/skills/) ← 增量 symlink"
+[ "$SKIP_OPENCODE" = false ] && echo "  ✓ OpenCode (~/.config/opencode/skills/) ← 增量 symlink"
+[ "$SKIP_PI" = false ] && echo "  ✓ PI Agent (~/.pi/agent/skills/) ← 增量 symlink"
 [ "$SKIP_PROJECTS" = false ] && echo "  ✓ 项目级 symlinks (clawd, xiyu, etc.)"
 echo ""
