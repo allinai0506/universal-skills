@@ -227,15 +227,37 @@ import_orphans() {
 # 用法: pull_from_projects [--dry-run]
 # --dry-run: 只展示差异，不回流
 
-# 查找 categories/ 中的同名技能目录（兼容 bash 3.x，不用 associative array）
+# 查找 categories/ 中的同名技能目录（兼容 bash 3.x）
+# 如果有多个同名技能，选 diff 行数最少（内容最接近）的那个
 find_repo_skill_dir() {
     local skill_name="$1"
+    local best_dir=""
+    local best_diff_lines=999999
+    local project_md="$2"  # 可选：项目版路径，用于选最接近的
+
     for cat_dir in "$UNIVERSAL_SKILLS/categories"/*/; do
-        if [ -f "${cat_dir}${skill_name}/SKILL.md" ]; then
-            echo "${cat_dir}${skill_name}"
+        local candidate="${cat_dir}${skill_name}"
+        [ -f "$candidate/SKILL.md" ] || continue
+
+        if [ -z "$project_md" ]; then
+            # 没提供项目版，返回第一个匹配
+            echo "$candidate"
             return 0
         fi
+
+        # 有项目版，选 diff 行数最少的
+        local lines
+        lines=$(diff "$candidate/SKILL.md" "$project_md" 2>/dev/null | grep -c '^[<>]')
+        if [ "$lines" -lt "$best_diff_lines" ]; then
+            best_diff_lines=$lines
+            best_dir="$candidate"
+        fi
     done
+
+    if [ -n "$best_dir" ]; then
+        echo "$best_dir"
+        return 0
+    fi
     return 1
 }
 
@@ -278,9 +300,9 @@ pull_from_projects() {
                 [ -f "$skill_md" ] || continue
                 local skill_name="$(basename "$(dirname "$skill_md")")"
 
-                # 查找 categories/ 中的同名技能
+                # 查找 categories/ 中的同名技能（选内容最接近的）
                 local repo_dir
-                repo_dir=$(find_repo_skill_dir "$skill_name") || continue
+                repo_dir=$(find_repo_skill_dir "$skill_name" "$skill_md") || continue
 
                 local repo_md="$repo_dir/SKILL.md"
 
