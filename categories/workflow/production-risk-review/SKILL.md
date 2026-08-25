@@ -59,7 +59,7 @@ git diff origin/dev..HEAD
 不是"修改了 UserService"，而是"所有调用 UserService 的地方"。必须画调用链：
 
 ```
-Controller → Service → Domain → Repository → MySQL → Redis → MQ → 第三方
+Controller -> Service -> Domain -> Repository -> MySQL -> Redis -> MQ -> 第三方
 ```
 
 任何节点都不能遗漏。用 Grep/SearchCodebase 找出每个改动符号的全部调用方，不允许只读 diff。
@@ -78,12 +78,12 @@ Controller → Service → Domain → Repository → MySQL → Redis → MQ → 
 
 ```
 改了 DTO
-  → 谁引用 DTO？
-  → 有没有旧接口？
-  → 有没有前端页面/小程序？
-  → 有没有 SDK/对接方（泛微OA、NCC、福寿康）？
-  → 有没有导出（Excel/PDF）？
-  → 有没有报表/统计（dashboardStats）？
+  -> 谁引用 DTO？
+  -> 有没有旧接口？
+  -> 有没有前端页面/小程序？
+  -> 有没有 SDK/对接方（泛微OA、NCC、福寿康）？
+  -> 有没有导出（Excel/PDF）？
+  -> 有没有报表/统计（dashboardStats）？
 ```
 
 **直到没有新的影响为止。**
@@ -159,6 +159,8 @@ NexusArchive 特定扩散点（必须逐一检查）：
 
 ### 前端（如涉及）
 - 权限点精确性（禁止宽 OR 条件，用 computed + every()）/ `react-hooks/exhaustive-deps` / useCallback 包裹 props 函数 / Zustand 精确 selector
+- **表单与模型契约对齐**：新建/编辑表单是否覆盖了对应实体/DTO 的全部业务字段？严禁列表展示但表单漏写输入项
+- **交互与状态流转防死锁（RULES.md §8）**：检查所有新增的 `disabled`、`readonly` 与状态拦截 `if (status !== 'DRAFT')`。用户在非草稿状态下能否完成必要操作？若不能就地修改，是否有明确的「复制为草稿/创建新版本」入口？无替代链路即判定为交互死锁缺陷（P0 阻断）
 
 ### 存量数据兼容
 - 新代码对存量生产数据的假设是否成立（字段 null、旧枚举值、旧格式 JSON、历史脏数据）
@@ -167,7 +169,8 @@ NexusArchive 特定扩散点（必须逐一检查）：
 
 ### 测试与验证证据
 - 关键修复/新逻辑是否有对应单元测试或回归测试（缺失即 P1）
-- 已执行 CLAUDE.md 最少验证命令并附输出：前端改动 `npm run lint` + `npm run test:run`；路由/边界/模块改动补 `npm run check:arch` + `npm run modules:validate`；后端改动 `npm run backend:test`
+- 表单/CRUD 组件测试是否包含提交载荷全字段断言与编辑状态可用性断言
+- 已执行 CLAUDE.md 最少验证命令并附输出：前端改动 `npm run lint` + `npm run test:run`；路由/边界/模块改动补 `npm run check:arch` + `npm run modules:validate`；后端改动 `npm run backend:test`（涉及实体/自动填充改动必须通过 `AutoFillEntityContractTest`）
 - 验证命令未执行时，对应检查项不得判 PASS
 
 ---
@@ -178,12 +181,12 @@ NexusArchive 特定扩散点（必须逐一检查）：
 
 ```
 修改了凭证归档
-  → 预归档池还能不能看？
-  → 归档流程还能不能走完？
-  → 检索/全景视图还能不能查？
-  → PDF 生成还能不能跑？
-  → 导出还能不能用？
-  → 各角色权限视图是否正常？
+  -> 预归档池还能不能看？
+  -> 归档流程还能不能走完？
+  -> 检索/全景视图还能不能查？
+  -> PDF 生成还能不能跑？
+  -> 导出还能不能用？
+  -> 各角色权限视图是否正常？
 ```
 
 所有受影响业务链全部列出并逐环给出验证证据。
@@ -215,6 +218,9 @@ NexusArchive 特定扩散点（必须逐一检查）：
   - mock/demo 数据 fonds 用错（必须 `BR-DEMO` 且 `arc_original_voucher` / `arc_file_content` / `acc_archive` 三表同步）
   - PDF 链路历史约束（SM3 文件校验、`PdfTaskStatus` 枚举、下载接口 fonds 隔离、格式转换审计日志）
   - 改动类字段长度/类型后，DDL 与 Entity/MyBatis 映射不一致
+  - Entity 自动填充字段与 `AutoFillMetaObjectHandler` 字段名不一致（必跑 `AutoFillEntityContractTest` 验证）
+  - 状态机单向死锁（如已发布状态置灰保存按钮却无升版复制入口）
+  - 表单遗漏业务输入框（如创建表单遗漏 scene 场景选择）
 
 逐条去证明"真的没有"，并给出行号证据。
 
@@ -247,7 +253,7 @@ NexusArchive 特定扩散点（必须逐一检查）：
 **必须写法：**
 
 ```
-PASS — 空值检查
+PASS - 空值检查
 证据：
 - DocumentPoolServiceImpl.java:134 Objects.requireNonNull(batchId)
 - DocumentPoolServiceImpl.java:288 Optional.ofNullable(...).orElseThrow(...)
@@ -263,13 +269,13 @@ PASS — 空值检查
 最后不能写"看起来没问题"，必须二选一：
 
 ```
-PASS — 可以上线
+PASS - 可以上线
 ```
 
 或
 
 ```
-FAIL — 禁止上线
+FAIL - 禁止上线
 ```
 
 问题分级：
@@ -319,12 +325,12 @@ FAIL — 禁止上线
 <回滚可行性 / 部署顺序 / 配置清单 / 客户环境兼容性，逐项证据>
 
 ### 发现的问题
-- [P0] 文件:行号 — 问题描述 — 修复建议
+- [P0] 文件:行号 - 问题描述 - 修复建议
 - [P1] ...
 - [P2] ...
 
 ### 最终裁决
-✅ PASS — 可以上线 / ❌ FAIL — 禁止上线
+✅ PASS - 可以上线 / ❌ FAIL - 禁止上线
 <一句话理由>
 
 ### 上线后验证清单（PASS 时必填）
