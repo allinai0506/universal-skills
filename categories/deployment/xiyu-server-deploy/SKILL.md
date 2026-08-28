@@ -255,7 +255,6 @@ sudo chmod 440 /etc/sudoers.d/xiyu-bid-jetty
    ```
    - 锚点分支 `agent/trae-init` 上执行 `sync-env.sh` 是 ff-only 同步，不是开发行为
    - 确认 `git status --short` 干净，HEAD = origin/main
-   - 确认 GitHub 镜像同步状态：`git log --oneline github/main..origin/main | wc -l`（应为 0）
 
 4. **Inspect the current release surface.**
    - Read project docs and scripts before acting: `docs/release/PRODUCTION_RELEASE_PIPELINE.md`, `docs/release/GO_LIVE_CHECKLIST.md`, `docs/release/ROLLBACK.md`, `scripts/release/*`.
@@ -352,13 +351,12 @@ sudo chmod 440 /etc/sudoers.d/xiyu-bid-jetty
      curl --noproxy '*' -s -o /dev/null -w "HTTP %{http_code}\n" http://${TARGET_HOST}:8080/login   # 200
      curl --noproxy '*' -s http://${TARGET_HOST}:8080/ | grep -oE 'assets/index-[A-Za-z0-9_-]+\.js'  # 与 release 一致
      ```
-   - GitHub 镜像同步检查（如落后则 `bash scripts/sync-to-github.sh`）
    - Capture exact commit, release id, URLs checked, smoke result, and any skipped checks with reasons.
 
 8. **Generate deployment report（部署报告纪律）**.
    - **每次部署必须生成报告**，即使代码变更小（第 12 次部署报告缺失是反面教材）
    - 报告路径：`docs/release/deploy-report-YYYY-MM-DD-Nth.md`
-   - 报告必须包含：部署环境（test/prod）、部署概览、基线信息、PR 列表、改动范围、Flyway 预检结果、部署步骤、验证结果、GitHub 同步、回滚信息、经验沉淀应用情况、风险提示、部署确认清单
+   - 报告必须包含：部署环境（test/prod）、部署概览、基线信息、PR 列表、改动范围、Flyway 预检结果、部署步骤、验证结果、回滚信息、经验沉淀应用情况、风险提示、部署确认清单
    - 报告生成后建议提 PR 合入 main（PR 标题示例：`docs(release): 第 N 次部署报告 (test/prod)`）
 
 9. **Handle failure decisively.**
@@ -383,7 +381,7 @@ When reporting results, include:
 ```
  0. 环境门禁          → 用户声明 ENV=test|prod + AI 展示确认信息 + AskUserQuestion 确认
  1. 早操三连          → source dev-env.sh + sync-env.sh + check-git-wrapper.sh
- 2. 确认基线          → git status + git log + git diff origin/main + GitHub 同步检查
+ 2. 确认基线          -> git status + git log + git diff origin/main
  3. 服务器现状        → deployed-release.json + health + 增量 commit + 迁移文件变更
  4. Flyway 预检 3 步  → validate + DB 版本对比 + remote-deploy 内置
  5. 本地打包          → RELEASE_ID + VITE_API_BASE_URL= + VITE_OBS_ENABLED=true + COPYFILE_DISABLE=1 + package-release.sh
@@ -392,10 +390,9 @@ When reporting results, include:
  7.5 前端资源保留     → 从上一版本 release 目录 cp -rn 旧 assets 到 /srv/www/xiyu-bid/assets/
  8. 健康检查          → 等待 UP（最多 4 分钟，容忍 Kafka 延迟）
  9. 迁移应用验证      → SQL 查询 flyway_schema_history
-10. Smoke 测试       → health + readiness + 3 个接口路由 + 前端页面
-11. GitHub 镜像同步  → 检查 + 必要时 sync-to-github.sh
-12. 配置清理检查     → SHOW_DETAILS/DEBUG/TRACE 临时配置
-13. 部署报告         → docs/release/deploy-report-YYYY-MM-DD-Nth.md（标注环境）
+10. Smoke 测试       -> health + readiness + 3 个接口路由 + 前端页面
+11. 配置清理检查     -> SHOW_DETAILS/DEBUG/TRACE 临时配置
+12. 部署报告         -> docs/release/deploy-report-YYYY-MM-DD-Nth.md（标注环境）
 ```
 
 ## Key Lessons from Deployment Practice (15 次部署实战沉淀)
@@ -461,18 +458,7 @@ curl --noproxy '*' -s http://${TARGET_HOST}:8080/api/projects
 curl --noproxy '*' -s http://${TARGET_HOST}:8080/api/integration/crm/health
 ```
 
-### 5. GitHub 镜像同步
-
-部署到 Gitee main 后，GitHub 镜像可能落后：
-
-```bash
-git log --oneline github/main..origin/main | wc -l
-bash scripts/sync-to-github.sh
-```
-
-> 仅主工作区（`/Users/user/xiyu/worktrees/trae`）执行同步，其他 worktree 不推镜像。
-
-### 6. 临时调试配置清理
+### 5. 临时调试配置清理
 
 排障期间可能往 `/etc/xiyu-bid/backend.env` 添加了临时配置，部署完成后**必须检查**：
 
@@ -480,7 +466,7 @@ bash scripts/sync-to-github.sh
 ssh jetty@${TARGET_HOST} 'sudo grep -E "SHOW_DETAILS|DEBUG|TRACE" /etc/xiyu-bid/backend.env'
 ```
 
-### 7. 幂等迁移设计（部署安全底线）
+### 6. 幂等迁移设计（部署安全底线）
 
 所有新迁移**尽量幂等**，防止重复执行/部分执行后产生冲突。
 
@@ -489,35 +475,35 @@ ssh jetty@${TARGET_HOST} 'sudo grep -E "SHOW_DETAILS|DEBUG|TRACE" /etc/xiyu-bid/
 - ✅ 存储过程 + `information_schema` 检查（复杂场景）
 - ✅ `UPDATE ... WHERE NOT LIKE` 检查（追加权限类操作）
 
-### 8. systemctl sudo 权限（第 15 次发现，PR !1324 已修复）
+### 7. systemctl sudo 权限（第 15 次发现，PR !1324 已修复）
 
 `remote-deploy.sh` 默认 `SYSTEMCTL_SUDO=true`（PR !1324 后调整，原默认 `false` 导致第 15 次部署事故）。
 
-### 9. git.properties commit id 不准确（第 11 次发现）
+### 8. git.properties commit id 不准确（第 11 次发现）
 
 worktree `.git` 指向问题导致 `git.properties` 中 `git.commit.id` 显示旧 commit。
 
-### 10. 破坏性 schema 变更（DROP COLUMN）（第 15 次 V1108）
+### 9. 破坏性 schema 变更（DROP COLUMN）（第 15 次 V1108）
 
 破坏性 DROP+ADD 迁移需特别关注：数据无法回滚恢复，需从 DB 备份恢复整张表。
 
-### 11. 服务器 /tmp/migration-mysql/ 目录过时（第 15 次发现）
+### 10. 服务器 /tmp/migration-mysql/ 目录过时（第 15 次发现）
 
 不影响 validate，但建议部署时同步更新该目录到最新版本。
 
-### 12. rollback 脚本命名规范（第 15 次误判教训）
+### 11. rollback 脚本命名规范（第 15 次误判教训）
 
 新迁移必须配套 rollback 脚本，命名前缀是 `U<version>`（不是 `RV<version>`）。
 
-### 13. 前端目录权限（第 10 次发现）
+### 12. 前端目录权限（第 10 次发现）
 
 `/srv/www/xiyu-bid/` 目录属于 `nginx:nginx`，jetty 用户无权删除。解决方案：`sudo chown -R jetty:jetty /srv/www/xiyu-bid/`。
 
-### 14. macOS `._*` 残留文件（第 10 次发现）
+### 13. macOS `._*` 拋留文件（第 10 次发现）
 
 从 macOS 打包并 scp 到 Linux 服务器时，会生成 `._*` 元数据残留文件。清理：`find /srv/www/xiyu-bid/ -name "._*" -delete`。预防：打包时设置 `COPYFILE_DISABLE=1`。
 
-### 15. Flyway 防护体系总览（第 10 次事故后建立）
+### 14. Flyway 防护体系总览（第 10 次事故后建立）
 
 15 项防护覆盖 4 个阶段（截至 2026-06-29）：
 
@@ -541,7 +527,7 @@ worktree `.git` 指向问题导致 `git.properties` 中 `git.commit.id` 显示�
 
 **防复发效果**：第 11-15 次未再发生 Flyway 启动失败事故。
 
-### 16. Mac HTTP_PROXY 导致外部访问 502（第 19/23 次发现）
+### 15. Mac HTTP_PROXY 导致外部访问 502（第 19/23 次发现）
 
 本地 Mac 开启了 HTTP 代理（如 Clash/V2Ray 等），导致 `curl http://<内网IP>:8080` 走代理隧道返回 502。
 
@@ -552,13 +538,13 @@ curl --noproxy '*' http://${TARGET_HOST}:8080/actuator/health
 
 - 部署脚本中的 `curl` 命令统一加 `--noproxy '*'`，避免环境变量干扰
 
-### 17. SentryAppender 手动声明导致 crash-loop（第 34 次事故，PR !1519 引入）
+### 16. SentryAppender 手动声明导致 crash-loop（第 34 次事故，PR !1519 引入）
 
 `logback-spring.xml` 手动声明 `io.sentry.logback.SentryAppender`，但项目仅引入 `sentry-spring-boot-starter-jakarta`（**不包含 `sentry-logback` 模块**），logback 初始化时找不到该类，后端 crash-loop 约 10 分钟。
 
 **修复方式**（PR !1533）：移除 `logback-spring.xml` 中 `SentryAppender` 手动声明。Spring Boot Starter 会**自动配置** SentryAppender，**不需要**在 logback.xml 中手动声明。
 
-### 18. 前端 hash 资源跨版本 404（Unable to preload CSS）
+### 17. 前端 hash 资源跨版本 404（Unable to preload CSS）
 
 **根因**：前端构建产物使用 hash 化文件名（如 `assets/index-ABC.js`）。`remote-deploy.sh` 发版时直接覆盖 `/srv/www/xiyu-bid`，旧 hash 文件被删除。用户浏览器中仍有未刷新的旧标签页（或缓存的 HTML），其 `<link rel="preload">` 指向已不存在的旧 CSS/JS → Nginx 404 → Vue/Sentry 捕获 `Unable to preload CSS`。
 
@@ -583,7 +569,7 @@ curl --noproxy '*' http://${TARGET_HOST}:8080/actuator/health
 
 3. **前端容错（补充手段）**：对 `<link rel="preload">` 增加 `onerror` 降级处理，避免未处理异常进入 Sentry。只能减少噪声，不能解决资源缺失。
 
-### 19. Nginx TEMP no-cache 块导致页面切换全量重传（2026-08-17 修复）
+### 18. Nginx TEMP no-cache 块导致页面切换全量重传（2026-08-17 修复）
 
 **根因**：服务器 `/etc/nginx/conf.d/xiyu-bid.conf` 中遗留一段 "TEMP: disable JS/CSS cache for deployment refresh" 的临时配置——`location ~* \.(js|css)$ { no-cache, no-store }`，且全局未开 gzip。两个因素叠加：每次页面切换，所有 hash 化 chunk 全量重新下载（vendor 960KB + echarts 822KB + 页面 chunk），无压缩传输。这是"页面切换内容展示慢"的第一根因（占比远超 API 耗时）。
 
@@ -646,9 +632,8 @@ curl --noproxy '*' -sI -H 'Accept-Encoding: gzip' https://winbid.ehsy.com/assets
 2. **Kafka SDK readiness 延迟**（5 次出现）：第 8、9、10、13、15 次 — 已沉淀为已知行为
 3. **Smoke 测试 admin 密码限制**（9 次跳过）：第 6-15 次 — 用 400/403/401 替代验证
 4. **SHOW_DETAILS=always 保留**（3 次决定保留）：第 13、14、15 次 — 用户决定
-5. **rollback 脚本缺失**（3 次缺失）：V1107、V1108、V1109 — 需补全
-6. **GitHub 镜像同步**（3 次明确处理）：第 3 次发现落后，第 8 次明确待办，第 13 次起作为标准步骤
-7. **Mac HTTP_PROXY 502**（2 次出现）：第 19 次首次发现，第 23 次复发——绕过代理后正常，属 Mac 代理问题非服务故障
-8. **SentryAppender crash-loop**（1 次事故）：第 34 次首次发现，logback.xml 手动声明 SentryAppender 但未引入 sentry-logback 依赖
-9. **前端 hash 资源跨版本 404**（部署生命周期问题）：发版直接覆盖 `/srv/www/xiyu-bid` 删除旧 hash 文件，旧标签页 `<link rel="preload">` 指向已删除资源 → Nginx 404 → Sentry 噪声。解决方案：部署后从上一版本 release 目录 `cp -rn` 旧 assets 保留 24h
-10. **OBS 直传漏传 VITE_OBS_ENABLED=true**（2 次事故）：第 84 次测试 + 第 8 次生产均漏传，导致 `isObsEnabled` 编译为 `!1`（false），OBS 大文件直传失效。**根治修复**：`package-release.sh` 默认值已从 `false` 改为 `true`（不传也启用），skill 打包模板已显式传入 `VITE_OBS_ENABLED=true` 作双保险，产物校验加 `obsEnabled` 检查
+5. **rollback 脚本缺失**（3 次缺失）：V1107、V1108、V1109 - 需补全
+6. **Mac HTTP_PROXY 502**（2 次出现）：第 19 次首次发现，第 23 次复发--绕过代理后正常，属 Mac 代理问题非服务故障
+7. **SentryAppender crash-loop**（1 次事故）：第 34 次首次发现，logback.xml 手动声明 SentryAppender 但未引入 sentry-logback 依赖
+8. **前端 hash 资源跨版本 404**（部署生命周期问题）：发版直接覆盖 `/srv/www/xiyu-bid` 删除旧 hash 文件，旧标签页 `<link rel="preload">` 指向已删除资源 -> Nginx 404 -> Sentry 噪声。解决方案：部署后从上一版本 release 目录 `cp -rn` 旧 assets 保留 24h
+9. **OBS 直传漏传 VITE_OBS_ENABLED=true**（2 次事故）：第 84 次测试 + 第 8 次生产均漏传，导致 `isObsEnabled` 编译为 `!1`（false），OBS 大文件直传失效。**根治修复**：`package-release.sh` 默认值已从 `false` 改为 `true`（不传也启用），skill 打包模板已显式传入 `VITE_OBS_ENABLED=true` 作双保险，产物校验加 `obsEnabled` 检查

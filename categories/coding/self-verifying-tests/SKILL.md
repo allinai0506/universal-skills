@@ -1,6 +1,6 @@
 ---
 name: self-verifying-tests
-description: Write tests that verify system consistency: UI matches database, state transitions are valid, docs align with code. Use when building E2E tests, test infrastructure, or detecting hidden bugs between layers. Replaces "click and check" testing. 自验证测试, 跨层验证, 状态机测试
+description: "Write tests that verify system consistency: UI matches database, state transitions are valid, docs align with code. Use when building E2E tests, test infrastructure, or detecting hidden bugs between layers. Replaces 'click and check' testing. 自验证测试, 跨层验证, 状态机测试"
 ---
 
 # Self-Verifying Tests
