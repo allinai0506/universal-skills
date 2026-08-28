@@ -1,6 +1,6 @@
 # SKILLS-INDEX
 
-> 技能来源速查表 · 自动生成于 2026-08-25 21:59 · 共 234 个一级技能。
+> 技能来源速查表 · 自动生成于 2026-08-27 11:24 · 共 240 个一级技能。
 > 按「来源」检索：公开技能包（外部大神编写的成套技能） / 自建・单个技能。
 > 技能由 AI 按 description 自动触发，无需记住名字。
 
@@ -172,8 +172,8 @@ _前端界面设计技能_
 | 技能 | 用途 |
 | --- | --- |
 | `frontend-design` | 打造高质量且有辨识度的前端界面 |
+| `snapping-ui-to-grid` | Use when building, modifying, or reviewing any page-level UI layout — list pages, form pages, dashboards, drawers, or modal content. Triggers include new page scaffolds, UI/UX polish passes, review comments about misaligned edges, uneven toolbar control heights, ragged number columns, misplaced primary buttons, or arbitrary spacing values. |
 | `ui-ux-pro-max` | 覆盖多风格多栈的 UI/UX 设计智能库 |
-| `snapping-ui-to-grid` | 四基准线对齐+视线动线分区，消除错位/参差/裸值间距 |
 
 ---
 
@@ -242,8 +242,10 @@ _自动发现的第三方技能_
 | `autopilot` | 从想法到可运行代码的全自主执行 |
 | `autoresearch` | 带严格评估合约的单任务持续改进循环 |
 | `blueprint-e2e` | 为飞书产品蓝图每小节独立编写并执行 E2E 测试 |
+| `branch-name` | Use when starting a new branch or renaming an existing one — produces a branch name in the format `<type>/<work-item-id>-<short-description>` that's compatible with the create-pr skill's work item ID extraction. |
 | `configure-notifications` | 用自然语言配置 Telegram、Discord 与 Slack 通知 |
 | `create-migration` | 生成 Flyway 迁移脚本并做格式校验 |
+| `create-pull-request` | Use when creating a pull request for the current branch — gathers branch context, generates a PR description following the repo's pull_request_template.md, and creates the PR with a Plane work item ID prefix in the title. |
 | `deep-dive` | 两阶段管线做因果追踪与需求澄清的深度调查 |
 | `deep-interview` | 苏格拉底式深度访谈并澄清需求中的数学歧义 |
 | `deepinit` | 用分层 AGENTS.md 文档深度初始化代码库 |
@@ -259,7 +261,9 @@ _自动发现的第三方技能_
 | `project-session-manager` | 以工作树优先管理开发环境与工单会话 |
 | `ralph` | 带可配置验证评审的自循环任务执行 |
 | `ralplan` | 执行前对模糊请求做共识规划的入口 |
+| `react-doctor` | Use when finishing a feature, fixing a bug, before committing React code, or when the user types `/doctor`, asks to scan, triage, or clean up React diagnostics. Covers lint, accessibility, bundle size, architecture. Includes a regression check and a full local-triage workflow that fetches the canonical playbook. |
 | `release` | 分析仓库发布规则并引导完成发布流程 |
+| `release-notes` | Generate release notes for a Plane release PR in either `makeplane/plane-cloud` (date-based versioning, e.g. `release: vYY.MM.DD-N`) or `makeplane/plane-ee` (semver, e.g. `release: vX.Y.Z`). Reads PR commits, filters out noise, categorizes by conventional-commit type, optionally enriches via Plane MCP, and writes the result as the PR description in the GitHub Releases format. |
 | `self-improve` | 用锦标赛选择实现代码的自主进化改进 |
 | `setup` | 把安装诊断与 MCP 请求路由到正确流程 |
 | `skill` | 列出、添加、移除并搜索本地技能 |
@@ -284,6 +288,7 @@ _自动发现的第三方技能_
 | `test-real-skill` | 用于测试技能机制的示例技能 |
 | `test-symlink-skill` | 验证 symlink 机制的示例测试技能 |
 | `trace` | 以证据驱动并行追踪竞争假设并定位根因 |
+| `translate` | Translate or update keys in packages/i18n/src/locales. Use whenever adding, changing, or reviewing strings across any target locale — enforces do-not-translate terminology, CLDR plural forms, placeholder/tag preservation, per-locale punctuation/register, and the AI-translation review workflow. Required reading before touching any *.json under src/locales. |
 | `ultragoal` | 持久化多目标工作流并生成会话交接文本 |
 | `ultraqa` | 测试、验证、修复循环直至达成目标 |
 | `ultrawork` | 面向高吞吐任务并行的执行引擎 |

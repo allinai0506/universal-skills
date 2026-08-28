@@ -28,9 +28,7 @@ DUPLICATE_SKILL_NAMES=(
 
 # 项目专用技能：格式为 "技能名:项目名匹配模式"，匹配模式支持 bash 通配符
 # 这些技能不会同步到全局目录，只会同步到项目名匹配的项目级 skills 目录
-PROJECT_ONLY_SKILLS=(
-    "xiyu-server-deploy:xiyu*"
-)
+PROJECT_ONLY_SKILLS=()
 
 is_duplicate_skill_name() {
     local skill_name="$1"

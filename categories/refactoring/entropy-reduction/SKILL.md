@@ -1,6 +1,6 @@
 ---
 name: entropy-reduction
-description: Design modular code with clear boundaries: one reason to change per module, no circular dependencies, and low complexity. Use when refactoring spaghetti code, fixing over-engineered systems, or deciding where logic belongs. Avoids "5 files for one function" pseudo-modularity. 模块化, 低复杂度, 循环依赖, 依赖倒置, SOLID
+description: "Design modular code with clear boundaries: one reason to change per module, no circular dependencies, and low complexity. Use when refactoring spaghetti code, fixing over-engineered systems, or deciding where logic belongs. Avoids '5 files for one function' pseudo-modularity. 模块化, 低复杂度, 循环依赖, 依赖倒置, SOLID"
 ---
 
 # Entropy Reduction

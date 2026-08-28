@@ -1,6 +1,6 @@
 ---
 name: architecture-defense
-description: Enforce architectural rules automatically: block wrong dependencies, prevent layer violations, detect circular dependencies. Use when you need dependency-cruiser, ArchUnit, module guards, or CI architecture checks. Prevents "UI importing database", "cross-feature internal imports", and other boundary violations.
+description: "Enforce architectural rules automatically: block wrong dependencies, prevent layer violations, detect circular dependencies. Use when you need dependency-cruiser, ArchUnit, module guards, or CI architecture checks. Prevents 'UI importing database', 'cross-feature internal imports', and other boundary violations."
 ---
 
 # Architecture Defense
