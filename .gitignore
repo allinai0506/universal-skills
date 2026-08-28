@@ -18,3 +18,11 @@ categories/imported/
 
 # 临时生成插件配置
 .claude-plugin/
+
+# Python 编译缓存
+__pycache__/
+*.pyc
+*.pyo
+
+# Trae 运行期缓存
+.trae/
