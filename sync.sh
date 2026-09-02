@@ -120,6 +120,32 @@ is_syncable_skill_dir() {
     ! is_duplicate_skill_name "$skill_name"
 }
 
+# 增量复制单个技能（增量校验重试核心）
+# 幂等：目标已是最新（diff 一致）或 symlink 直指源 → 跳过；漂移/缺失 → 重拷
+# 返回值：0=已复制  1=无需变动（已一致）
+# sync_skill_copy <src_skill_dir> <dst_skill_dir>
+sync_skill_copy() {
+    local src="$1"
+    local dst="$2"
+
+    if [ -L "$dst" ]; then
+        local dest
+        dest="$(readlink "$dst" 2>/dev/null || true)"
+        if [ "$dest" = "$src" ]; then
+            return 1
+        fi
+        rm -f "$dst"
+    elif [ -e "$dst" ]; then
+        if diff -rq "$src" "$dst" >/dev/null 2>&1; then
+            return 1
+        fi
+        rm -rf "$dst"
+    fi
+
+    cp -R "$src" "$dst"
+    return 0
+}
+
 cleanup_duplicate_skill_links() {
     local target="$1"
     local removed=0
@@ -1537,8 +1563,9 @@ sync_projects() {
 
         mkdir -p "$target_dir"
 
-        # 逐技能复制实体文件，过滤 project-only（不使用 symlink，避免 git 追踪死链接）
+        # 逐技能增量复制实体文件（diff 校验：仅漂移技能重拷，幂等可重试），过滤 project-only
         local skill_count=0
+        local unchanged_count=0
         for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
             if is_syncable_skill_dir "$skill_dir"; then
                 local skill_name="$(basename "$skill_dir")"
@@ -1548,15 +1575,18 @@ sync_projects() {
                         continue
                     fi
                 fi
-                # 清除旧 symlink 或旧拷贝，写入实体文件
-                rm -rf "$target_dir/$skill_name"
-                cp -R "$skill_dir" "$target_dir/$skill_name"
-                skill_count=$((skill_count + 1))
+                if sync_skill_copy "$skill_dir" "$target_dir/$skill_name"; then
+                    skill_count=$((skill_count + 1))
+                else
+                    unchanged_count=$((unchanged_count + 1))
+                fi
             fi
         done
 
-        if [ "$skill_count" -gt 0 ]; then
-            log "✓ $project_name: universal-skills 已同步 ($skill_count 个，实体文件)"
+        if [ "$skill_count" -gt 0 ] || [ "$unchanged_count" -gt 0 ]; then
+            # bash 3.2 在 C.UTF-8 下展开「ASCII数字直接接全角标点」（如 $skill_count，）
+            # 会丢失数字与标点首字节，故数字与全角逗号间保留空格
+            log "✓ $project_name: universal-skills 校验完成 (更新 $skill_count ，一致 $unchanged_count)"
             synced_count=$((synced_count + 1))
         fi
     done
@@ -1755,6 +1785,7 @@ SKIP_PI=false
 DO_DISCOVER=false
 DO_PULL=false
 DO_DRY_RUN=false
+DO_VERIFY=false
 SPECIFIC_PROJECT=""
 
 while [[ $# -gt 0 ]]; do
@@ -1775,6 +1806,7 @@ while [[ $# -gt 0 ]]; do
         --discover) DO_DISCOVER=true ;;
         --pull) DO_PULL=true ;;
         --dry-run) DO_DRY_RUN=true ;;
+        --verify) DO_VERIFY=true ;;
         --help)
             echo "用法: $0 [选项]"
             echo ""
@@ -1795,6 +1827,8 @@ while [[ $# -gt 0 ]]; do
             echo "  --pull          反向回流：扫描项目副本与仓库的差异，逐个确认后回流"
             echo "                 确认选项: y=整份覆盖  m=行级合并(diff3,含防丢行校验)  a=全部整份覆盖  N/q=跳过"
             echo "  --pull --dry-run  只展示差异，不回流"
+            echo "  --verify        增量校验重试：只同步项目级 universal-skills 副本"
+            echo "                 （diff 校验，仅重拷漂移/缺失技能；sync.sh 中断后快速自愈）"
             echo "  --help          显示此帮助"
             exit 0
             ;;
@@ -1841,6 +1875,13 @@ if [ "$DO_PULL" = true ]; then
     else
         pull_from_projects
     fi
+    exit 0
+fi
+
+if [ "$DO_VERIFY" = true ]; then
+    log "增量校验重试：校验项目级 universal-skills 副本（diff 校验，漂移/缺失自愈）..."
+    echo ""
+    sync_projects
     exit 0
 fi
 
