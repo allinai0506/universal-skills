@@ -44,6 +44,35 @@ Branch: `chore/unify-global-skill-symlinks`
 - Preserved the legacy key path and legacy SSH option pattern only as fallback guidance, while keeping `StrictHostKeyChecking=accept-new` as the preferred direct-probe/default.
 - Summarized the old hand-written scp/systemctl steps rather than copying them verbatim, because the canonical runbook already prefers GitHub Actions and `scripts/release/remote-deploy.sh`.
 
+## Task: optimize unified-dev-flow skill
+
+## Findings
+
+- `categories/security-review/SKILL.md` was single-level, but every `sync.sh` loop uses `categories/*/*` — the skill was never installed anywhere (`~/.config/opencode/skills/security-review` missing). S6 referenced a dead link.
+- SKILL.md mandated `google-code-review` while WORKFLOW-MAP.md §2 claimed canonical was engineering `code-review`; SKILL never mentioned `code-review` at all.
+- Medium route diverged: SKILL said `speckit-chain`, MAP §4 said hand-split `writing-plans` route; MAP §4 also lacked refactor/research rows that SKILL has.
+- `WORKFLOW-MAP.md at the repo root` pointer was unreachable after install (flat per-skill symlinks).
+- S0 missed the AGENTS.md ledger breakpoint-resume rule; S3→S4 exemption covered micro only while the small route also skips S3; `ai-release-engineer` gate covered all AI-assisted code (≈ everything); Intractable route listed标讯-specific `blueprint-driven-development` as generic fallback.
+- `categories/imported/ai-slop-cleaner/` was an empty leftover dir.
+
+## Decisions
+
+- Moved skill to `categories/security/security-review/` via `git mv` (history preserved as `R`); deleted the empty imported dir; fixed the stale `security-review/` line in AGENTS.md.
+- S6 rule kept as validated (`ai-slop-cleaner` + `google-code-review` mandatory) and added `code-review` as spec-consistency supplement for spec-bearing routes only; MAP §2 updated to match instead of contradicting.
+- MAP §4 rewritten to SKILL's taxonomy (added refactor/research rows, bug keeps S6-light, medium/large use `speckit-chain`, large makes `architect` plan review explicit).
+- Created `categories/workflow/unified-dev-flow/references/alternatives.md` (stage alternatives + domain table + debug ladder, all refs machine-verified) and repointed SKILL.md's Overview at it; installed copies get it free via whole-dir symlink.
+- S0 now checks `.superpowers/sdd/progress.md` first (resume, no re-classify); exemption widened to micro+small with S5 never exempt; `ai-release-engineer` narrowed to `autopilot`/`ralph` unattended output; Intractable keeps `figure-it-out` only (blueprint users invoke it by name, covered by When-NOT-to-use).
+- P2: S6 force-semantics live only in Gates; dropped the duplicate access-pattern bullet (kept in S3 + debug note in references); standing principles named (4) with rest on-demand; parallel trio disambiguated; description gained one English trigger sentence with no flow enumeration (article's probe lesson preserved); `standard-workflow` non-intercept declared.
+- Also fixed stale `gstack-*` names in MAP (§2 S2/S6/S7: `spec`, `qa`/`qa-only`, `ship`, `canary` — verified against frontmatter).
+- Left untouched: `skillify` duplicate (`categories/gstack/skillify` vs `categories/imported/skillify`, both `name: skillify`) — pre-existing, needs its own DUPLICATE_SKILL_NAMES decision; sync run refreshed an alias symlink inside the gstack dir, flagged as follow-up.
+
+## Verification plan
+
+- `quick_validate.py` on both touched skills → valid.
+- Regex-extracted all backtick skill refs from SKILL.md (69) and alternatives.md (64) → all resolve to exactly one `categories/*/*/SKILL.md`, no duplicates.
+- `./sync.sh --no-projects` → all global targets OK, `security-review` symlink now present in `~/.config/opencode/skills/` and `~/.claude/skills/`, SKILLS-INDEX.md + GEMINI.md rebuilt (`### security` section, real description).
+- Project checkouts still hold old file copies (`--no-projects`); next full `./sync.sh` propagates.
+
 ## Task: stop generating Cursor skill rules
 
 ## Decisions

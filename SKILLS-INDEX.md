@@ -1,6 +1,6 @@
 # SKILLS-INDEX
 
-> 技能来源速查表 · 自动生成于 2026-09-06 21:46 · 共 353 个一级技能。
+> 技能来源速查表 · 自动生成于 2026-09-06 23:11 · 共 353 个一级技能。
 > 按「来源」检索：公开技能包（外部大神编写的成套技能） / 自建・单个技能。
 > 技能由 AI 按 description 自动触发，无需记住名字。
 
@@ -439,12 +439,11 @@ _重构实践_
 | `ai-slop-cleaner` | Clean AI-generated code slop with a regression-safe, deletion-first workflow and optional reviewer-only mode |
 | `entropy-reduction` | 设计边界清晰且低复杂度的模块化代码 |
 
-### security-review
-_安全审查_
+### security
 
 | 技能 | 用途 |
 | --- | --- |
-| `security-review` | 安全审查清单与策略 |
+| `security-review` | Use this skill when adding authentication, handling user input, working with secrets, creating API endpoints, or implementing payment/sensitive features. Provides comprehensive security checklist and patterns. |
 
 ### testing
 _测试_
@@ -476,7 +475,7 @@ _开发流程_
 | `speckit-chain` | 串联执行多个 Spec Kit 命令 |
 | `standard-workflow` | 四阶段标准作业流程规划开发质检维护 |
 | `subagent-driven-development` | 用子代理执行相互独立的实现计划 |
-| `unified-dev-flow` | 当开始非简单的功能开发、修 bug、重构或迁移，需要决定走哪些阶段、调用哪些技能、走多深时使用。当用户问该用什么流程或技能时使用。触发词：统一流程 / 标准流程 / 开发流程 / 完整流程 / 走流程 / 端到端开发 / 该用什么技能 / 帮我选流程 / 怎么推进这个需求 / 规范流程。 |
+| `unified-dev-flow` | 当开始非简单的功能开发、修 bug、重构或迁移，需要决定走哪些阶段、调用哪些技能、走多深时使用。当用户问该用什么流程或技能时使用。触发词：统一流程 / 标准流程 / 开发流程 / 完整流程 / 走流程 / 端到端开发 / 该用什么技能 / 帮我选流程 / 怎么推进这个需求 / 规范流程。Use when deciding which dev workflow/skills to use for a non-trivial coding task. |
 | `using-git-worktrees` | 用 git worktree 创建隔离的开发工作区 |
 | `using-superpowers` | 开启会话时先调用技能再回应的流程 |
 | `verification-before-completion` | 声明完成前先运行验证命令并确认结果 |
