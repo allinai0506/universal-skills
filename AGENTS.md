@@ -55,7 +55,7 @@ categories/
 ├── debugging/           # Debugging methodologies (systematic, root-cause)
 ├── imported/            # Auto-discovered skills from projects (gitignored)
 ├── refactoring/         # Refactoring practices (entropy reduction)
-├── security-review/     # Security review checklist
+├── security/              # Security review checklist
 ├── ui-ux/              # Frontend design (frontend-design, ui-ux-pro-max)
 └── workflow/           # Development workflows (brainstorming, plans, TDD)
 

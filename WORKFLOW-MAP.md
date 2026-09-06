@@ -22,7 +22,7 @@ S0 准备 → S1 意图 → S2 规格 → S3 规划 → S4 实现 → S5 验证 
 
 **门禁规则**（借鉴各范式之长）：
 - S1→S2：意图不清不得写规格（speckit clarify 精神）
-- S3→S4：无书面计划不动代码，除非走「微改动」快速路径（writing-plans 精神）
+- S3→S4：无书面计划不动代码，微改动 / 小需求 fast path 豁免（S5 验证永不豁免）
 - S4→S5：声明完成前必须跑真实验证并出示证据（verification-before-completion / prove-it-works 精神）
 - S5→S6→S7：已上线系统的 PR 必须过生产风险审计（production-risk-review）
 
@@ -54,7 +54,7 @@ S0 准备 → S1 意图 → S2 规格 → S3 规划 → S4 实现 → S5 验证 
 |---|---|---|
 | **canonical** | `speckit-specify` + `speckit-clarify` | 最严谨：章程支撑 + 定向澄清；大型特性必用 |
 | 备选 | `to-spec` | 中型任务轻量路线：对话直接综合成规格并入 tracker |
-| 备选 | `gstack-spec` | 产出物直接是 issue/ticket、要与 GitHub 流衔接时 |
+| 备选 | `spec` | 产出物直接是 issue/ticket、要与 GitHub 流衔接时 |
 | 配套 | `speckit-constitution` | 项目级章程，一次配置长期复用 |
 | 配套 | `domain-modeling` | 有领域建模诉求时沉淀统一语言 |
 
@@ -96,22 +96,23 @@ S0 准备 → S1 意图 → S2 规格 → S3 规划 → S4 实现 → S5 验证 
 
 | 角色 | 技能 | 说明 |
 |---|---|---|
-| **canonical** | `code-review`（engineering） | 规范轴 + spec 轴双线并行审查 |
+| **canonical（门禁）** | `ai-slop-cleaner` + `google-code-review` | router S6 强制两步：先清 slop 再正式评审 |
+| spec 一致性 | `code-review`（engineering） | 有 spec 的路线追加：规范轴 + spec 轴双线并行审查 |
 | 对抗审查 | `interrogate` / `cog-4d-audit` | CI 全绿但仍不放心的隐藏缺陷挖掘 |
 | 生产风险 | `production-risk-review` | **已上线系统 PR 必过**，替代普通 review |
 | 安全 | `security-review` / `gstack-cso` | 清单式安全审查 / OWASP+威胁建模 |
 | 影响面 | `blast-radius` | 改动前评估可能破坏什么 |
-| QA | `gstack-qa`（改）/ `gstack-qa-only`（只报不改） | 真机浏览器 QA |
+| QA | `qa`（改）/ `qa-only`（只报不改） | 真机浏览器 QA |
 | AI 痕迹清理 | `ai-slop-cleaner` / `receiving-code-review` | 清理 AI slop；被审时不盲从反馈 |
 
 ### S7 交付集成（上上线）
 
 | 角色 | 技能 | 说明 |
 |---|---|---|
-| **canonical** | `finishing-a-development-branch` → `gstack-ship` | 分支集成决策 → 合基线、测试、版本、PR 一条龙 |
+| **canonical** | `finishing-a-development-branch` → `ship` | 分支集成决策 → 合基线、测试、版本、PR 一条龙 |
 | 发布工程 | `ai-release-engineer` / `release` | AI 代码合并前的验证门禁 / 仓库规则驱动发布 |
 | 部署专项 | `deployment/*`（docker/migrations/deployment-patterns）、项目专属如 `xiyu-server-deploy` | 按项目选用 |
-| 上线后 | `gstack-canary` | 金丝雀监控与回滚决策 |
+| 上线后 | `canary` | 金丝雀监控与回滚决策 |
 
 ### S8 沉淀学习（变聪明）
 
@@ -138,7 +139,7 @@ SKILL.md 只保留压缩版，本表是完整数据基础。路由器现含三�
 | 行为保持重构（清理/精简/拆分/降嵌套） | `clean-code-behavior-preserving-refactoring` | `entropy-reduction`（模块化熵减：循环依赖、边界重划） |
 | 调研/选型，先不写代码 | `research`（一手资料 → Markdown 备忘） | `search-first`（写码前先找现成轮子） |
 | 客户交付/正式文档 | `html-first-workflow` | `technical-writing`（Diátaxis 分层规范）/ `gstack-make-pdf` |
-| API 设计/改造 | `api-design` | 自触发强，暂不进 SKILL.md 压缩版 |
+| API 设计/改造 | `api-design` | router Cross-cutting 已收录 |
 | 数据库方言专项 | `postgres-patterns` / `clickhouse-io` | 同上；漏派证据出现再升级 |
 
 ### 🔍 调试诊断（升级路径）
@@ -167,11 +168,13 @@ pstack 的 21 条 `principle-*` 不属于任何阶段，是**所有阶段共享�
 | 任务类型 | 判定特征 | 路径 |
 |---|---|---|
 | 微改动 | 单文件、<50 行、行为明确 | S4 直改 → S5 验证（跳过 S0-S3） |
-| Bug 修复 | 有复现路径 | S0 → 调试横切链 → S4(TDD 先写失败测试) → S5 → S7 |
+| Bug 修复 | 有复现路径 | S0 → 调试横切链 → S4(TDD 先写失败测试) → S5 → S6(轻量) → S7 |
+| 纯重构 | 行为保持、技术债 | S0 → S3(`writing-plans`) → S4(重构 + 回归测试) → S5 → S6 → S7 |
+| 调研探路 | 技术评估、可行性 PoC、不交付 | S1 → S3(`research` / `prototype`) → S8(记备忘，止) |
 | 小功能 | 1-3 文件 | S0 → S4(TDD) → S5 → S6(轻量) → S7 |
-| 中型功能 | 多模块、需拆步 | S0 → S1 → S3(`writing-plans`) → S4(`subagent-driven`) → S5-S7 |
-| 大型特性/新系统 | 跨层、高风险、需求模糊 | 全流程：S0→S1→S2(speckit)→S3(+多角色会审)→S4→S5→S6(interrogate+production-risk-review)→S7(ship)→S8 |
-| 疑难杂症/大迁移 | 跨周、需审计 | `figure-it-out` / `blueprint-driven-development` 剧本模式 |
+| 中型功能 | 多模块、需拆步 | S0 → `speckit-chain`（S1–S4 全链）→ S5 → S6 → S7 |
+| 大型特性/新系统 | 跨层、高风险、需求模糊 | S0 → `speckit-chain`（S1–S4，plan 追加 `architect` 会审）→ S5 → S6(`interrogate` + `production-risk-review`) → S7(`ship`) → S8 |
+| 疑难杂症/大迁移 | 跨周、需审计 | `figure-it-out` 剧本模式 |
 
 ---
 
@@ -218,4 +221,4 @@ pstack 的 21 条 `principle-*` 不属于任何阶段，是**所有阶段共享�
 2. ✅ 第五节去重清单已执行完毕（结果见第五节表格）；
 3. ✅ 领域分派轴上线（2026-08-23）：SKILL.md Cross-cutting 新增 Domain specialists（UI / 性能 / 重构 / 调研 / 文档），Step 2 指令改为"阶段技能 + 领域专项"并行加载，"Load only" 眼罩指令移除；路由测试 7 场景全 PASS——规模轴 3（建表中型功能、AI 发布双门禁、错别字豁免）+ 领域轴 4（重构 / UI 看板 / CPU 内存性能 / 纯调研，修复前全 GAP、修复后全 PASS）；
 4. ⬜ 用第七节实战校验跑 3 个真实任务并记录结果（微改动 / 中型功能 / 大型特性各一）；
-5. ⬜ map 领域表中"自触发"行（`api-design` / `postgres-patterns` / `clickhouse-io`）仅在实战出现漏派证据时升级进 SKILL.md。
+5. ⬜ map 领域表中 DB 方言行（`postgres-patterns` / `clickhouse-io`）仅在实战出现漏派证据时升级进 SKILL.md。
