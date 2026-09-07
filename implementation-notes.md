@@ -126,3 +126,80 @@ Branch: `chore/unify-global-skill-symlinks`
 - Hook step 3 hardcoded `git push origin "$branch"`, but this repo's remote is named `gitee` (no `origin`), so every commit's push step failed with "fatal: 'origin' does not appear to be a git repository".
 - Replaced with upstream-aware detection: `git rev-parse --abbrev-ref @{u}` → fall back to first remote in `git remote` → skip if none. Works regardless of remote name.
 - Updated wording from "推送到 GitHub" to "推送到远端" since the actual remote is Gitee, not GitHub.
+
+## Task: unified-dev-flow entry gate + mechanical enforcement
+
+Branch: `feat/unified-dev-flow-entry-gate`
+
+## Findings
+
+- Prompt-only gates get skipped under pressure (admitted in SKILL.md Common mistakes for S6); enforcement must be deterministic code on the tool-call path, not more text.
+- Repo had only git hooks (post-commit sync); agent-behavior precedent exists as `delivery-gate` (Stop hook + quality-gate.py, exit-2 block, stdin transcript_path) — reused its philosophy and stdlib-only style.
+- OpenCode plugins expose `tool.execute.before` (throw = block) with sessionID + project dir; Claude has PreToolUse. Both can gate the first Edit/Write.
+
+## Decisions
+
+- Entry Gate compressed 6 items → 4, each pinned to exactly one downstream consumer (①→S1/S2 ②→S3 ③→S6 ④→S5) + anti-restatement rule (instantiate, never restate) to remove the overlap burden instead of adding ceremony.
+- Mechanical contract: `<project>/.omc/entry-gate-<sessionID>.md` (session in filename kills stale-pass), 4 headers + file list under §2 + ≥150 chars; single source of truth `scripts/entry-gate-check.py`, thin TS wrapper `plugins/entry-gate.ts` shells out to it.
+- DEVIATION from A2 (micro exempt): hook enforces uniformly — it cannot judge task size before the first write and any self-declared bypass is gameable. Micro cost is 4 one-liners (~30s); template in references/enforcement.md. One-line revert possible if rejected.
+- Entry item ① requires naming project constraint docs read (RULES.md / lessons-learned.md / AGENTS.md, if present) — the global-router vs project-docs split the user clarified.
+- Honest limits documented (existence≠truth; bash-redirect bypass) — downstream S5/S6 are the second layer, same defense-in-depth as delivery-gate + self-audit.
+- TDD: `scripts/test_entry_gate_check.py` written first (RED: script-exists FAIL), then implementation (GREEN 9/9); TS plugin verified via `bun build` + `node --check` only (no opencode runtime harness in repo).
+
+## Verification plan
+
+- `python3 scripts/test_entry_gate_check.py` → 9/9 PASS.
+- `quick_validate.py` on unified-dev-flow; backtick-ref resolver 0 unresolved.
+- Install e2e in scratch dir per references/enforcement.md (never in repo); live hook install into ~/.claude/settings.json + opencode plugins is a deliberate manual step, not done by sync.
+
+## Task: entry gate 9-tool wiring + live install
+
+## Decisions
+
+- enforcement.md rewritten as 9-tool manual (Claude/Codex/Cursor/Gemini/Trae/Antigravity/Kimi/Qoder/OpenCode), one checker script everywhere (stdin-JSON + exit-2 protocol is industry-converged).
+- Live-installed on this machine via /tmp/install_entry_gate.py (scratch, not committed): backup-before-merge for every config, idempotent re-run verified (8 skips), existing hooks preserved (Claude Stop timeline hook, Trae danger-guard group).
+- Canonical checker copy: ~/.claude/scripts/entry-gate-check.py (cross-tool ~/.claude refs already the norm here); opencode fallback copy too.
+- Known per-tool caveats documented in manual: Codex apply_patch coverage intermittent (matcher has Edit|Write aliases); Gemini has no session id (SessionStart cleanup bounds staleness); Trae needs 本地自动运行 mode; Antigravity + Kimi matchers unverified-live (Beta); ZCode/Grok/PI have no public hook API (prompt-level only).
+
+## Task: entry gate live-debug (Trae/Agy/Cursor)
+
+## Findings
+
+- Cursor: entry-gate PreToolUse fires (matcher Edit|Write confirmed by live block); canary removed afterwards. Done.
+- Antigravity: two stacked bugs — (1) bare exit-2 fails OPEN (needs stdout {"decision":"deny"}), fixed with scripts/entry-gate-antigravity.py (also maps workspacePaths->project, conversationId->session); (2) matcher guessed wrong, canary captured real tool `write_to_file` (08:44 probe). Fixed + live-confirmed blocking. Canary removed.
+- Trae: canary zero-log across absolute-path fix + full restart → hooks never execute our commands. Ruled out: bad JSON, wrong path (~/.trae-cn/hooks.json is the documented CN path; no Solo-specific path exists), matcher (Edit|Write matches Trae's real tool names per danger-guard.sh), stale config (restart done). Unresolved; user chose to stop here. entry-gate group left installed (harmless if never fired; works automatically if Trae later loads it).
+- Lesson: `~` in hook commands fails open on Trae (danger-guard's absolute paths were the tell); wrong matchers fail silent everywhere — canary-first is now the standard bring-up procedure (documented in enforcement.md per-tool caveats).
+
+## Task: Trae hook root cause (closed)
+
+## Findings
+
+- User confirmed BOTH stacked causes: hand-added hook group toggle was OFF in Settings > Hooks, AND run-mode was sandbox. Either alone fails silent — hence three weeks of zero logs with a 100%-correct file.
+- Corrected earlier misdiagnosis ("host sovereignty"): Trae exposes full PreToolUse + deny + matcher API; the failure was entirely settings-layer. Lesson: for IDE tools, check UI toggle + run-mode BEFORE questioning the API.
+- enforcement.md Trae section now records the verified two-item checklist instead of "unresolved".
+
+## Task: entry gate bootstrap paradox (Trae field report)
+
+## Findings
+
+- Trae live run caught a real deadlock: writing the entry-gate artifact itself was blocked (file doesn't exist yet) — agent escaped via shell heredoc, i.e. our documented bypass became the REQUIRED path. Design miss, not a config issue.
+- Fix: self-exemption — writes targeting `.omc/entry-gate-*.md` always pass (the artifact IS compliance); content validated on subsequent edits. Target read from --target, stdin tool_input path fields (file_path/filePath/path/TargetFile/…), or Codex apply_patch Update/Add File text. OpenCode plugin + Antigravity shim forward the target (thin pass-through, no logic duplication).
+- TDD: 4 new cases RED first (self-write via arg/stdin narrowness apply_patch), then GREEN 13/13; live copies refreshed (installed hooks run COPIES, not repo source — easy to forget).
+
+## Task: Phase 1 — 思维链接线（prompt only）
+
+## Decisions
+
+- S3 Exit += 否决记录（一行一个：否决了什么、为什么）——结构化思维的价值在没选的路，不新增技能不改表。
+- Large 路线 plan 会审转正：`architect` + `plan-eng-review` 通过才进 S4（此前 architect 已有，eng-review 从备选提上来）；S3→S4 门禁同步加 large 条款。
+- S8 大型/复杂迁移交付物 += `show-me-your-work` TSV 决策轨迹（思维链持久化；机械存在性检查留给 Phase 2）。
+- 顺手修正 MAP 中过期的 `gstack-plan-eng-review` 旧名（与 frontmatter `plan-eng-review` 对齐；待引用解析确认）。
+
+## Task: Phase 2 — scope 校验 + trail 检查（mechanical）
+
+## Decisions
+
+- Scope check on first gated edit/session (marker `.omc/.scope-ok-<session>`, re-runs when artifact edited): exists→ok, NEW:→ok, outside-project→block, missing+index→codegraph query stem (hit ok/miss block), missing+no-index→block with NEW: hint (forces explicitness, catches typos dep-free), broken CLI→warn+fail-open.
+- codegraph contract probed live on scratch index: hit→JSON array, miss→`[]`, both exit 0 — so parse stdout, never trust exit code. `shutil.which` gate + 15s timeout.
+- Trail check as `--check-trail` Stop-hook mode (write-gate stays write-time; end-of-work belongs to Stop): <8 edits pass, else decisions.tsv must exist+nonempty+touched-today. Snippet documented, NOT auto-installed (same manual-step rule as write gate).
+- TDD: RED first (incl. fixing 2 self-inflicted test-fixture breaks from VALID edits — scope check doing its job), GREEN 26/26 incl. stub-codegraph trio (hit/miss/broken). Doc micro-template proven against real checker (caught an edit that truncated ##3/##4).

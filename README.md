@@ -1,6 +1,10 @@
-# Universal Skills
+# Universal Skills — Agent 治理层
 
 统一的 AI Coding Skills 仓库，支持跨工具、跨设备同步。
+
+它跑在各家 Agent 运行时之上的治理层：同一套生命周期路由（`unified-dev-flow`）、
+同一套机械门禁（hooks）、同一套记忆与复盘规范，在哪里执行都一个样。
+模型与 harness 是可替换的内核，这里定的是制度：走多深、卡在哪、拿什么证明做完。
 
 ## 支持的工具
 
