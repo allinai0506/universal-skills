@@ -21,6 +21,7 @@ S0 准备 → S1 意图 → S2 规格 → S3 规划 → S4 实现 → S5 验证 
 ```
 
 **门禁规则**（借鉴各范式之长）：
+- Entry→Step 1：无 4 项入口声明不动代码；首次 Edit/Write 由 hook 机械拦截（契约见 unified-dev-flow `references/enforcement.md`）
 - S1→S2：意图不清不得写规格（speckit clarify 精神）
 - S3→S4：无书面计划不动代码，微改动 / 小需求 fast path 豁免（S5 验证永不豁免）
 - S4→S5：声明完成前必须跑真实验证并出示证据（verification-before-completion / prove-it-works 精神）
@@ -65,7 +66,7 @@ S0 准备 → S1 意图 → S2 规格 → S3 规划 → S4 实现 → S5 验证 
 | **canonical** | `writing-plans` | 动代码前写实现计划，bite-sized 步骤 + 预埋验证点 |
 | 架构先行 | `architect`（pstack） | 先勾勒类型签名与模块结构再填实现 |
 | 大型加码 | `speckit-plan` + `speckit-tasks` | 文档流水线式计划 + 有序任务清单 |
-| 计划评审 | `gstack-plan-eng-review` / `plan-ceo-review` / `plan-design-review` | 仅大型/高风险特性启用多视角会审 |
+| 计划评审 | `plan-eng-review` / `plan-ceo-review` / `plan-design-review` | 大型特性必过（门禁），其余可选 |
 | 一致性检查 | `speckit-analyze` / `speckit-checklist` | 规格-计划-任务交叉校验 |
 | 原型探路 | `prototype` / `arena` / `principle-exhaust-the-design-space` | 无先例的交互或设计决策，先对比再定案 |
 | 数据建模 | `access-pattern-driven-data-modeling` | 涉及建表/改表、加索引、列表/搜索/报表查询路径、反规范化或读模型设计时；从访问模式倒推 schema，每个索引对应具体查询 |
@@ -119,6 +120,7 @@ S0 准备 → S1 意图 → S2 规格 → S3 规划 → S4 实现 → S5 验证 
 | 角色 | 技能 | 说明 |
 |---|---|---|
 | **canonical** | `knowledge-capture` | 按 docs/ 现有格式沉淀开发知识，归属明确 |
+| 决策轨迹 | `show-me-your-work` | 大型/复杂迁移必交：TSV 决策日志（决定了什么、为什么、证据在哪） |
 | 自动提炼 | `continuous-learning-v2` | 会话观察 → 本能 → 技能演化（v2 优先于 v1） |
 | 回顾复盘 | `gstack-retro` | 周期性工程回顾 |
 | 元技能 | `learner` / `reflect` / `automate-me` | 把成功流程固化为新技能 |
@@ -173,7 +175,7 @@ pstack 的 21 条 `principle-*` 不属于任何阶段，是**所有阶段共享�
 | 调研探路 | 技术评估、可行性 PoC、不交付 | S1 → S3(`research` / `prototype`) → S8(记备忘，止) |
 | 小功能 | 1-3 文件 | S0 → S4(TDD) → S5 → S6(轻量) → S7 |
 | 中型功能 | 多模块、需拆步 | S0 → `speckit-chain`（S1–S4 全链）→ S5 → S6 → S7 |
-| 大型特性/新系统 | 跨层、高风险、需求模糊 | S0 → `speckit-chain`（S1–S4，plan 追加 `architect` 会审）→ S5 → S6(`interrogate` + `production-risk-review`) → S7(`ship`) → S8 |
+| 大型特性/新系统 | 跨层、高风险、需求模糊 | S0 → `speckit-chain`（S1–S4，plan 追加 `architect` 会审 + `plan-eng-review`，多视角通过才进 S4）→ S5 → S6(`interrogate` + `production-risk-review`) → S7(`ship`) → S8 |
 | 疑难杂症/大迁移 | 跨周、需审计 | `figure-it-out` 剧本模式 |
 
 ---
