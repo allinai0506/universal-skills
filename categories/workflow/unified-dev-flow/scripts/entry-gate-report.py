@@ -28,7 +28,7 @@ DEFAULT_LOG = os.environ.get(
     os.path.join(os.path.expanduser("~"), ".claude", "homunculus",
                  "entry-gate-blocks.jsonl"))
 
-KINDS = ("missing", "malformed", "scope", "trail")
+KINDS = ("missing", "malformed", "scope", "trail", "trail-giveup")
 
 
 def load_rows(path: str, since: datetime.datetime) -> list[dict]:

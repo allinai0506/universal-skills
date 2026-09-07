@@ -36,6 +36,7 @@ from typing import NoReturn
 SECTIONS = ("理解和假设", "最小方案", "范围纪律", "验证计划")
 MIN_CHARS = 150
 TRAIL_MIN_EDITS = 8  # fewer edits than this needs no decision trail
+TRAIL_MAX_BLOCKS = 3  # then give up loudly instead of spinning forever
 CODEGRAPH_TIMEOUT = 5  # per-query ceiling; SCOPE_DEADLINE_S caps the total
 SCOPE_DEADLINE_S = 6.0  # scope validation must never stall the hook itself
 DEFAULT_BLOCKLOG = os.path.join(os.path.expanduser("~"), ".claude",
@@ -332,6 +333,7 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--transcript", default="")
     ap.add_argument("--trail", default="")
     ap.add_argument("--min-edits", type=int, default=TRAIL_MIN_EDITS)
+    ap.add_argument("--max-blocks", type=int, default=TRAIL_MAX_BLOCKS)
     ap.add_argument("--project-dir", default="")
     ap.add_argument("--session-id", default="")
     ap.add_argument("--block-log", default="")
@@ -407,26 +409,86 @@ def read_transcript_text(transcript_arg: str, raw: str = "") -> str:
     return raw if isinstance(raw, str) else ""
 
 
+def trail_counter_path(project_dir: str, session_id: str) -> str:
+    safe = re.sub(r"[^A-Za-z0-9_-]", "_", session_id or "default")
+    return os.path.join(project_dir, ".omc", f".trail-blocks-{safe}")
+
+
+def read_trail_counter(path: str) -> int:
+    try:
+        with open(path, encoding="utf-8") as f:
+            return max(int(f.read().strip() or 0), 0)
+    except (OSError, ValueError):
+        return 0
+
+
+def reset_trail_counter(path: str) -> None:
+    try:
+        if os.path.isfile(path):
+            os.remove(path)
+    except OSError:
+        pass
+
+
 def cmd_check_trail(ns: argparse.Namespace) -> None:
     """Stop-hook mode: complex work must leave a decision trail.
 
     Small work (< --min-edits Edit/Write calls) passes without one.
     Trail = <project>/decisions.tsv (show-me-your-work default), must exist,
-    be non-empty, and be touched today. Exit 2 blocks the stop.
+    be non-empty, and be touched today. Exit 2 blocks the stop — but at most
+    --max-blocks times per episode, then it gives up loudly (a gate that
+    spins the agent forever is worse than a missing trail).
     """
     project_dir = ns.project_dir or ""
     raw = ""
-    if not project_dir or not ns.transcript:
+    if not project_dir or not ns.transcript or not ns.session_id:
         raw = read_stdin_text()
+    session_id = ns.session_id or ""
+    payload = parse_stdin_json(raw)
+    if not session_id:
+        session_id = str(payload.get("session_id") or payload.get("sessionID") or "")
     if not project_dir:
-        payload = parse_stdin_json(raw)
         project_dir = str(payload.get("cwd") or payload.get("project_dir") or "")
         if not project_dir:
             project_dir = os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd())
+    counter = trail_counter_path(project_dir, session_id)
     transcript = read_transcript_text(ns.transcript, raw)
     edits = len(re.findall(r'"name":\s*"(?:Edit|Write)"', transcript))
     if edits < ns.min_edits:
+        reset_trail_counter(counter)
         sys.exit(0)
+    trail = ns.trail or os.path.join(project_dir, "decisions.tsv")
+    ok = False
+    try:
+        ok = (os.path.isfile(trail) and os.path.getsize(trail) > 0
+              and datetime.date.fromtimestamp(os.path.getmtime(trail))
+              == datetime.date.today())
+    except OSError:
+        ok = False
+    if ok:
+        reset_trail_counter(counter)
+        sys.exit(0)
+    strikes = read_trail_counter(counter) + 1
+    if strikes > max(ns.max_blocks, 1):
+        # Give up loudly: a gate that spins the agent forever is worse
+        # than a missing trail. Counter resets so the next episode re-arms.
+        reset_trail_counter(counter)
+        msg = (f"决策轨迹仍缺失（已拦 {strikes - 1} 次达上限），本次放行不再阻停：{trail}。"
+               "请尽快按 show-me-your-work 补 decisions.tsv。")
+        sys.stderr.write(msg + "\n")
+        log_block("trail-giveup", session_id, project_dir, msg)
+        sys.exit(0)
+    try:
+        parent = os.path.dirname(counter)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        with open(counter, "w", encoding="utf-8") as f:
+            f.write(str(strikes))
+    except OSError:
+        pass
+    fail(f"复杂工作（{edits} 次写操作）缺少当日决策轨迹：{trail}。"
+         "按 show-me-your-work 写 decisions.tsv 后再结束。",
+         kind="trail", project=project_dir)
     trail = ns.trail or os.path.join(project_dir, "decisions.tsv")
     ok = False
     try:

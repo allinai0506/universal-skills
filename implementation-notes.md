@@ -253,3 +253,10 @@ Branch: `feat/unified-dev-flow-entry-gate`
 - P1-1 stdin 归并（resolve_context(raw=) + read_transcript_text(raw) 共用，删 NOTE）；P1-3 _is_within 共用；P1-2 brief/report 尾读（3000/20000 行 cap）。
 - P2：TEMPLATE_HINT 补 NEW: 半句；SessionStart 清理 glob 扩 .scope-ok-*；--block-log 改模块变量（去 env mutation）；trail 一日语义文档承认；tests 随 sync 发布问题：sync 全目录 symlink 改排除面太大，决议接受现状（单技能测试 ~10KB，概念瑕疵换零风险），有异议可推翻。
 - 环境插曲：本机 python3 切到 Homebrew 3.14（无 yaml），quick_validate 改用 miniconda python 跑；自研脚本 stdlib-only 故免疫——当初立的规矩兑现了。
+
+## Task: trail Stop 无限循环保险
+
+## Decisions
+
+- --max-blocks（默认 3）：同 episode 拦超 3 次转大声放行（stderr + trail-giveup 记账），计数器按 session 存 .omc、通过/放行即清零，下回重装。
+- 附带修真 bug：trail 模式 stdin 被读两次（--transcript 缺省时 transcript 恒空→恒过）；现单读一次透传。旧测试没抓到是因为全传 --transcript 文件——新增 stdin 形态用例锁住。

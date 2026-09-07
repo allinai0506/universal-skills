@@ -291,6 +291,36 @@ def phase2_trail() -> None:
         r = run(base + ["--transcript", transcript(10)])
         check("trail-stale-blocks", r.returncode == 2, f"exit={r.returncode}")
 
+    # ---- Stop-loop guard: give up loudly instead of spinning forever ----
+    with tempfile.TemporaryDirectory() as proj:
+        tp = os.path.join(proj, "t.jsonl")
+        with open(tp, "w") as f:
+            f.write('{"name": "Edit"}\n' * 10)
+        base = ["--check-trail", "--project-dir", proj, "--transcript", tp,
+                "--session-id", "s-loop", "--max-blocks", "3"]
+        codes = [run(base).returncode for _ in range(4)]
+        check("trail-giveup-sequence", codes == [2, 2, 2, 0], f"codes={codes}")
+
+        # a pass resets the counter: fresh trail -> 0, then missing -> 2 again
+        with open(os.path.join(proj, "decisions.tsv"), "w") as f:
+            f.write("date\tdecision\n2026-09-07\tdid X\n")
+        check("trail-pass-resets",
+              run(base).returncode == 0, "pass after giveup failed")
+        os.remove(os.path.join(proj, "decisions.tsv"))
+        check("trail-counter-reset",
+              run(base).returncode == 2, "counter was not reset by pass")
+
+        # Stop-shape stdin WITHOUT --transcript must still count edits
+        # (stdin used to be consumed twice -> empty transcript -> false pass)
+        tp2 = os.path.join(proj, "t2.jsonl")
+        with open(tp2, "w") as f:
+            f.write('{"name": "Write"}\n' * 10)
+        payload = json.dumps({"session_id": "s-stdin", "cwd": proj,
+                              "transcript_path": tp2})
+        r = run(["--check-trail", "--session-id", "s-stdin"], stdin_text=payload)
+        check("trail-stdin-single-read", r.returncode == 2,
+              f"exit={r.returncode} (stdin transcript ignored?)")
+
 
 def phase2_codegraph() -> None:
     with tempfile.TemporaryDirectory() as proj:
