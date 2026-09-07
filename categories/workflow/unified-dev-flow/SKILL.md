@@ -1,5 +1,7 @@
 ---
 name: unified-dev-flow
+version: "2026.09.07-1"
+synced-at: "2026-09-07T21:51:58"
 description: 当开始非简单的功能开发、修 bug、重构或迁移，需要决定走哪些阶段、调用哪些技能、走多深时使用。当用户问该用什么流程或技能时使用。触发词：统一流程 / 标准流程 / 开发流程 / 完整流程 / 走流程 / 端到端开发 / 该用什么技能 / 帮我选流程 / 怎么推进这个需求 / 规范流程。Use when deciding which dev workflow/skills to use for a non-trivial coding task.
 ---
 
@@ -103,3 +105,4 @@ Large-feature one-shot: `speckit-chain`.
 - Declaring work complete on "it compiles" without running real verification.
 - Forgetting to scan domain cross-cutting signals after scale classification.
 - Copying skill bodies into plans — reference by name, load on demand.
+
