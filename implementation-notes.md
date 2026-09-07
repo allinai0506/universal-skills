@@ -275,7 +275,31 @@ Branch: `feat/unified-dev-flow-entry-gate`
 - miniconda python 跑 `quick_validate.py` → valid（本机 brew python3 无 yaml，老问题）。
 - backtick 引用解析 139 个：新增 `health`/`self-verifying-tests`/`codehealth-mcp`/`ultraqa` 全部单命中；`speckit-*` 未命中是自查脚本对引号 frontmatter 的误报（pre-existing 引用，线上正常）。
 
-## Task: P1 三件套（constitution必选化 + 跨模型评审路由 + MemU挖矿rollout，2026-09-08）
+## Task: P2 收尾（skillify 清理 + standard-workflow 双向引用 + entry-gate 小修，2026-09-08）
+
+## Findings
+
+- gstack/skillify/ 下有一个指向 imported/skillify 的同名 symlink（skillify → imported/skillify），两者 frontmatter name 不同（skillify vs omc-skillify），非重名冲突但易误导。
+- standard-workflow 只单向引用 unified-dev-flow（轻量 4 阶段），反向无导航。
+- entry-gate: TEMPLATE_HINT 已含 NEW: 提示；block-log 已模块变量化（_block_log_override）；SessionStart 缺 .scope-ok-* 清理。
+
+## Decisions
+
+1. **skillify symlink 清理 + 文档**：删除 gstack/skillify/skillify symlink；在 SKILL.md "When to invoke" 追加说明区分 gstack/skillify（/scrape 固化）vs imported/omc-skillify（workflow→OMC skill 草稿）。
+2. **standard-workflow 双向引用**：概览段落追加 "需要更完整的 9 阶段流程？参见 unified-dev-flow..."。
+3. **entry-gate SessionStart 清理**：session-brief.py main() 开头加清理 .scope-ok-* 陈旧标记（无痕、不阻塞）。
+
+## Tradeoffs
+
+- gstack/skillify 的 `triggers`、`version` frontmatter 超出 quick_validate 允许列表（pre-existing，不改动以保 upstream 兼容）。
+- gstack/* 与 imported/gstack/* 镜像导致的重复引用非本次引入，不再处理。
+
+## Verification plan
+
+- quick_validate：unified-dev-flow / standard-workflow → valid；gstack/skillify 仅 warning（前缀键，非错误）。
+- 引用解析 143 个：新增 `unified-dev-flow` 反向引用单命中；其余重复为 pre-existing 镜像。
+
+## Task: trail Stop 无限循环保险
 
 ## Findings
 

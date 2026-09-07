@@ -7,6 +7,8 @@ description: Everything Claude Code 标准作业流程 - 4阶段工作法：规�
 
 这是 **Everything Claude Code** 的标准 4 阶段工作流程，确保代码质量和开发效率。
 
+> **需要更完整的 9 阶段流程？** 参见 `unified-dev-flow`（S0–S8）：Entry Gate、Intent/Spec/Plan、Implement/Verify/Review/Ship/Capture、强制多轮 Review Fix Loop、对抗测试门、跨模型评审、Constitution 必选、MemU 记忆回溯。
+
 ---
 
 ## 🔄 工作流程图

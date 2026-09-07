@@ -158,6 +158,16 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--project-dir", default="")
     ns = ap.parse_args(argv)
     project_dir = ns.project_dir or os.getcwd()
+    # Cleanup stale .scope-ok-* markers from previous sessions
+    try:
+        omc = os.path.join(project_dir, ".omc")
+        if os.path.isdir(omc):
+            for f in os.listdir(omc):
+                if f.startswith(".scope-ok-"):
+                    try: os.remove(os.path.join(omc, f))
+                    except OSError: pass
+    except OSError:
+        pass
     sections: list[str] = [f"# Session Brief — {project_dir}"]
     for fn in (ck_section, wiki_section, ledger_section, trail_section, blocks_section):
         try:

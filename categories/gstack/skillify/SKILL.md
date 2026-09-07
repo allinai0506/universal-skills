@@ -19,6 +19,10 @@ triggers:
 
 ## When to invoke this skill
 
+> **Note**: This is `gstack/skillify` (name: `skillify`) — gstack-browser skill codification.
+> A separate skill `imported/omc-skillify` (name: `omc-skillify`, alias: `learner`) turns
+> repeatable workflows into OMC skill drafts. Different purpose, different triggers.
+
 Future /scrape calls with the same intent run
 the codified script in ~200ms instead of re-driving the page. Walks
 back through the conversation, synthesizes script.ts + script.test.ts
