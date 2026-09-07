@@ -220,3 +220,26 @@ Branch: `feat/unified-dev-flow-entry-gate`
 - 不接 unified-memory/gbrain（前者缺 ecc-universal 运行时，后者待搭建）——等用户拍板基石方案后再看要不要第二层。
 - TDD：9 断言先红后绿（含一次测试断言过细的修正）；真仓实测 graceful + 项目级 block 过滤正确。
 - SessionStart 接线只写文档不装机（手动规则延续）。
+
+## Task: MemU spike（基石验证，2026-09-07）
+
+## Findings
+
+- 安装坑：pip 包名是 memu-cli（裸 memu 是安卓模拟器，已卸载）；Ollama + bge-m3 本地 embedding 全程免费；本机 SOCKS 代理劫持 httpx，需 strip 代理变量（定时任务环境干净不受影响）。
+- 20Q：中文转述 9.5/10（Q9 相邻半分），英译中 5/5，干扰 5 题全部有返回但分值 0.42 vs 命中 0.57+ —— 阈值 0.5 可分，调用方必须自己设阈值（memu 不拒答）。
+- 适配器实测：mining 自动挖 Codex✅/Qoder-CN✅/Cursor✅，Trae-CN❌/Claude❌/Gemini/Kimi❌（方言不识别）；retrieve 通用 CLI 全工具可调。结论：inject 缝全覆盖，mining 缝按宿主分化。
+- 导出：纯 SQLite 明文（memu_recall_files/segments），.dump 即全部拿回——可逆性成立，换供应商成本=重建索引。
+-  verdict：GO，但范围是 recall 索引 + 手动 commit 流（贴合显式哲学），不是自动挖矿魔法。
+
+## Decisions
+
+- 文件永远 canonical，MemU 只做索引；session-brief.py 直读文件不受影响（逃生通道）。
+- 下一步（待批）：各主力项目 AGENTS.md  patched 检索指令 + Codex/Qoder 定时挖矿任务。
+
+## Task: xiyu×6 + nexusarchive 接 MemU 检索指令
+
+## Decisions
+
+- 每仓只 +7 行：长期记忆检索节（memu retrieve 一句话 + score<0.5 丢弃 + env strip 代理 + source-of-truth 声明）。xiyu 六 worktree 同文（qoder 既有差异 untouched）；nexusarchive 贴合其 §10 文档原则、无编号节改为 ## 11。
+- 未在任何项目仓 commit（用户仓库用户提交）；universal-skills 侧无技能改动，仅记账。
+- 当前库内 10 条为 spike 记忆（治理层内容），跨项目共享无害；生产 rollout 时按项目 commit 其 wiki/架构内容。
