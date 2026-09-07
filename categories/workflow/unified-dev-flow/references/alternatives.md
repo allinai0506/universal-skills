@@ -15,7 +15,8 @@ only, not installed with the skill).
 - S1: `grill-with-docs` (need ADR + glossary as you go);
   `deep-interview` (extreme ambiguity, Socratic probing).
 - S2: `spec` (output is issues/tickets for GitHub flow);
-  `speckit-constitution` (one-time project charter);
+  `speckit-constitution` (one-time project charter, **medium+ mandatory** —
+  no `.specify/` → Entry Gate §1 constraint docs act as constitution);
   `domain-modeling` (ubiquitous language).
 - S3: `speckit-plan` + `speckit-tasks` (heavy doc pipeline);
   `plan-eng-review` / `plan-ceo-review` / `plan-design-review`
@@ -25,14 +26,19 @@ only, not installed with the skill).
 - S4: `implement` (spec/tickets exist, small-medium build);
   `executing-plans` (no-subagent env); `autopilot` / `ralph` +
   `show-me-your-work` (unattended long runs).
-- S5: `self-verifying-tests` (cross-layer UI/DB/doc checks); `ultraqa`
-  (test-fix-retest loop); `create-verification-skill` +
+- S5: `self-verifying-tests` is now a canonical adversarial branch (see SKILL.md),
+  not an alternative; remaining alts: `ultraqa` (fix-loop engine — cap at 3
+  cycles inside the S6 loop, not its native 5); `create-verification-skill` +
   `maintain-verification-skill` (project-level verify);
   language rigs (`cpp-testing`, etc.).
-- S6: `cog-4d-audit` (CI-green but uneasy); `blast-radius` before the change
+- S6: `cog-4d-audit` (CI-green but uneasy); `health` is now canonical
+  (see SKILL.md S6), `codehealth-mcp` stays the alt when a live structural
+  score via MCP is preferred over the CLI dashboard; `blast-radius` before the change
   (impact); `cso` (OWASP + threat model); `qa` (fix) / `qa-only` (report
   only); `receiving-code-review` (when being reviewed: verify feedback,
-  don't blindly obey).
+  don't blindly obey); **cross-model gate** — reviewer from different lab
+  than implementer (env `PSTACK_REVIEW_MODELS` or `~/.config/opencode/skills/pstack-models.mdc`,
+  missing → same-model `interrogate` fallback).
 - S7: `release` (repo-rule-driven release); `deployment-patterns` /
   `docker-patterns` / `database-migrations` / project deploys
   (e.g. `xiyu-server-deploy`).

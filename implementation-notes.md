@@ -254,9 +254,75 @@ Branch: `feat/unified-dev-flow-entry-gate`
 - P2：TEMPLATE_HINT 补 NEW: 半句；SessionStart 清理 glob 扩 .scope-ok-*；--block-log 改模块变量（去 env mutation）；trail 一日语义文档承认；tests 随 sync 发布问题：sync 全目录 symlink 改排除面太大，决议接受现状（单技能测试 ~10KB，概念瑕疵换零风险），有异议可推翻。
 - 环境插曲：本机 python3 切到 Homebrew 3.14（无 yaml），quick_validate 改用 miniconda python 跑；自研脚本 stdlib-only 故免疫——当初立的规矩兑现了。
 
+## Task: P0 三件套（多轮 Review Fix Loop + 对抗测试门 + 简洁机械化，2026-09-08）
+
+## Findings
+
+- S6 是单遍评审：`interrogate` 一次性、无收敛条件、无回路；reviewer 可直接改代码（无 judge 约束），作者自审盲区仍在。业界基线（2026 多智能体综述）：reviewer 只判不改 + fix loop + 同轮超 3 次 ESCALATE（多半是 spec 模糊，回 S2 不换 agent 硬试）。
+- S5 无对抗测试：`interrogate` 是对抗性审查不是对抗性测试；`self-verifying-tests`/`ultraqa` 躺在备选；2026 PROBE/AdverTest 论文证明 mutation-guided 双智能体循环 +9.79% mutation / +8.56% FDR。
+- 简洁性纯 prompt：`ai-slop-cleaner` 无度量；仓内已有 `health`（0–10 综合分，包 lint/type/tests/dead code）未被 router 使用。
+
+## Decisions
+
+- S6 三步变强制链：`ai-slop-cleaner` → `health`（相对改前基线下降即拦，不设绝对分绝对值——项目自定 floor）→ `google-code-review`；fix loop 裁决 MERGE_READY/NEEDS_FIXES，max 3 次 S4 修复后 ESCALATE 由人定夺，feedback 文档为唯一输入增量。
+- S5 新增对抗分支：auth/数据/安全路径强制、其余推荐——`self-verifying-tests` 跨层 + diff 级 mutation 全杀（有项目 runner 用 runner，无则 reviewer 手写 counter-cases）；存活 mutant = NEEDS_FIXES 进 S6 循环。
+- alternatives.md 同步：S5 把 `self-verifying-tests` 标为已转正、保留 `ultraqa` 作 loop 引擎（S6 内 cap 3 次非原生 5 次）；S6 标注 `health` 已转正、`codehealth-mcp` 留作 MCP 版备选。
+- WORKFLOW-MAP.md §二 S5/S6 + 门禁规则同步跟进（SKILL↔MAP 曾经发散过，本次成对改）。
+- DEVIATION 预告：health 基线对比需要改前跑一次分（S4 前或 S6 开头），多一次工具调用；若实战证明噪音大，退回仅记录不拦门。
+
+## Verification plan
+
+- miniconda python 跑 `quick_validate.py` → valid（本机 brew python3 无 yaml，老问题）。
+- backtick 引用解析 139 个：新增 `health`/`self-verifying-tests`/`codehealth-mcp`/`ultraqa` 全部单命中；`speckit-*` 未命中是自查脚本对引号 frontmatter 的误报（pre-existing 引用，线上正常）。
+
+## Task: P1 三件套（constitution必选化 + 跨模型评审路由 + MemU挖矿rollout，2026-09-08）
+
+## Findings
+
+- S2 无章程约束：`speckit-constitution` 躺在 imported，中型以上没人用；Entry Gate §1 已读约束文档（RULES/lessons-learned/AGENTS）未被规范化为章程。ETH 2026 实验证实：LLM 生成的 AGENTS.md 无益甚至 -3% 成功率，开发者自写的 constitution 提供 +4% 提升。
+- S6 同模型自审盲区：`interrogate` 读 `pstack-models.mdc` 但 router 未强制异 lab；业界 2026 多智能体综述共识——同 family 模型共享 failure surface，跨 vendor 评审必需。
+- MemU mining 仅止于 spike：Codex/Qoder 已有专用 adapter 且 memorization works（detect 确认），但无定时任务、各仓无检索指令；Claude/Trae/Gemini/Kimi 需专用 adapter 或方言支持。
+
+## Decisions
+
+1. **constitution 必选化（中型以上）**：
+   - S2 spec 阶段：必须声明章程来源——`.specify/` 存在则 `speckit-constitution`，否则 Entry Gate §1 读到的约束文档作章程
+   - S3 exit 新增门禁：plan 无 constitution 违规，或豁免列表已列出
+   - alternatives.md 同步：speckit-constitution 标为 medium+ mandatory
+
+2. **跨模型评审路由**：
+   - S6 新增 cross-model gate：reviewer 与 implementer 异 lab（`PSTACK_REVIEW_MODELS` 或 `~/.config/opencode/skills/pstack-models.mdc` 指定）；未配置退化为同模型强制 `interrogate`
+   - reviewer 只判不改（judge pattern）已在 P0 确立
+   - alternatives.md 同步：S6 备选表新增 cross-model gate 条目
+
+3. **MemU 挖矿 rollout（Codex/Qoder 定时 + 各仓检索指令）**：
+   - memory-backend.md 新增 Rollout 章节：AGENTS.md 统一追加检索指令（`memu-agent retrieve --score 0.5` + 代理 strip 前缀）+ Codex/Qoder launchd plist（每天 03:00/03:15 prepare，周一手动 commit）
+   - 验收标准 4 条：doctor 绿、AGENTS.md 命中、plist loaded 有输出、retrieve 命中非空
+   - Trae/Gemini/Kimi/Claude 待 adapter/dialect 支持，暂不阻塞 rollout
+
+## Tradeoffs / DEVIATIONS
+
+- constitution 豁免列表由人维护（不自动），避免误判锁死；若实战噪音大可改为 warn-only
+- cross-model 退化同模型 `interrogate` 仍保底——不阻塞流程，只是少了一层异构防御
+- MemU mining 仅覆盖 Codex/Qoder（adapter ready + memorization works），其他工具等上游 adapter；不影响检索（retrieve CLI 通用）
+
+## Verification plan
+
+- `quick_validate.py` → valid（miniconda python，brew python3 无 yaml 老问题）
+- backtick 引用解析 141 个：新增 `speckit-constitution`/`PSTACK_REVIEW_MODELS`/cross-model 全部单命中；gstack/* 重复是 imported 镜像导致的 pre-existing duplication，非本次引入
+
 ## Task: trail Stop 无限循环保险
 
 ## Decisions
 
 - --max-blocks（默认 3）：同 episode 拦超 3 次转大声放行（stderr + trail-giveup 记账），计数器按 session 存 .omc、通过/放行即清零，下回重装。
 - 附带修真 bug：trail 模式 stdin 被读两次（--transcript 缺省时 transcript 恒空→恒过）；现单读一次透传。旧测试没抓到是因为全传 --transcript 文件——新增 stdin 形态用例锁住。
+
+## Task: Stop 接线三家（agy/opencode/zcode）
+
+## Decisions
+
+- Agy Stop 全支持：shim --stop（exit2→continue/0→stop/其他→stop+warn；transcriptPath 驼峰显式透传）。诊断插曲：e2e 误放行查到是线上拷贝滞后（repo 已改、~/.claude 未重拷）——再次证明"线上跑的是拷贝"这条运维铁律，修后 e2e 双态全绿。
+- checker 编辑计数泛化：EDIT_TOOL_PATTERN 覆盖 agy 三工具名（transcript 实测取样）；Claude 系行为不变（回归测试锁）。
+- OpenCode 无可阻塞 stop 事件 → session.idle 提醒器（计数≥8、每会话一次、toast+log），human-in-loop，明示 warn-only。
+- ZCode 无 hook API（cli/config.json 仅 plugins+mcp；v2/setting.json 无 hook 键）→ prompt 版 only。附带发现其 MCP 已有 everme 记忆 + sequential-thinking，记入记忆 rollout。

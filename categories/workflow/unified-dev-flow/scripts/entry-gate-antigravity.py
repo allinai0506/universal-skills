@@ -9,6 +9,10 @@ passes silently. This adapter translates.
 Mapping (Antigravity -> checker):
   workspacePaths[0] -> --project-dir   (Antigravity sends no cwd)
   conversationId    -> --session-id    (per-conversation isolation)
+  transcriptPath    -> --transcript    (camelCase! passed explicitly)
+
+Modes: PreToolUse (default) translates exit codes to allow/deny decisions;
+--stop translates to continue/stop for the Stop event (exit 2 -> continue).
 
 Always exits 0 — the DECISION carries the verdict, never the exit code.
 Stdlib only.
@@ -26,6 +30,7 @@ CHECKER = os.environ.get(
 
 
 def main() -> None:
+    stop_mode = "--stop" in sys.argv[1:]
     try:
         payload = json.load(sys.stdin)
         if not isinstance(payload, dict):
@@ -40,31 +45,42 @@ def main() -> None:
     argv = [sys.executable, CHECKER,
             "--project-dir", str(project_dir),
             "--session-id", session_id]
-    tool_call = payload.get("toolCall") or {}
-    tool_args = tool_call.get("args") or {}
-    for key in ("TargetFile", "file", "path", "file_path"):
-        val = tool_args.get(key)
-        if isinstance(val, str) and val.strip():
-            argv += ["--target", val.strip()]
-            break
+    if stop_mode:
+        argv += ["--check-trail"]
+        tpath = payload.get("transcriptPath")
+        if isinstance(tpath, str) and tpath.strip():
+            argv += ["--transcript", os.path.expanduser(tpath.strip())]
+    else:
+        tool_call = payload.get("toolCall") or {}
+        tool_args = tool_call.get("args") or {}
+        for key in ("TargetFile", "file", "path", "file_path"):
+            val = tool_args.get(key)
+            if isinstance(val, str) and val.strip():
+                argv += ["--target", val.strip()]
+                break
 
     try:
         proc = subprocess.run(argv, capture_output=True, text=True, timeout=30)
     except OSError as e:
-        print(json.dumps({"decision": "deny", "reason": f"entry-gate checker failed to run: {e}"}))
+        # Checker binary itself missing: writes stay denied (safe default),
+        # but a stop must never loop forever against a broken install.
+        print(json.dumps({"decision": "deny" if not stop_mode else "stop",
+                          "reason": f"entry-gate checker failed to run: {e}"}))
         return
 
     if proc.returncode == 0:
-        print(json.dumps({"decision": "allow"}))
+        print(json.dumps({"decision": "allow" if not stop_mode else "stop"}))
     elif proc.returncode == 2:
         reason = (proc.stderr or "entry gate artifact missing or malformed").strip()
-        print(json.dumps({"decision": "deny", "reason": reason}))
+        print(json.dumps({"decision": "deny" if not stop_mode else "continue",
+                          "reason": reason}))
     else:
         # Checker crashed (not a validation verdict): fail OPEN, warn loudly.
         # A crashing gate must never brick the session (cf. delivery-gate).
         warn = f"entry-gate checker crashed (exit {proc.returncode}), fail-open"
         sys.stderr.write(warn + ": " + (proc.stderr or "").strip()[:200] + "\n")
-        print(json.dumps({"decision": "allow", "reason": warn}))
+        print(json.dumps({"decision": "allow" if not stop_mode else "stop",
+                          "reason": warn}))
 
 
 if __name__ == "__main__":

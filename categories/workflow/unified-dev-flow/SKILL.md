@@ -62,11 +62,11 @@ Load stage skills for your route, plus any domain specialist (see Cross-cutting)
 |---|---|---|---|
 | S0 Prepare | Isolated workspace? Unfinished prior run? | 先查 `.superpowers/sdd/progress.md`：有未完成 ledger 则续跑、不重新分级；否则 `using-git-worktrees`（resume: `recall`）；首次 Edit/Write 由 entry-gate hook 机械拦截 | Workspace ready, breakpoint resumed or fresh |
 | S1 Intent | Why do this? | `brainstorming`; PRD: `parse-prd`; product analysis: `product-analysis`; domain terms: `domain-modeling` | User confirms scope |
-| S2 Spec | What exactly? | `speckit-specify` → `speckit-clarify`; light path: `to-spec` | Spec written & ambiguity resolved |
-| S3 Plan | How, in what order? | `writing-plans`; architecture-first: `architect`; design validation: `prototype`; schema/query: `access-pattern-driven-data-modeling`; heavy path: `speckit-plan` → `speckit-tasks` | Plan with verification points + rejected alternatives (one line each: dropped, why) |
+| S2 Spec | What exactly? | `speckit-specify` → `speckit-clarify`; light path: `to-spec`; medium+: declare the governing-principles source — `speckit-constitution` when `.specify/` exists, else the Entry-① constraint docs act as constitution | Spec written & ambiguity resolved, principles source named |
+| S3 Plan | How, in what order? | `writing-plans`; architecture-first: `architect`; design validation: `prototype`; schema/query: `access-pattern-driven-data-modeling`; heavy path: `speckit-plan` → `speckit-tasks` | Plan with verification points + rejected alternatives (one line each: dropped, why) + constitution-violation check (medium+: no violation, or waivers listed) |
 | S4 Implement | Build it | `test-driven-development` via `subagent-driven-development` (fallback: `executing-plans`; unattended: `autopilot` / `ralph`; convergence: `speckit-converge`; DB scripts: `create-migration`) | Code + tests per plan |
-| S5 Verify | Prove it works | `verification-before-completion` (+ `principle-prove-it-works`); E2E: `e2e-testing` | Real command evidence |
-| S6 Review | Find flaws | `ai-slop-cleaner` → `google-code-review` (mandatory, see Gates); spec-bearing routes add `code-review` for spec consistency; medium+ ends with `interrogate`; optional: live/prod `production-risk-review`, security `security-review`, impact `blast-radius`, architecture `architecture-defense` | Gates S6 conditions met, findings addressed |
+| S5 Verify | Prove it works | `verification-before-completion` (+ `principle-prove-it-works`); E2E: `e2e-testing`; adversarial (auth/data/security paths mandatory, else recommended): `self-verifying-tests` cross-layer + mutation bar — every diff-level mutant killed (project runner if present, else reviewer-written counter-cases); surviving mutant = NEEDS_FIXES into the S6 loop | Real command evidence + zero surviving mutants |
+| S6 Review | Find flaws | `ai-slop-cleaner` → `health` (0–10 composite; drop vs pre-change baseline blocks) → `google-code-review` (mandatory, see Gates); spec-bearing routes add `code-review` for spec consistency; medium+ ends with `interrogate`; fix loop: verdict MERGE_READY / NEEDS_FIXES, max 3 S4-fix cycles then ESCALATE to human; reviewer judges only, never edits source (judge pattern); optional: live/prod `production-risk-review`, security `security-review`, impact `blast-radius`, architecture `architecture-defense` | MERGE_READY, or explicit human waiver |
 | S7 Ship | Integrate & deploy | `finishing-a-development-branch` → `ship`; unattended (`autopilot`/`ralph`): `ai-release-engineer`; migrations: `database-migrations`; deploy infra: `deployment-patterns`; post-deploy: `canary` | Merged, deployed |
 | S8 Capture | Get smarter | `knowledge-capture` (auto: `continuous-learning-v2`; review: `reflect`); large/intractable 追加 `show-me-your-work` 决策轨迹 | Knowledge filed (+ decision trail for large/intractable) |
 
@@ -82,6 +82,8 @@ Large-feature one-shot: `speckit-chain`.
 - **S5 → S6**: completion claims need real command evidence, not "it compiles".
 - **S6 进入即强制**：所有走到 S6 的路线（含 light）都必须过 `ai-slop-cleaner` + `google-code-review`，缺一不可跳过；有 spec 的路线加 `code-review` 做 spec 一致性。
 - **S6 收尾（中型及以上）**：评审通过后还需 `interrogate` 对抗性审查；light 路径（微改动/Bug/小需求）可选。
+- **S6 cross-model**：reviewer 与 implementer 异 lab（Claude 代码 → Codex/Opus/O1 评审，反之亦然）；`interrogate` 读 `~/.config/opencode/skills/pstack-models.mdc` 或环境变量 `PSTACK_REVIEW_MODELS`，未配置则退化为同模型强制 `interrogate`；reviewer 只判不改（judge pattern）。
+- **S6 fix-loop（所有到 S6 的路线）**：NEEDS_FIXES 回 S4 修，feedback 文档是唯一的输入增量；同轮 NEEDS_FIXES 超 3 次转 ESCALATE，由人定夺（多半是 spec 模糊——回 S2 修 spec，不换 agent 硬试）；reviewer 只判不改，改代码的永远是 S4。
 - **S6 → S7 (production)**: PRs touching a live system MUST pass `production-risk-review`.
 - **S6 → S7 (unattended AI)**: `autopilot` / `ralph` 全自主产出必须过 `ai-release-engineer` gates；日常结对路线以 S7 `ship` 为准，不重复设卡。
 

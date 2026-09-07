@@ -48,6 +48,14 @@ _block_log_override = ""  # set by --block-log; never via os.environ mutation
 TARGET_KEYS = ("file_path", "filePath", "path", "file", "filename",
                "target_file", "TargetFile")
 
+# Write-tool names across harnesses, for transcript edit counting.
+# Claude/Codex/Cursor/Trae/Qoder/Kimi: Edit|Write; Gemini: write_file|replace;
+# Antigravity: write_to_file|replace_file_content|multi_replace_file_content.
+# Shape matched is always JSON ("name":"<tool>"), never prose.
+EDIT_TOOL_PATTERN = (r'"name":\s*"(?:Edit|Write|write_file|replace|'
+                     r'write_to_file|replace_file_content|'
+                     r'multi_replace_file_content)"')
+
 PATH_EXTS = (".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs", ".java",
              ".md", ".json", ".yaml", ".yml", ".toml", ".sh", ".sql",
              ".vue", ".css", ".html", ".c", ".h", ".cpp")
@@ -453,7 +461,7 @@ def cmd_check_trail(ns: argparse.Namespace) -> None:
             project_dir = os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd())
     counter = trail_counter_path(project_dir, session_id)
     transcript = read_transcript_text(ns.transcript, raw)
-    edits = len(re.findall(r'"name":\s*"(?:Edit|Write)"', transcript))
+    edits = len(re.findall(EDIT_TOOL_PATTERN, transcript))
     if edits < ns.min_edits:
         reset_trail_counter(counter)
         sys.exit(0)

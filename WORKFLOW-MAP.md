@@ -25,7 +25,9 @@ S0 准备 → S1 意图 → S2 规格 → S3 规划 → S4 实现 → S5 验证 
 - S1→S2：意图不清不得写规格（speckit clarify 精神）
 - S3→S4：无书面计划不动代码，微改动 / 小需求 fast path 豁免（S5 验证永不豁免）
 - S4→S5：声明完成前必须跑真实验证并出示证据（verification-before-completion / prove-it-works 精神）
+- S5 对抗门：auth/数据/安全路径必过跨层自验证 + diff 级 mutation 全杀（self-verifying-tests；存活 mutant = NEEDS_FIXES 进 S6 循环）
 - S5→S6→S7：已上线系统的 PR 必须过生产风险审计（production-risk-review）
+- S6 fix-loop：reviewer 只判不改（judge pattern），NEEDS_FIXES 回 S4（feedback 文档为唯一输入增量），超 3 次转 ESCALATE 由人定夺（回 S2 修 spec）
 
 ---
 
@@ -56,7 +58,7 @@ S0 准备 → S1 意图 → S2 规格 → S3 规划 → S4 实现 → S5 验证 
 | **canonical** | `speckit-specify` + `speckit-clarify` | 最严谨：章程支撑 + 定向澄清；大型特性必用 |
 | 备选 | `to-spec` | 中型任务轻量路线：对话直接综合成规格并入 tracker |
 | 备选 | `spec` | 产出物直接是 issue/ticket、要与 GitHub 流衔接时 |
-| 配套 | `speckit-constitution` | 项目级章程，一次配置长期复用 |
+| 配套 | `speckit-constitution` | 项目级章程，**中型以上必选**（无 `.specify/` 则 Entry Gate §1 约束文档作章程） |
 | 配套 | `domain-modeling` | 有领域建模诉求时沉淀统一语言 |
 
 ### S3 方案规划（怎么做）
@@ -68,6 +70,7 @@ S0 准备 → S1 意图 → S2 规格 → S3 规划 → S4 实现 → S5 验证 
 | 大型加码 | `speckit-plan` + `speckit-tasks` | 文档流水线式计划 + 有序任务清单 |
 | 计划评审 | `plan-eng-review` / `plan-ceo-review` / `plan-design-review` | 大型特性必过（门禁），其余可选 |
 | 一致性检查 | `speckit-analyze` / `speckit-checklist` | 规格-计划-任务交叉校验 |
+| 章程违规检查 | （内置） | 中型以上：plan 无 constitution 违规，或豁免列表已列出（S3 exit 门禁） |
 | 原型探路 | `prototype` / `arena` / `principle-exhaust-the-design-space` | 无先例的交互或设计决策，先对比再定案 |
 | 数据建模 | `access-pattern-driven-data-modeling` | 涉及建表/改表、加索引、列表/搜索/报表查询路径、反规范化或读模型设计时；从访问模式倒推 schema，每个索引对应具体查询 |
 
@@ -89,7 +92,8 @@ S0 准备 → S1 意图 → S2 规格 → S3 规划 → S4 实现 → S5 验证 
 |---|---|---|
 | **canonical** | `verification-before-completion` | 完成声明前必须跑命令、看输出、留证据 |
 | 原则兜底 | `principle-prove-it-works` | 对真实产物验证，拒绝"编译通过就算完" |
-| 测试专项 | `e2e-testing` / `self-verifying-tests` / `cpp-testing` / `eval-harness` | 按层按语言选用 |
+| 对抗测试 | `self-verifying-tests` + mutation bar | 跨层 UI/DB/doc 一致性；auth/数据/安全路径强制，diff 级 mutant 全杀，存活即 NEEDS_FIXES |
+| 测试专项 | `e2e-testing` / `cpp-testing` / `eval-harness` | 按层按语言选用 |
 | 循环验证 | `ultraqa` | 测试-修复-再测直至目标达成 |
 | 项目级 | `create-verification-skill` + `maintain-verification-skill` | 把"这个项目怎么验"固化成技能 |
 
@@ -97,7 +101,9 @@ S0 准备 → S1 意图 → S2 规格 → S3 规划 → S4 实现 → S5 验证 
 
 | 角色 | 技能 | 说明 |
 |---|---|---|
-| **canonical（门禁）** | `ai-slop-cleaner` + `google-code-review` | router S6 强制两步：先清 slop 再正式评审 |
+| **canonical（门禁）** | `ai-slop-cleaner` → `health` → `google-code-review` | router S6 强制三步：先清 slop，再跑 health 0–10 综合分（相对改前基线下降即拦），再正式评审 |
+| cross-model | `interrogate`（异 lab） | reviewer 与 implementer 异 lab（环境变量 `PSTACK_REVIEW_MODELS` / `pstack-models.mdc` 指定）；未配置退化同模型强制 `interrogate` |
+| fix-loop | NEEDS_FIXES / MERGE_READY / ESCALATE | reviewer 只判不改，NEEDS_FIXES 回 S4（feedback 唯一增量），超 3 次 ESCALATE 由人定夺 |
 | spec 一致性 | `code-review`（engineering） | 有 spec 的路线追加：规范轴 + spec 轴双线并行审查 |
 | 对抗审查 | `interrogate` / `cog-4d-audit` | CI 全绿但仍不放心的隐藏缺陷挖掘 |
 | 生产风险 | `production-risk-review` | **已上线系统 PR 必过**，替代普通 review |

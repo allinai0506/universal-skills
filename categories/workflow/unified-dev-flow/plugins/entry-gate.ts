@@ -17,6 +17,12 @@ const execFileAsync = promisify(execFile)
 
 const GATED_TOOLS = new Set(["edit", "write"])
 
+// Trail reminder state (warn-only: OpenCode has no blocking stop event,
+// so the human — not the hook — is the enforcement layer here).
+const TRAIL_MIN_EDITS = 8
+const editCounts = new Map<string, number>()
+const trailWarned = new Set<string>()
+
 // Resolved at install time; override with ENTRY_GATE_CHECKER env.
 function checkerPath(): string {
   if (process.env.ENTRY_GATE_CHECKER) return process.env.ENTRY_GATE_CHECKER
@@ -50,6 +56,40 @@ export const EntryGate = async (ctx: any) => {
         if (code === 2) throw new Error(reason)
         console.warn(`[entry-gate] checker failed (code=${code}), fail-open: ${reason}`)
         return
+      }
+    },
+    "tool.execute.after": async (input: any) => {
+      const tool = String(input?.tool ?? "").toLowerCase()
+      if (!GATED_TOOLS.has(tool)) return
+      const sid = String((input as any)?.sessionID ?? "default")
+      editCounts.set(sid, (editCounts.get(sid) ?? 0) + 1)
+    },
+    event: async ({ event }: any) => {
+      if (!event || typeof event.type !== "string") return
+      const sid = String(
+        event?.properties?.sessionID ?? event?.sessionID ?? event?.session?.id ?? "",
+      )
+      if (event.type === "session.deleted") {
+        if (sid) {
+          editCounts.delete(sid)
+          trailWarned.delete(sid)
+        }
+        return
+      }
+      if (event.type !== "session.idle" || !sid) return
+      const n = editCounts.get(sid) ?? 0
+      if (n < TRAIL_MIN_EDITS || trailWarned.has(sid)) return
+      trailWarned.add(sid)
+      const msg = `[entry-gate] session did ${n} file writes with no confirmed decisions.tsv — ask the agent to write one (show-me-your-work)`
+      try {
+        await ctx?.client?.app?.log?.({ body: { service: "entry-gate", level: "warn", message: msg } })
+      } catch {
+        /* log best-effort */
+      }
+      try {
+        await execFileAsync("osascript", ["-e", `display notification "${msg}" with title "entry-gate"`])
+      } catch {
+        /* macOS-only notifier; absence must not break anything */
       }
     },
   }

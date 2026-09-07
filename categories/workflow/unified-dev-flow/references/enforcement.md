@@ -343,6 +343,36 @@ project-dir variable in place of `$CLAUDE_PROJECT_DIR`). NOT auto-installed —
 same manual-step rule as the write gate. It consumes the memory skills you
 already run (`ck`, `wiki`, ledger, `decisions.tsv`); it creates no new store.
 
+## Stop-hook trail wiring (per tool, `--check-trail` mode)
+
+Small work (< 8 edits) passes without a trail; complex work without a fresh
+`decisions.tsv` blocks the stop (max 3 blocks, then loud give-up).
+
+- **Antigravity** — full support. `~/.gemini/config/hooks.json`, no matcher
+  (Stop ignores it). The shim translates exit codes (0→`stop`, 2→`continue`,
+  other→`stop` + warn) and maps `transcriptPath`→`--transcript` explicitly
+  (Antigravity uses camelCase; the checker reads snake_case):
+  ```json
+  {
+    "entry-gate-stop": {
+      "Stop": [{
+        "hooks": [{ "type": "command",
+                    "command": "python3 ~/.claude/scripts/entry-gate-antigravity.py --stop",
+                    "timeout": 30 }]
+      }]
+    }
+  }
+  ```
+- **OpenCode** — warn-only (no blocking session event exists; only
+  `tool.execute.before` can throw). The plugin counts edit/write per session
+  and on `session.idle` fires a macOS notification + log (>= 8 edits, once
+  per session). The human — not the hook — is the enforcement layer here;
+  update `plugins/entry-gate.ts` (already included) and re-copy it.
+- **ZCode** — no hook API found (`cli/config.json` = `{plugins, mcp}` only,
+  `v2/setting.json` has no hook keys; surveyed 2026-09-07). Prompt-level
+  Entry Gate + S5/S6 only. (Side find: its MCP list already contains
+  `everme` memory + `sequential-thinking` — see memory rollout notes.)
+
 ## Block log & weekly report (value proof)
 
 Every block appends one JSONL row (`ts/kind/session/project/reason`) to

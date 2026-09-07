@@ -200,6 +200,41 @@ def phase_shim() -> None:
               d.get("decision") == "deny" and "reason-2" in d.get("reason", ""),
               f"got={d}")
 
+    # ---- shim --stop mode (Antigravity Stop contract) ----
+    with tempfile.TemporaryDirectory() as proj:
+        bindir = os.path.join(proj, "bin")
+        os.makedirs(bindir)
+        stub = os.path.join(bindir, "fake-checker.py")
+        env = {"PATH": os.environ.get("PATH", ""),
+               "ENTRY_GATE_CHECKER_BIN": stub}
+        stop_payload = lambda: json.dumps(
+            {"executionNum": 1, "terminationReason": "model_stop",
+             "fullyIdle": True, "conversationId": "c-stop",
+             "workspacePaths": [proj],
+             "transcriptPath": os.path.join(proj, "t.jsonl")})
+
+        def drive_stop(code: int) -> dict:
+            with open(stub, "w") as f:
+                f.write(f"import sys\nsys.stderr.write('reason-{code}\\n')\n"
+                        f"sys.exit({code})\n")
+            r = subprocess.run(
+                [sys.executable, shim, "--stop"], input=stop_payload(),
+                capture_output=True, text=True, timeout=30,
+                env={**os.environ, **env})
+            assert r.returncode == 0, f"shim --stop must exit 0, got {r.returncode}: {r.stderr[:200]}"
+            return json.loads(r.stdout)
+
+        d = drive_stop(2)
+        check("shim-stop-block-continues",
+              d.get("decision") == "continue" and "reason-2" in d.get("reason", ""),
+              f"got={d}")
+        d = drive_stop(0)
+        check("shim-stop-pass-stops",
+              d.get("decision") != "continue", f"got={d}")
+        d = drive_stop(1)
+        check("shim-stop-crash-failopen",
+              d.get("decision") != "continue", f"got={d}")
+
 
 def phase_blocklog_flag() -> None:
     # --block-log routes the row without touching os.environ
@@ -320,6 +355,18 @@ def phase2_trail() -> None:
         r = run(["--check-trail", "--session-id", "s-stdin"], stdin_text=payload)
         check("trail-stdin-single-read", r.returncode == 2,
               f"exit={r.returncode} (stdin transcript ignored?)")
+
+        # Antigravity transcript dialect counts too (write_to_file etc.)
+        tp3 = os.path.join(proj, "t3.jsonl")
+        with open(tp3, "w") as f:
+            for _ in range(6):
+                f.write('{"step_index":1,"type":"X","status":"DONE","name":"replace_file_content"}\n')
+            for _ in range(4):
+                f.write('{"step_index":2,"type":"X","status":"DONE","name":"write_to_file"}\n')
+        r = run(["--check-trail", "--project-dir", proj, "--session-id", "s-agy",
+                 "--transcript", tp3])
+        check("trail-agy-dialect-counts", r.returncode == 2,
+              f"exit={r.returncode} (agy write tools not counted?)")
 
 
 def phase2_codegraph() -> None:
