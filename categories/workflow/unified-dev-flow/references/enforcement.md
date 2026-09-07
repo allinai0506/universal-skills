@@ -399,3 +399,4 @@ blocks for weeks is ceremony, not enforcement — cut it.
   only — probabilistic, honestly labeled, S5/S6 still apply.
 - Test suite: `scripts/test_entry_gate_check.py` (stdlib only, no pytest).
   Run it after any change to the checker: `python3 scripts/test_entry_gate_check.py`.
+# test
