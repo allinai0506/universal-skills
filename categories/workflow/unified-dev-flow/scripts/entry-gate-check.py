@@ -36,6 +36,8 @@ SECTIONS = ("理解和假设", "最小方案", "范围纪律", "验证计划")
 MIN_CHARS = 150
 TRAIL_MIN_EDITS = 8  # fewer edits than this needs no decision trail
 CODEGRAPH_TIMEOUT = 15
+DEFAULT_BLOCKLOG = os.path.join(os.path.expanduser("~"), ".claude",
+                                "homunculus", "entry-gate-blocks.jsonl")
 
 # tool_input keys that may carry the write target, across tools
 # (Claude/Trae: file_path; OpenCode: filePath; Antigravity: TargetFile; ...)
@@ -47,8 +49,34 @@ PATH_EXTS = (".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs", ".java",
              ".vue", ".css", ".html", ".c", ".h", ".cpp")
 
 
-def fail(msg: str) -> NoReturn:
-    sys.stderr.write(msg.rstrip() + "\n")
+def blocklog_path() -> str:
+    return (os.environ.get("ENTRY_GATE_BLOCKLOG") or DEFAULT_BLOCKLOG)
+
+
+def log_block(kind: str, session: str, project: str, reason: str) -> None:
+    """Append one JSONL row per block. Logging must never block the gate."""
+    try:
+        path = blocklog_path()
+        parent = os.path.dirname(path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps({
+                "ts": datetime.datetime.now().isoformat(timespec="seconds"),
+                "kind": kind,
+                "session": session,
+                "project": project,
+                "reason": reason[:160],
+            }, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
+
+
+def fail(msg: str, kind: str = "block", session: str = "",
+         project: str = "") -> NoReturn:
+    text = msg.rstrip()
+    sys.stderr.write(text + "\n")
+    log_block(kind, session, project, text.splitlines()[0] if text else "")
     sys.exit(2)
 
 
@@ -62,7 +90,10 @@ def resolve_context(argv: list[str] | None = None) -> tuple[str, str, str]:
     ap.add_argument("--project-dir", default="")
     ap.add_argument("--session-id", default="")
     ap.add_argument("--target", default="")
+    ap.add_argument("--block-log", default="")
     ns, _ = ap.parse_known_args(argv)
+    if ns.block_log:
+        os.environ["ENTRY_GATE_BLOCKLOG"] = ns.block_log
 
     project_dir = ns.project_dir
     session_id = ns.session_id
@@ -282,7 +313,10 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--min-edits", type=int, default=TRAIL_MIN_EDITS)
     ap.add_argument("--project-dir", default="")
     ap.add_argument("--session-id", default="")
+    ap.add_argument("--block-log", default="")
     early, _ = ap.parse_known_args(argv)
+    if early.block_log:
+        os.environ["ENTRY_GATE_BLOCKLOG"] = early.block_log
     if early.check_trail:
         cmd_check_trail(early)
         return
@@ -291,15 +325,18 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(0)  # writing the artifact itself is always allowed
     path = artifact_path(project_dir, session_id)
     if not os.path.isfile(path):
-        fail(TEMPLATE_HINT + f"\n当前缺失：{path}")
+        fail(TEMPLATE_HINT + f"\n当前缺失：{path}",
+             kind="missing", session=session_id, project=project_dir)
     try:
         with open(path, "r", encoding="utf-8") as f:
             content = f.read()
     except OSError as e:
-        fail(f"入口产物不可读：{path}（{e}）。")
+        fail(f"入口产物不可读：{path}（{e}）。",
+             kind="malformed", session=session_id, project=project_dir)
     reason = validate(content)
     if reason is not None:
-        fail("入口产物不合格：" + reason + "\n" + TEMPLATE_HINT)
+        fail("入口产物不合格：" + reason + "\n" + TEMPLATE_HINT,
+             kind="malformed", session=session_id, project=project_dir)
     run_scope_check(project_dir, session_id, path, content)
     sys.exit(0)
 
@@ -321,7 +358,7 @@ def run_scope_check(project_dir: str, session_id: str,
         return
     reason = verify_scope(project_dir, content)
     if reason is not None:
-        fail(reason)
+        fail(reason, kind="scope", session=session_id, project=project_dir)
     try:
         with open(marker, "w", encoding="utf-8") as f:
             f.write("scope ok\n")
@@ -393,7 +430,8 @@ def cmd_check_trail(ns: argparse.Namespace) -> None:
         ok = False
     if not ok:
         fail(f"复杂工作（{edits} 次写操作）缺少当日决策轨迹：{trail}。"
-             "按 show-me-your-work 写 decisions.tsv 后再结束。")
+             "按 show-me-your-work 写 decisions.tsv 后再结束。",
+             kind="trail", project=project_dir)
     sys.exit(0)
 
 

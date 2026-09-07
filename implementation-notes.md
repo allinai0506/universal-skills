@@ -203,3 +203,20 @@ Branch: `feat/unified-dev-flow-entry-gate`
 - codegraph contract probed live on scratch index: hit→JSON array, miss→`[]`, both exit 0 — so parse stdout, never trust exit code. `shutil.which` gate + 15s timeout.
 - Trail check as `--check-trail` Stop-hook mode (write-gate stays write-time; end-of-work belongs to Stop): <8 edits pass, else decisions.tsv must exist+nonempty+touched-today. Snippet documented, NOT auto-installed (same manual-step rule as write gate).
 - TDD: RED first (incl. fixing 2 self-inflicted test-fixture breaks from VALID edits — scope check doing its job), GREEN 26/26 incl. stub-codegraph trio (hit/miss/broken). Doc micro-template proven against real checker (caught an edit that truncated ##3/##4).
+
+## Task: ① block 日志 + 周报（value proof）
+
+## Decisions
+
+- fail() 中央记账：kind（missing/malformed/scope/trail）+ session + project + reason 头 160 字，JSONL 追加，记账失败永不拦门。默认路径 ~/.claude/homunculus/entry-gate-blocks.jsonl（沿用 homunculus 惯例），ENTRY_GATE_BLOCKLOG/--block-log 可覆盖。
+- scripts/entry-gate-report.py：total + 按 kind/项目/天计数 + dead-gate hint（30 天零拦截的 kind 可能是仪式）；始终 exit 0。
+- TDD：5 新用例先红（含一次实现把全文件 indentation 打炸、29 红的插曲——修好后全绿，测试即安全网的实例）。
+
+## Task: ② session-brief.py（SessionStart 记忆拼装，不造新轮子）
+
+## Decisions
+
+- 只读现成三层文件记忆：ck CONTEXT.md（projects.json 按 path 反查，CK_HOME 可覆盖）、项目 .omc/wiki（index + log 末 5 行）、ledger 断点、decisions.tsv 新鲜度、block 日志 7 天统计；缺失即标 无，永不崩溃永 exit 0。
+- 不接 unified-memory/gbrain（前者缺 ecc-universal 运行时，后者待搭建）——等用户拍板基石方案后再看要不要第二层。
+- TDD：9 断言先红后绿（含一次测试断言过细的修正）；真仓实测 graceful + 项目级 block 过滤正确。
+- SessionStart 接线只写文档不装机（手动规则延续）。

@@ -310,6 +310,49 @@ echo '{"session_id":"demo","cwd":"'"$D"'"}' | python3 ~/.claude/scripts/entry-ga
 Then do one live pass in the real tool: start a session, attempt any file
 edit, confirm the block message tells the agent to write the artifact.
 
+## SessionStart memory brief (file-based, zero new systems)
+
+`scripts/session-brief.py --project-dir <dir>` assembles existing memory
+into a compact brief on stdout (all SessionStart-class events surface stdout
+as context): ck `CONTEXT.md` excerpt (matched by path in `projects.json`),
+wiki index + log tail, ledger breakpoint, trail freshness, 7-day block stats.
+Missing stores print 无 and are skipped; always exits 0 (briefing never blocks).
+`CK_HOME` / `ENTRY_GATE_BLOCKLOG` override paths (tests rely on this).
+
+Claude example (`SessionStart`, keep existing groups):
+
+```json
+{
+  "hooks": {
+    "SessionStart": [{
+      "matcher": "startup",
+      "hooks": [{ "type": "command",
+                  "command": "python3 ~/.claude/scripts/session-brief.py --project-dir \"$CLAUDE_PROJECT_DIR\"",
+                  "timeout": 10000 }]
+    }]
+  }
+}
+```
+
+Same shape maps to Codex/Cursor/Gemini/Trae/Qoder `SessionStart` (their
+project-dir variable in place of `$CLAUDE_PROJECT_DIR`). NOT auto-installed —
+same manual-step rule as the write gate. It consumes the memory skills you
+already run (`ck`, `wiki`, ledger, `decisions.tsv`); it creates no new store.
+
+## Block log & weekly report (value proof)
+
+Every block appends one JSONL row (`ts/kind/session/project/reason`) to
+`~/.claude/homunculus/entry-gate-blocks.jsonl` (`ENTRY_GATE_BLOCKLOG` or
+`--block-log` overrides; logging never blocks the gate). Kinds: `missing` /
+`malformed` / `scope` / `trail`.
+
+```bash
+python3 scripts/entry-gate-report.py [--log PATH] [--days 7]
+```
+
+Use the output to decide which gates earn their keep: a kind with zero
+blocks for weeks is ceremony, not enforcement — cut it.
+
 ## Honest limitations
 
 - Checks existence + structure, not truthfulness. Garbage artifacts are caught

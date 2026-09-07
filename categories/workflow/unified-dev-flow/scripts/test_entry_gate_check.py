@@ -146,6 +146,7 @@ def main() -> None:
     phase2()
     phase2_trail()
     phase2_codegraph()
+    phase3_logging()
 
     print(f"\n{len(FAILURES)} failure(s)." if FAILURES else "\nAll tests passed.")
     sys.exit(1 if FAILURES else 0)
@@ -269,6 +270,69 @@ def phase2_codegraph() -> None:
         r = run(["--project-dir", proj, "--session-id", "s-cgboom", "--target", tgt],
                 extra_env=env2)
         check("codegraph-broken-failopen", r.returncode == 0, f"exit={r.returncode}")
+
+
+def phase3_logging() -> None:
+    with tempfile.TemporaryDirectory() as proj:
+        os.makedirs(os.path.join(proj, "src"))
+        open(os.path.join(proj, "src", "real.py"), "w").write("x = 1\n")
+        logf = os.path.join(proj, "blocks.jsonl")
+        env = {"ENTRY_GATE_BLOCKLOG": logf}
+
+        def logged() -> list[dict]:
+            if not os.path.isfile(logf):
+                return []
+            return [json.loads(line) for line in open(logf) if line.strip()]
+
+        # 23. missing artifact block is logged with kind
+        r = run(["--project-dir", proj, "--session-id", "s-l1"], extra_env=env)
+        check("block-missing-exit", r.returncode == 2, f"exit={r.returncode}")
+        rows = logged()
+        check("block-missing-logged",
+              len(rows) == 1 and rows[0].get("kind") == "missing"
+              and rows[0].get("session") == "s-l1", f"rows={rows}")
+
+        # 24. passes append nothing
+        make_artifact(proj, "s-l2", ["src/real.py"])
+        r = run(["--project-dir", proj, "--session-id", "s-l2",
+                 "--target", os.path.join(proj, "src", "real.py")], extra_env=env)
+        check("pass-logs-nothing", r.returncode == 0 and len(logged()) == 1,
+              f"exit={r.returncode} rows={len(logged())}")
+
+        # 25. scope block logged with kind=scope
+        make_artifact(proj, "s-l3", ["src/typo-missing.py"])
+        r = run(["--project-dir", proj, "--session-id", "s-l3",
+                 "--target", os.path.join(proj, "src", "real.py")], extra_env=env)
+        kinds = [x.get("kind") for x in logged()]
+        check("block-scope-logged", r.returncode == 2 and "scope" in kinds,
+              f"exit={r.returncode} kinds={kinds}")
+
+        # 26. trail block logged with kind=trail
+        tp = os.path.join(proj, "t.jsonl")
+        with open(tp, "w") as f:
+            f.write('{"name": "Edit"}\n' * 10)
+        r = run(["--check-trail", "--project-dir", proj, "--transcript", tp],
+                extra_env=env)
+        kinds = [x.get("kind") for x in logged()]
+        check("block-trail-logged", r.returncode == 2 and "trail" in kinds,
+              f"exit={r.returncode} kinds={kinds}")
+
+    # 27. weekly report renders counts from a fixture log
+    with tempfile.TemporaryDirectory() as proj:
+        logf = os.path.join(proj, "blocks.jsonl")
+        with open(logf, "w") as f:
+            f.write('{"ts": "2026-09-01T10:00:00", "kind": "missing", "session": "a", "project": "/p/x", "reason": "r1"}\n'
+                    '{"ts": "2026-09-02T10:00:00", "kind": "scope", "session": "b", "project": "/p/x", "reason": "r2"}\n'
+                    '{"ts": "2026-09-03T10:00:00", "kind": "missing", "session": "c", "project": "/p/y", "reason": "r3"}\n')
+        report = os.path.join(os.path.dirname(os.path.abspath(__file__)), "entry-gate-report.py")
+        check("report-exists", os.path.isfile(report), "entry-gate-report.py missing (RED?)")
+        if os.path.isfile(report):
+            r = subprocess.run(
+                [sys.executable, report, "--log", logf, "--days", "30"],
+                capture_output=True, text=True, timeout=30)
+            out = r.stdout
+            check("report-counts", r.returncode == 0 and "total: 3" in out
+                  and "missing: 2" in out and "scope: 1" in out, f"exit={r.returncode} out={out[:300]}")
 
 
 if __name__ == "__main__":
