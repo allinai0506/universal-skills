@@ -84,7 +84,10 @@ Small work (< 8 Edit/Write calls, `--min-edits` tunable) passes without a
 trail. Complex work requires `<project>/decisions.tsv` (show-me-your-work
 default, `--trail` to override): must exist, be non-empty, and be touched
 today — else exit 2 blocks the stop. ("Today", not "this session": Stop hooks
-cannot reliably know session start; same known limitation as delivery-gate.) Claude example (`Stop` event, keep any
+cannot reliably know session start; same known limitation as delivery-gate.)
+Anti-spin: at most `--max-blocks` blocks per episode (default 3), then it
+gives up loudly (stderr + `trail-giveup` log row) and lets the stop through —
+a gate that spins the agent forever is worse than a missing trail. Claude example (`Stop` event, keep any
 existing Stop hooks):
 
 ```json
