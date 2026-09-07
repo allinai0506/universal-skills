@@ -23,21 +23,24 @@ Downstream gates (S5 evidence, S6 review) catch garbage content.
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import os
 import re
 import shutil
 import subprocess
 import sys
-import datetime
+import time
 from typing import NoReturn
 
 SECTIONS = ("理解和假设", "最小方案", "范围纪律", "验证计划")
 MIN_CHARS = 150
 TRAIL_MIN_EDITS = 8  # fewer edits than this needs no decision trail
-CODEGRAPH_TIMEOUT = 15
+CODEGRAPH_TIMEOUT = 5  # per-query ceiling; SCOPE_DEADLINE_S caps the total
+SCOPE_DEADLINE_S = 6.0  # scope validation must never stall the hook itself
 DEFAULT_BLOCKLOG = os.path.join(os.path.expanduser("~"), ".claude",
                                 "homunculus", "entry-gate-blocks.jsonl")
+_block_log_override = ""  # set by --block-log; never via os.environ mutation
 
 # tool_input keys that may carry the write target, across tools
 # (Claude/Trae: file_path; OpenCode: filePath; Antigravity: TargetFile; ...)
@@ -50,7 +53,9 @@ PATH_EXTS = (".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs", ".java",
 
 
 def blocklog_path() -> str:
-    return (os.environ.get("ENTRY_GATE_BLOCKLOG") or DEFAULT_BLOCKLOG)
+    return (_block_log_override
+            or os.environ.get("ENTRY_GATE_BLOCKLOG")
+            or DEFAULT_BLOCKLOG)
 
 
 def log_block(kind: str, session: str, project: str, reason: str) -> None:
@@ -80,7 +85,23 @@ def fail(msg: str, kind: str = "block", session: str = "",
     sys.exit(2)
 
 
-def resolve_context(argv: list[str] | None = None) -> tuple[str, str, str]:
+def read_stdin_text() -> str:
+    try:
+        return sys.stdin.read() if not sys.stdin.isatty() else ""
+    except OSError:
+        return ""
+
+
+def parse_stdin_json(raw: str) -> dict:
+    try:
+        parsed = json.loads(raw) if raw.strip() else {}
+    except (json.JSONDecodeError, TypeError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def resolve_context(argv: list[str] | None = None,
+                    raw: str | None = None) -> tuple[str, str, str]:
     """Return (project_dir, session_id, target).
 
     target = the file this tool call writes (for self-exemption), from
@@ -93,24 +114,18 @@ def resolve_context(argv: list[str] | None = None) -> tuple[str, str, str]:
     ap.add_argument("--block-log", default="")
     ns, _ = ap.parse_known_args(argv)
     if ns.block_log:
-        os.environ["ENTRY_GATE_BLOCKLOG"] = ns.block_log
+        global _block_log_override
+        _block_log_override = ns.block_log
 
     project_dir = ns.project_dir
     session_id = ns.session_id
     target = ns.target
+    if raw is None:
+        raw = read_stdin_text()
     payload: dict = {}
 
     if not project_dir or not session_id or not target:
-        try:
-            raw = sys.stdin.read() if not sys.stdin.isatty() else ""
-        except OSError:
-            raw = ""
-        if raw.strip():
-            try:
-                parsed = json.loads(raw)
-                payload = parsed if isinstance(parsed, dict) else {}
-            except json.JSONDecodeError:
-                payload = {}
+        payload = parse_stdin_json(raw)
         if not session_id:
             session_id = str(payload.get("session_id") or payload.get("sessionID") or "")
         if not project_dir:
@@ -141,6 +156,14 @@ def resolve_context(argv: list[str] | None = None) -> tuple[str, str, str]:
     return project_dir, session_id, target
 
 
+def _is_within(abs_proj: str, abs_target: str) -> bool:
+    """True if abs_target lives under abs_proj (both must be absolute)."""
+    try:
+        return os.path.commonpath([abs_proj, abs_target]) == abs_proj
+    except ValueError:
+        return False
+
+
 def is_artifact_target(project_dir: str, target: str) -> bool:
     """True if the write targets an entry-gate artifact itself.
 
@@ -154,11 +177,7 @@ def is_artifact_target(project_dir: str, target: str) -> bool:
     abs_target = os.path.abspath(
         target if os.path.isabs(target) else os.path.join(project_dir, target))
     abs_proj = os.path.abspath(project_dir)
-    try:
-        same_root = os.path.commonpath([abs_proj, abs_target]) == abs_proj
-    except ValueError:
-        return False
-    if not same_root:
+    if not _is_within(abs_proj, abs_target):
         return False
     parent, base = os.path.split(abs_target)
     return (os.path.basename(parent) == ".omc"
@@ -242,21 +261,23 @@ def verify_scope(project_dir: str, content: str) -> str | None:
     abs_proj = os.path.abspath(project_dir)
     has_index = os.path.isdir(os.path.join(project_dir, ".codegraph"))
     cli_ok = shutil.which("codegraph") is not None
+    deadline = time.monotonic() + SCOPE_DEADLINE_S
     for is_new, path in extract_scope_paths(content):
         if is_new:
             continue
         abs_target = os.path.abspath(
             path if os.path.isabs(path) else os.path.join(project_dir, path))
-        try:
-            inside = os.path.commonpath([abs_proj, abs_target]) == abs_proj
-        except ValueError:
-            inside = False
+        inside = _is_within(abs_proj, abs_target)
         if not inside:
             problems.append(f"{path}（超出项目目录）")
             continue
         if os.path.exists(abs_target):
             continue
         if has_index and cli_ok:
+            if time.monotonic() > deadline:
+                sys.stderr.write(
+                    f"WARN: scope 校验超时（>{SCOPE_DEADLINE_S:g}s），跳过剩余索引查询：{path}\n")
+                continue
             symbol = codegraph_has_symbol(project_dir, path)
             if symbol is True:
                 continue
@@ -281,7 +302,7 @@ TEMPLATE_HINT = (
     "Entry Gate 缺失或不合格，STOP。先写入口产物再动手：\n"
     "  <project>/.omc/entry-gate-<sessionID>.md，须含 4 节标题 "
     "(## 1. 理解和假设 / ## 2. 最小方案 / ## 3. 范围纪律 / ## 4. 验证计划)，"
-    "§2 须有用 - 或 1. 开头的条目列出文件范围，全文 >= 150 字。"
+    "§2 须有用 - 或 1. 开头的条目列出文件范围（新建文件标 NEW: 前缀），全文 >= 150 字。"
     "不许重述规则（如'我将遵循 TDD'），只许写实例"
     "（如'失败测试：tests/x_test.py::test_y；验证命令：pytest tests/x_test.py'）。"
     "写完后重试刚才的工具调用。"
@@ -316,7 +337,8 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--block-log", default="")
     early, _ = ap.parse_known_args(argv)
     if early.block_log:
-        os.environ["ENTRY_GATE_BLOCKLOG"] = early.block_log
+        global _block_log_override
+        _block_log_override = early.block_log
     if early.check_trail:
         cmd_check_trail(early)
         return
@@ -366,22 +388,15 @@ def run_scope_check(project_dir: str, session_id: str,
         pass  # marker is an optimization; a failed write must not block
 
 
-def read_transcript_text(transcript_arg: str) -> str:
+def read_transcript_text(transcript_arg: str, raw: str = "") -> str:
     if transcript_arg and os.path.isfile(transcript_arg):
         try:
             with open(transcript_arg, "r", encoding="utf-8") as f:
                 return f.read()
         except OSError:
             return ""
-    try:
-        raw = sys.stdin.read() if not sys.stdin.isatty() else ""
-    except OSError:
-        return ""
-    try:
-        payload = json.loads(raw) if raw.strip() else {}
-    except (json.JSONDecodeError, TypeError):
-        return ""
-    if isinstance(payload, dict) and payload.get("transcript_path"):
+    payload = parse_stdin_json(raw)
+    if payload.get("transcript_path"):
         tp = os.path.expanduser(str(payload["transcript_path"]))
         if os.path.isfile(tp):
             try:
@@ -400,23 +415,15 @@ def cmd_check_trail(ns: argparse.Namespace) -> None:
     be non-empty, and be touched today. Exit 2 blocks the stop.
     """
     project_dir = ns.project_dir or ""
+    raw = ""
+    if not project_dir or not ns.transcript:
+        raw = read_stdin_text()
     if not project_dir:
-        try:
-            raw = sys.stdin.read() if not sys.stdin.isatty() else ""
-        except OSError:
-            raw = ""
-        project_dir = ""
-        try:
-            payload = json.loads(raw) if raw.strip() else {}
-            if isinstance(payload, dict):
-                project_dir = str(payload.get("cwd") or payload.get("project_dir") or "")
-        except (json.JSONDecodeError, TypeError):
-            pass
+        payload = parse_stdin_json(raw)
+        project_dir = str(payload.get("cwd") or payload.get("project_dir") or "")
         if not project_dir:
             project_dir = os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd())
-    # NOTE: resolve_context() is writer-gate shaped (needs session/target);
-    # trail mode re-derives project_dir here to avoid consuming stdin twice.
-    transcript = read_transcript_text(ns.transcript)
+    transcript = read_transcript_text(ns.transcript, raw)
     edits = len(re.findall(r'"name":\s*"(?:Edit|Write)"', transcript))
     if edits < ns.min_edits:
         sys.exit(0)

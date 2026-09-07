@@ -92,6 +92,18 @@ def main() -> None:
         check("bare-project-zero", r2.returncode == 0, f"exit={r2.returncode}")
         check("bare-project-marks-absent", "无" in r2.stdout, "missing stores not marked")
 
+    # oversized block log: tail cap keeps counts exact, never loads it all
+    biglog = os.path.join(proj, "big.jsonl")
+    with open(biglog, "w") as f:
+        for _ in range(100):
+            f.write('{"ts": "2020-01-01T00:00:00", "kind": "missing", "session": "o", "project": "%s", "reason": "old"}\n' % proj)
+        for _ in range(5):
+            f.write('{"ts": "2026-09-07T10:00:00", "kind": "scope", "session": "n", "project": "%s", "reason": "new"}\n' % proj)
+    env["ENTRY_GATE_BLOCKLOG"] = biglog
+    r3 = run(proj, env)
+    check("biglog-counts-exact", "近7天拦截：5（scopex5）" in r3.stdout,
+          r3.stdout[-200:])
+
     import shutil
     shutil.rmtree(proj, ignore_errors=True)
     shutil.rmtree(ckhome, ignore_errors=True)

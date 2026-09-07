@@ -20,7 +20,9 @@ import os
 import subprocess
 import sys
 
-CHECKER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "entry-gate-check.py")
+CHECKER = os.environ.get(
+    "ENTRY_GATE_CHECKER_BIN",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "entry-gate-check.py"))
 
 
 def main() -> None:
@@ -48,16 +50,21 @@ def main() -> None:
 
     try:
         proc = subprocess.run(argv, capture_output=True, text=True, timeout=30)
-        )
     except OSError as e:
         print(json.dumps({"decision": "deny", "reason": f"entry-gate checker failed to run: {e}"}))
         return
 
     if proc.returncode == 0:
         print(json.dumps({"decision": "allow"}))
-    else:
+    elif proc.returncode == 2:
         reason = (proc.stderr or "entry gate artifact missing or malformed").strip()
         print(json.dumps({"decision": "deny", "reason": reason}))
+    else:
+        # Checker crashed (not a validation verdict): fail OPEN, warn loudly.
+        # A crashing gate must never brick the session (cf. delivery-gate).
+        warn = f"entry-gate checker crashed (exit {proc.returncode}), fail-open"
+        sys.stderr.write(warn + ": " + (proc.stderr or "").strip()[:200] + "\n")
+        print(json.dumps({"decision": "allow", "reason": warn}))
 
 
 if __name__ == "__main__":

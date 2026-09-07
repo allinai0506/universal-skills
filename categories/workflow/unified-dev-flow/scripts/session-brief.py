@@ -16,6 +16,7 @@ Stdlib only.
 from __future__ import annotations
 
 import argparse
+import collections
 import datetime
 import json
 import os
@@ -24,6 +25,7 @@ import sys
 CK_LINES = 60
 WIKI_INDEX_LINES = 30
 WIKI_LOG_TAIL = 5
+BLOCKLOG_TAIL_LINES = 3000  # brief only needs 7d; never parse the whole log
 
 
 def ck_home() -> str:
@@ -107,33 +109,44 @@ def trail_section(project_dir: str) -> list[str]:
     return out + (["decisions.tsv 当日新鲜 ✅"] if fresh else ["（无当日 decisions.tsv）"])
 
 
+def read_tail_lines(path: str, n: int) -> list[str] | None:
+    """Last n lines without loading the whole file (logs grow unbounded)."""
+    try:
+        with open(path, encoding="utf-8", errors="ignore") as f:
+            return [line.rstrip("\n") for line in collections.deque(f, maxlen=n)]
+    except OSError:
+        return None
+
+
 def blocks_section(project_dir: str) -> list[str]:
     out = ["## 门禁统计"]
     log = (os.environ.get("ENTRY_GATE_BLOCKLOG")
            or os.path.join(os.path.expanduser("~"), ".claude", "homunculus",
                            "entry-gate-blocks.jsonl"))
-    try:
-        since = datetime.datetime.now() - datetime.timedelta(days=7)
-        n = 0
-        kinds: dict[str, int] = {}
-        with open(log, encoding="utf-8") as f:
-            for line in f:
-                try:
-                    row = json.loads(line)
-                except (json.JSONDecodeError, TypeError):
-                    continue
-                if not isinstance(row, dict) or row.get("project") != project_dir:
-                    continue
-                try:
-                    ts = datetime.datetime.fromisoformat(str(row.get("ts", "")))
-                except ValueError:
-                    continue
-                if ts >= since:
-                    n += 1
-                    k = str(row.get("kind", "?"))
-                    kinds[k] = kinds.get(k, 0) + 1
-    except OSError:
+    lines = read_tail_lines(log, BLOCKLOG_TAIL_LINES)
+    if lines is None:
         return out + ["（无 block 日志）"]
+    since = datetime.datetime.now() - datetime.timedelta(days=7)
+    n = 0
+    kinds: dict[str, int] = {}
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if not isinstance(row, dict) or row.get("project") != project_dir:
+            continue
+        try:
+            ts = datetime.datetime.fromisoformat(str(row.get("ts", "")))
+        except ValueError:
+            continue
+        if ts >= since:
+            n += 1
+            k = str(row.get("kind", "?"))
+            kinds[k] = kinds.get(k, 0) + 1
     if not n:
         return out + ["近7天拦截：0"]
     detail = " ".join(f"{k}x{v}" for k, v in sorted(kinds.items()))
