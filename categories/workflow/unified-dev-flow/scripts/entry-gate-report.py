@@ -21,6 +21,8 @@ import json
 import os
 import sys
 
+TAIL_LINES = 20000  # reports aggregate recent history; never load it all
+
 DEFAULT_LOG = os.environ.get(
     "ENTRY_GATE_BLOCKLOG",
     os.path.join(os.path.expanduser("~"), ".claude", "homunculus",
@@ -33,22 +35,23 @@ def load_rows(path: str, since: datetime.datetime) -> list[dict]:
     rows: list[dict] = []
     try:
         with open(path, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    row = json.loads(line)
-                except (json.JSONDecodeError, TypeError):
-                    continue
-                try:
-                    ts = datetime.datetime.fromisoformat(str(row.get("ts", "")))
-                except ValueError:
-                    continue
-                if ts >= since and isinstance(row, dict):
-                    rows.append(row)
+            tail = collections.deque(f, maxlen=TAIL_LINES)
     except OSError:
-        pass
+        return rows
+    for line in tail:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        try:
+            ts = datetime.datetime.fromisoformat(str(row.get("ts", "")))
+        except ValueError:
+            continue
+        if ts >= since and isinstance(row, dict):
+            rows.append(row)
     return rows
 
 

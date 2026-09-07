@@ -146,7 +146,9 @@ def main() -> None:
     phase2()
     phase2_trail()
     phase2_codegraph()
+    phase_shim()
     phase3_logging()
+    phase_blocklog_flag()
 
     print(f"\n{len(FAILURES)} failure(s)." if FAILURES else "\nAll tests passed.")
     sys.exit(1 if FAILURES else 0)
@@ -161,7 +163,66 @@ def make_artifact(proj: str, session: str, files: list[str]) -> None:
     write_artifact(proj, session, body)
 
 
+def phase_shim() -> None:
+    shim = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "entry-gate-antigravity.py")
+    with tempfile.TemporaryDirectory() as proj:
+        bindir = os.path.join(proj, "bin")
+        os.makedirs(bindir)
+        stub = os.path.join(bindir, "fake-checker.py")
+        with open(stub, "w") as f:
+            f.write("import sys\nsys.stderr.write('stub says no\\n')\n"
+                    "sys.exit(int(sys.argv[1]))\n")
+        env = {"PATH": os.environ.get("PATH", ""),
+               "ENTRY_GATE_CHECKER_BIN": stub}
+        payload = lambda: json.dumps(
+            {"toolCall": {"name": "write_to_file", "args": {}},
+             "conversationId": "c1", "workspacePaths": [proj]})
+
+        # simpler: drive shim with a stub checker chosen by exit code
+        def drive(code: int) -> dict:
+            with open(stub, "w") as f:
+                f.write(f"import sys\nsys.stderr.write('reason-{code}\\n')\n"
+                        f"sys.exit({code})\n")
+            r = subprocess.run(
+                [sys.executable, shim], input=payload(),
+                capture_output=True, text=True, timeout=30, env={**os.environ, **env})
+            assert r.returncode == 0, f"shim must always exit 0, got {r.returncode}"
+            return json.loads(r.stdout)
+
+        # crash (exit 1) -> fail OPEN, never deny
+        d = drive(1)
+        check("shim-crash-failopen",
+              d.get("decision") == "allow", f"got={d}")
+        # validation block (exit 2) -> deny preserved
+        d = drive(2)
+        check("shim-block-still-denies",
+              d.get("decision") == "deny" and "reason-2" in d.get("reason", ""),
+              f"got={d}")
+
+
+def phase_blocklog_flag() -> None:
+    # --block-log routes the row without touching os.environ
+    with tempfile.TemporaryDirectory() as proj:
+        logf = os.path.join(proj, "flag.jsonl")
+        base_env = {k: v for k, v in os.environ.items() if k != "ENTRY_GATE_BLOCKLOG"}
+        base_env["PATH"] = os.environ.get("PATH", "")
+        r = subprocess.run(
+            [sys.executable, SCRIPT, "--project-dir", proj, "--session-id", "s-f",
+             "--block-log", logf],
+            capture_output=True, text=True, timeout=30, env=base_env)
+        check("blocklog-flag-exit", r.returncode == 2, f"exit={r.returncode}")
+        rows = []
+        if os.path.isfile(logf):
+            rows = [json.loads(line) for line in open(logf) if line.strip()]
+        check("blocklog-flag-routes",
+              len(rows) == 1 and rows[0].get("session") == "s-f", f"rows={rows}")
+        check("blocklog-no-env-mutation",
+              "ENTRY_GATE_BLOCKLOG" not in os.environ, "test env polluted")
+
+
 def phase2() -> None:
+
     with tempfile.TemporaryDirectory() as proj:
         os.makedirs(os.path.join(proj, "src"))
         open(os.path.join(proj, "src", "real.py"), "w").write("x = 1\n")
@@ -271,8 +332,24 @@ def phase2_codegraph() -> None:
                 extra_env=env2)
         check("codegraph-broken-failopen", r.returncode == 0, f"exit={r.returncode}")
 
+        # 23. slow CLI x3 paths: no deadline => ~45s; deadline => ~6s + pass.
+        # Proves the scope budget caps hook-blocking wall time.
+        import time as _time
+        with open(stub, "w") as f:
+            f.write("#!/usr/bin/env python3\nimport time\ntime.sleep(30)\nprint('[]')\n")
+        make_artifact(proj, "s-cgslow",
+                      ["src/real.py", "src/slow-a.py", "src/slow-b.py", "src/slow-c.py"])
+        t0 = _time.monotonic()
+        r = run(["--project-dir", proj, "--session-id", "s-cgslow", "--target", tgt],
+                extra_env=env)
+        dt = _time.monotonic() - t0
+        check("scope-budget-caps-walltime",
+              r.returncode == 0 and dt < 12 and "WARN" in r.stderr,
+              f"exit={r.returncode} dt={dt:.1f}s")
+
 
 def phase3_logging() -> None:
+
     with tempfile.TemporaryDirectory() as proj:
         os.makedirs(os.path.join(proj, "src"))
         open(os.path.join(proj, "src", "real.py"), "w").write("x = 1\n")

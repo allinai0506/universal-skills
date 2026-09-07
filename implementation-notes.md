@@ -243,3 +243,13 @@ Branch: `feat/unified-dev-flow-entry-gate`
 - 每仓只 +7 行：长期记忆检索节（memu retrieve 一句话 + score<0.5 丢弃 + env strip 代理 + source-of-truth 声明）。xiyu 六 worktree 同文（qoder 既有差异 untouched）；nexusarchive 贴合其 §10 文档原则、无编号节改为 ## 11。
 - 未在任何项目仓 commit（用户仓库用户提交）；universal-skills 侧无技能改动，仅记账。
 - 当前库内 10 条为 spike 记忆（治理层内容），跨项目共享无害；生产 rollout 时按项目 commit 其 wiki/架构内容。
+
+## Task: Review findings fix-all（P0/P1/P2）
+
+## Decisions
+
+- P0-1 crash 分级：exit 2 = 拦，其他非零 = 放行+警告（shim + plugin；附带修掉 bootstrap 期引入的 shim 括号残留——拖到有测试才现形，TDD 欠账的实例）。
+- P0-2 scope 预算：单 query 5s + 总 6s deadline，超时 warn+跳过；10s hook 超时够用，文档不动。
+- P1-1 stdin 归并（resolve_context(raw=) + read_transcript_text(raw) 共用，删 NOTE）；P1-3 _is_within 共用；P1-2 brief/report 尾读（3000/20000 行 cap）。
+- P2：TEMPLATE_HINT 补 NEW: 半句；SessionStart 清理 glob 扩 .scope-ok-*；--block-log 改模块变量（去 env mutation）；trail 一日语义文档承认；tests 随 sync 发布问题：sync 全目录 symlink 改排除面太大，决议接受现状（单技能测试 ~10KB，概念瑕疵换零风险），有异议可推翻。
+- 环境插曲：本机 python3 切到 Homebrew 3.14（无 yaml），quick_validate 改用 miniconda python 跑；自研脚本 stdlib-only 故免疫——当初立的规矩兑现了。

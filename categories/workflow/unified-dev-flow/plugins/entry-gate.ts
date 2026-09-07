@@ -42,8 +42,14 @@ export const EntryGate = async (ctx: any) => {
       try {
         await execFileAsync("python3", args, { timeout: 10000 })
       } catch (err: any) {
+        // Only exit code 2 is a validation verdict ("deny").
+        // Anything else (missing script, crash, timeout) fails OPEN —
+        // a crashing gate must never brick the session.
+        const code = (err as any)?.code
         const reason = String(err?.stderr ?? err?.message ?? "entry gate check failed").trim()
-        throw new Error(reason)
+        if (code === 2) throw new Error(reason)
+        console.warn(`[entry-gate] checker failed (code=${code}), fail-open: ${reason}`)
+        return
       }
     },
   }
