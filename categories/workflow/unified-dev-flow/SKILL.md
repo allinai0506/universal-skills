@@ -1,7 +1,5 @@
 ---
 name: unified-dev-flow
-version: "2026.09.07-1"
-synced-at: "2026-09-07T21:51:58"
 description: 当开始非简单的功能开发、修 bug、重构或迁移，需要决定走哪些阶段、调用哪些技能、走多深时使用。当用户问该用什么流程或技能时使用。触发词：统一流程 / 标准流程 / 开发流程 / 完整流程 / 走流程 / 端到端开发 / 该用什么技能 / 帮我选流程 / 怎么推进这个需求 / 规范流程。Use when deciding which dev workflow/skills to use for a non-trivial coding task.
 ---
 
@@ -13,6 +11,11 @@ A **thin router**: selects and chains existing skills by name, never re-implemen
 Alternatives and domain-specialist tables live in `references/alternatives.md`
 (load on demand, never by default). `WORKFLOW-MAP.md` at the repo root is the
 design doc behind this router — it is not installed with the skill.
+
+The `speckit-*` names in the routes are external spec-kit commands, not skills
+shipped by this repository. Use them only when the project has spec-kit
+initialized (`.specify/`); otherwise use the local `speckit-chain` only when it
+is available in the target environment, or choose the documented light path.
 
 1. **Gates before stages** — a failed gate stops progression until resolved.
 2. **Scale decides depth** — classify FIRST; only large tasks walk all 9 stages.
@@ -105,4 +108,3 @@ Large-feature one-shot: `speckit-chain`.
 - Declaring work complete on "it compiles" without running real verification.
 - Forgetting to scan domain cross-cutting signals after scale classification.
 - Copying skill bodies into plans — reference by name, load on demand.
-
