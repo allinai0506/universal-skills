@@ -218,14 +218,14 @@ pstack 的 21 条 `principle-*` 不属于任何阶段，是**所有阶段共享�
 
 ## 七、验证计划（怎么证明这张地图是对的）
 
-1. **存在性校验**：表中引用的全部技能路径必须真实存在（已对照 Glob 结果编写，router 化时再机器复核一遍）。
+1. **存在性校验**：本仓库内的技能引用必须真实存在；`speckit-*` 是外部 spec-kit 命令，不计入本仓库技能清单，使用前必须确认项目已初始化 `.specify/`。
 2. **实战校验**：取 3 个真实任务各跑一遍对应路由——① 一个微改动（快速路径）② 一个中型功能（writing-plans → subagent → verification）③ 一个大型特性（speckit 全流程 + 会审）。
 3. **对照指标**：返工次数、验证证据完整度、context 消耗，与传统单技能方式对比。
 4. **迭代门槛**：只有实战出现失败证据，才允许增加复杂度（新增阶段/新部门禁）；否则冻结当前粒度。
 
 ## 八、下一步（2026-08-23 更新）
 
-1. ✅ 薄 router 元技能已创建：`workflow/unified-dev-flow`——39 个被引用技能名全部机器校验存在，quick_validate 结构验证通过，sync.sh 已传播到全部同步目标（SKILLS-INDEX / GEMINI.md 均收录）；
+1. ✅ 薄 router 元技能已创建：`workflow/unified-dev-flow`——本地技能引用已机器校验，外部 `speckit-*` 命令已明确标注依赖 `.specify/`；quick_validate 结构验证通过，sync.sh 已传播到全部同步目标（SKILLS-INDEX / GEMINI.md 均收录）；
 2. ✅ 第五节去重清单已执行完毕（结果见第五节表格）；
 3. ✅ 领域分派轴上线（2026-08-23）：SKILL.md Cross-cutting 新增 Domain specialists（UI / 性能 / 重构 / 调研 / 文档），Step 2 指令改为"阶段技能 + 领域专项"并行加载，"Load only" 眼罩指令移除；路由测试 7 场景全 PASS——规模轴 3（建表中型功能、AI 发布双门禁、错别字豁免）+ 领域轴 4（重构 / UI 看板 / CPU 内存性能 / 纯调研，修复前全 GAP、修复后全 PASS）；
 4. ⬜ 用第七节实战校验跑 3 个真实任务并记录结果（微改动 / 中型功能 / 大型特性各一）；
