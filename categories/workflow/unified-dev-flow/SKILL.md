@@ -93,16 +93,21 @@ review, stopping at the authorized delivery target.
 
 At most one Controller owns the execution loop, retries, pause, and termination;
 controller-free routes are allowed. Controllers include `speckit-chain`, an
-OpenSpec change flow, `executing-plans`, `autopilot`, `ralph`, `team`, and
-`figure-it-out`. Never nest their main loops. A change of owner requires an
+OpenSpec change flow, `executing-plans`, `subagent-driven-development` (full
+SDD execution), `autopilot`, `ralph`, `team`, and `figure-it-out`. Never nest
+their main loops. A change of owner requires an
 explicit persisted handoff in existing controller-native records before the
-next owner starts.
+next owner starts. Full SDD execution must be selected as the controller or
+receive that handoff; its individual delegated agents are workers.
 
 Stage Skills perform stages; Workers perform delegated units; Reviewers judge
 without editing reviewed source; Principles constrain all roles; Domain
 Specialists add method/evidence. Dispatch helpers such as
 `dispatching-parallel-agents`, and the local pstack `swarm`, are workers under
 the chosen owner. Local `swarm` is distinct from OMC's retired alias.
+The router's gate and escalation requirements govern all delegation, including
+SDD: escalate after three NEEDS_FIXES rounds even if a delegated skill allows
+more retries.
 
 ## Spec Adapter Resolution
 
@@ -140,7 +145,7 @@ procedures. Alternatives live in [alternatives.md](references/alternatives.md)
 | S1 Intent | `brainstorming`; PRD: `parse-prd`; terms: `domain-modeling` | Scope confirmed; blocking assumptions resolved |
 | S2 Spec | Selected Spec Adapter; light: `to-spec` | Spec and governing principles named; ambiguity resolved |
 | S3 Plan | `writing-plans`; architecture: `architect`; large: `plan-eng-review`; design: `prototype` | Plan at required depth with verification, rejected alternatives, and principles check |
-| S4 Implement | Chosen owner; workers: `subagent-driven-development`; bugs/features: `test-driven-development`; DB: `create-migration` | Planned change and intent-appropriate tests implemented |
+| S4 Implement | Chosen controller and its delegated workers; bugs/features: `test-driven-development`; DB: `create-migration` | Planned change and intent-appropriate tests implemented |
 | S5 Verify | `verification-before-completion`, `principle-prove-it-works`; E2E: `e2e-testing`; cross-layer: `self-verifying-tests` | Fresh command evidence meets selected proof and assurance requirements |
 | S6 Review | `ai-slop-cleaner` → `health` → `google-code-review`; spec-bearing: `code-review`; medium+: `interrogate`; risk specialists as applicable | MERGE_READY or explicit waiver within authorization |
 | S7 Deliver | `finishing-a-development-branch` / `ship` within target; unattended: `ai-release-engineer`; deployment: `deployment-patterns`, `canary` | Fulfill delivery target |
