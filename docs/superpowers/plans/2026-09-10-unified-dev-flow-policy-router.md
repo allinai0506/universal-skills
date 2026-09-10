@@ -18,15 +18,118 @@
 - Complexity controls planning depth; risk controls assurance depth.
 - Default delivery target for an unqualified “implement/fix” request is `working_tree`; never escalate delivery authority implicitly.
 - Do not modify `categories/workflow/speckit-chain/SKILL.md` in phase one; the Router must stop depending on its current one-shot behavior.
+- The repository-standard `version` and `synced-at` frontmatter fields are valid; update the local quick validator without weakening rejection of unknown keys.
 
 ## File Map
 
 - `categories/workflow/unified-dev-flow/scripts/test_router_policy.py`: deterministic static acceptance test for the phase-one policy contract.
+- `categories/.system/skill-creator/scripts/quick_validate.py`: accept the two repository-maintained metadata keys.
+- `categories/.system/skill-creator/scripts/test_quick_validate.py`: regression coverage for accepted repository metadata and rejected unknown keys.
 - `categories/workflow/unified-dev-flow/references/policy-model.md`: detailed six-axis policy, proof modes, controller roles, Spec Adapter resolution, and state-transition semantics.
 - `categories/workflow/unified-dev-flow/SKILL.md`: compact executable router that performs R0, resume, Entry Gate, policy resolution, and delegates stage work.
 - `categories/workflow/unified-dev-flow/references/enforcement.md`: mechanical Entry Gate documentation updated to state that the artifact is produced after R0 and records Proof Mode rather than universal RED.
 - `WORKFLOW-MAP.md`: repository design source aligned with the new policy model and stripped of contradictory legacy routes.
 - `SKILLS-INDEX.md`, `GEMINI.md`, and synced metadata: generated only through `./sync.sh`; inspect generated diffs before committing them.
+
+---
+
+### Task 0: Align the Skill Validator with Repository Metadata
+
+**Files:**
+- Create: `categories/.system/skill-creator/scripts/test_quick_validate.py`
+- Modify: `categories/.system/skill-creator/scripts/quick_validate.py:40`
+
+**Interfaces:**
+- Consumes: `validate_skill(skill_path) -> tuple[bool, str]`.
+- Produces: the same interface, accepting `version` and `synced-at` while continuing to reject any other unknown frontmatter key.
+
+- [ ] **Step 1: Write the failing regression test**
+
+Create `test_quick_validate.py` with temporary skill directories and three assertions:
+
+```python
+#!/usr/bin/env python3
+"""Regression tests for repository-specific skill frontmatter metadata."""
+from __future__ import annotations
+
+import importlib.util
+from pathlib import Path
+import tempfile
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+SPEC = importlib.util.spec_from_file_location("quick_validate", SCRIPT_DIR / "quick_validate.py")
+assert SPEC and SPEC.loader
+MODULE = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(MODULE)
+
+
+def write_skill(frontmatter: str) -> Path:
+    root = Path(tempfile.mkdtemp())
+    (root / "SKILL.md").write_text(f"---\n{frontmatter}\n---\n# Test\n", encoding="utf-8")
+    return root
+
+
+def main() -> int:
+    standard = write_skill("name: demo\ndescription: Demo skill")
+    repository = write_skill(
+        'name: demo\nversion: "2026.09.10-2"\n'
+        'synced-at: "2026-09-10T19:33:57"\ndescription: Demo skill'
+    )
+    unknown = write_skill("name: demo\ndescription: Demo skill\nmade-up-key: true")
+
+    assert MODULE.validate_skill(standard)[0]
+    assert MODULE.validate_skill(repository)[0]
+    ok, message = MODULE.validate_skill(unknown)
+    assert not ok and "made-up-key" in message
+    print("All quick validator tests passed.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+```
+
+- [ ] **Step 2: Run the regression test and verify RED**
+
+```bash
+python3 categories/.system/skill-creator/scripts/test_quick_validate.py
+```
+
+Expected: assertion failure because `version` and `synced-at` are currently rejected.
+
+- [ ] **Step 3: Make the minimal validator change**
+
+Change the allowed property set to exactly:
+
+```python
+allowed_properties = {
+    "name",
+    "description",
+    "license",
+    "allowed-tools",
+    "metadata",
+    "version",
+    "synced-at",
+}
+```
+
+- [ ] **Step 4: Verify GREEN and the original failing command**
+
+```bash
+python3 categories/.system/skill-creator/scripts/test_quick_validate.py
+python3 categories/.system/skill-creator/scripts/quick_validate.py categories/workflow/unified-dev-flow
+```
+
+Expected: both exit `0`; the regression test prints `All quick validator tests passed.`, and the validator prints `Skill is valid!`.
+
+- [ ] **Step 5: Commit the validator compatibility fix**
+
+```bash
+git add categories/.system/skill-creator/scripts/quick_validate.py \
+  categories/.system/skill-creator/scripts/test_quick_validate.py \
+  docs/superpowers/plans/2026-09-10-unified-dev-flow-policy-router.md
+git commit -m "fix: accept repository skill metadata"
+```
 
 ---
 
