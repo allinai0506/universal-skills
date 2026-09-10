@@ -45,7 +45,7 @@ Controller Ownership Invariant：同一时刻至多一个 Controller 持有执�
 
 | 角色 | 技能 | 说明 |
 |---|---|---|
-| **canonical** | `using-git-worktrees` | 动手前确保隔离工作区，superpowers 链的入口习惯 |
+| **canonical** | `using-git-worktrees` | 按需创建或使用隔离 worktree；已有合适隔离工作区或纯只读路线不必新建 |
 | 备选 | `project-session-manager` | 多工单/多 worktree 并行场景升级替代 |
 | 备选 | `recall` | 接续之前的工作时先重建上下文 |
 | 辅助 | `deepinit` | 新代码库首次进入时生成分层 AGENTS.md |

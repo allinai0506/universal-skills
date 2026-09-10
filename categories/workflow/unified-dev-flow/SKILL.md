@@ -89,6 +89,21 @@ Complexity never lowers risk-driven assurance. **Bug + Micro + Security +
 Production** means light planning plus adversarial assurance plus production
 review, stopping at the authorized delivery target.
 
+Compose the final stage subset from the base route and all overlays. Before any
+S4, insert the planning required by complexity: micro uses a compressed S3
+Entry plan, small uses brief S3 steps, medium uses S2/S3 spec-plan-tasks through
+the selected adapter, large adds S3 plan review and checkpoints, and
+intractable adds its playbook and escalation points. Large and intractable
+routes also select S8 capture. Capture must stay within the delivery ceiling:
+write its artifacts only when the target permits worktree changes, and keep
+patch-only capture in the response.
+
+Example: **Feature + Large + Security + API + Working Tree** composes
+S0 → S1 → S2(selected adapter) → S3(plan review/checkpoints) → S4(one
+controller + API specialist) → S5(adversarial) → S6 → S7(working tree) → S8.
+It stops with verified, reviewed code and the required decision trail in the
+working tree; it does not commit, push, merge, or deploy.
+
 ## Controller Ownership Invariant
 
 At most one Controller owns the execution loop, retries, pause, and termination;

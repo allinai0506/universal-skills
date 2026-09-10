@@ -19,8 +19,8 @@ otherwise continue with normal read-only discovery. The router never initializes
 
 The Resume Gate runs before classification. The Entry Gate records R0-backed
 understanding, minimum file scope, scope discipline, and a proof plan. Policy
-Resolution combines independent dimensions, chooses exactly one controller (or
-none), and then selects the needed S0–S8 subset.
+Resolution combines independent dimensions, chooses at most one controller
+(controller-free routes are allowed), and then selects the needed S0–S8 subset.
 
 ## Resume Semantics
 
@@ -54,7 +54,7 @@ risk: [auth, permission, security, money, data_integrity, production, concurrenc
 domain: [ui, api, database, performance, docs, infrastructure]
 delivery_target: patch | working_tree | commit | pr | merge | deploy
 spec_backend: unified | speckit | openspec
-controller: exactly one controller or none
+controller: at most one controller; none is allowed
 proof_mode: derived from intent and domain
 assurance_level: deterministic | adversarial | mutation
 ```
@@ -145,10 +145,11 @@ authorization. S7 means “fulfill delivery target,” not an automatic deployme
 - **Principle** constrains all roles.
 - **Domain Specialist** supplies domain-specific method and evidence.
 
-Exactly one Controller owns execution at a time. A handoff to another
-controller requires an explicit recorded handoff. Candidate controllers include
-`speckit-chain`, an OpenSpec change flow, `executing-plans`, `autopilot`,
-`ralph`, `team`, and `figure-it-out`.
+At most one Controller owns execution at a time; controller-free routes are
+allowed. A handoff to another controller requires an explicit recorded
+handoff. Candidate controllers include `speckit-chain`, an OpenSpec change
+flow, `executing-plans`, `subagent-driven-development` (full SDD execution),
+`autopilot`, `ralph`, `team`, and `figure-it-out`.
 
 OMC's retired `swarm` alias is distinct from the local pstack `swarm` worker
 skill. This policy does not delete the local skill or treat the retired alias as

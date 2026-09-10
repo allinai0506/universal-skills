@@ -1,36 +1,53 @@
 # unified-dev-flow — Alternatives & Domain Tables
 
 On-demand reference for the `unified-dev-flow` router. The canonical
-stage→skill mapping lives in `SKILL.md`; this file only lists **alternatives
-and specialist tables** that were compressed out of the main file.
-Load this file only when the canonical skill doesn't fit — never by default.
+stage→skill mapping lives in `SKILL.md`; this file only lists **conditional
+stage selections and specialist tables** that were compressed out of the main
+file. Load it only when a route condition needs more detail.
 
 Design rationale lives in `WORKFLOW-MAP.md` at the repo root (repo checkout
 only, not installed with the skill).
 
-## Stage alternatives (replace canonical only when the condition hits)
+## Conditional stage selections
+
+These selections supplement the canonical route; they do not replace its gate
+semantics or start a new execution loop. At most one selected Controller owns
+implementation, verification repairs, retries, pause, and termination. A
+different Controller may start only after an explicit persisted handoff in
+existing controller-native records. Stage Skills and verification tools report
+work or evidence to that owner; they do not take ownership implicitly.
 
 - S0: `project-session-manager` (multi-ticket parallel worktrees);
   `recall` (resume prior work); `deepinit` (first entry into a new codebase).
 - S1: `grill-with-docs` (need ADR + glossary as you go);
   `deep-interview` (extreme ambiguity, Socratic probing).
-- S2: `spec` (output is issues/tickets for GitHub flow);
-  `speckit-constitution` (one-time project charter, **medium+ mandatory** —
-  no `.specify/` → Entry Gate §1 constraint docs act as constitution);
-  `domain-modeling` (ubiquitous language).
-- S3: `speckit-plan` + `speckit-tasks` (heavy doc pipeline);
+- S2: use the selected Spec Adapter; `spec` fits when that adapter's output is
+  issues/tickets for a GitHub flow; `domain-modeling` adds ubiquitous language.
+  Constitution handling is ensure/read-only: identify and read the applicable
+  governance first. Use `speckit-constitution` only when Spec Kit is the
+  selected adapter and missing or outdated governance must be created or
+  amended within the delivery authorization; never run or rewrite it
+  unconditionally for each task.
+- S3: under a selected Spec Kit adapter, `speckit-plan` + `speckit-tasks` can
+  provide the heavy doc pipeline;
   `plan-eng-review` / `plan-ceo-review` / `plan-design-review`
-  (large/high-risk multi-view review); `speckit-analyze` / `speckit-checklist`
-  (spec-plan-tasks consistency); `arena` / `principle-exhaust-the-design-space`
-  (no-precedent design, prototype 2–3 first).
-- S4: `implement` (spec/tickets exist, small-medium build);
-  `executing-plans` (no-subagent env); `autopilot` / `ralph` +
-  `show-me-your-work` (unattended long runs).
+  (large/high-risk multi-view review); use `speckit-analyze` /
+  `speckit-checklist` only with that adapter for spec-plan-tasks consistency;
+  `arena` / `principle-exhaust-the-design-space` fit no-precedent designs that
+  need 2–3 prototypes first.
+- S4: `implement` can perform a small/medium build from an existing spec or
+  tickets as a Stage Skill under the selected owner. `executing-plans` may be
+  selected as the sole Controller in a no-subagent environment. `autopilot` or
+  `ralph` may be selected as the sole Controller for an unattended long run;
+  the route also selects the required S8 `show-me-your-work` capture. Do not
+  introduce any of them as an ad-hoc replacement while another Controller owns
+  the route.
 - S5: `self-verifying-tests` is now a canonical adversarial branch (see SKILL.md),
-  not an alternative; remaining alts: `ultraqa` (fix-loop engine — cap at 3
-  cycles inside the S6 loop, not its native 5); `create-verification-skill` +
+  not an alternative; remaining selections include `create-verification-skill` +
   `maintain-verification-skill` (project-level verify);
-  language rigs (`cpp-testing`, etc.).
+  language rigs (`cpp-testing`, etc.). Verification failures return to S4;
+  the selected Controller owns repairs and obtains fresh S5 evidence. Do not
+  start a verifier-native fix loop inside S5 or S6.
 - S6: `cog-4d-audit` (CI-green but uneasy); `health` is now canonical
   (see SKILL.md S6), `codehealth-mcp` stays the alt when a live structural
   score via MCP is preferred over the CLI dashboard; `blast-radius` before the change
