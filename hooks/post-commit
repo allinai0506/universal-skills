@@ -34,6 +34,50 @@ echo "$CHANGED_SKILLS" | while read -r f; do
 done
 echo ""
 
+# ─── 步骤 1.5: 更新变更技能的 version + synced-at ──────────────────────
+# 对每个变更的 SKILL.md 自动递增版本号（YYYY.MM.DD-N）并写入同步时间戳
+for skill_md in $CHANGED_SKILLS; do
+    skill_path="$REPO_DIR/$skill_md"
+    if [ -f "$skill_path" ]; then
+        python3 - <<'PYEOF' "$skill_path"
+import sys, re, datetime
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8') as f:
+    content = f.read()
+
+today = datetime.datetime.now().strftime("%Y.%m.%d")
+existing_ver = re.search(r'version:\s*"([^"]+)"', content)
+if existing_ver:
+    existing = existing_ver.group(1)
+    if existing.startswith(today):
+        match = re.match(rf'{today}-(\d+)', existing)
+        counter = int(match.group(1)) + 1 if match else 1
+        new_version = f"{today}-{counter}"
+    else:
+        new_version = f"{today}-1"
+else:
+    new_version = f"{today}-1"
+
+synced_at = datetime.datetime.now().isoformat(timespec='seconds')
+
+if existing_ver:
+    content = re.sub(r'version:\s*"[^"]*"', f'version: "{new_version}"', content)
+else:
+    content = re.sub(r'(name:\s*\S+)', r'\1\nversion: "' + new_version + '"', content)
+
+if 'synced-at:' in content:
+    content = re.sub(r'synced-at:\s*"[^"]*"', f'synced-at: "{synced_at}"', content)
+else:
+    content = re.sub(r'(version:\s*"[^"]*")', r'\1\nsynced-at: "' + synced_at + '"', content)
+
+with open(path, 'w', encoding='utf-8') as f:
+    f.write(content)
+print(f"  📌 {path}: version={new_version}, synced-at={synced_at}")
+PYEOF
+    fi
+done
+echo ""
+
 # ─── 步骤 2: 运行 sync.sh 同步到本地 Agent ─────────────────────────────
 # --no-projects：项目级全量重建（40+ 项目 × 4 目录 × 230 技能 ≈ 3-5 分钟）是
 # post-commit 挂起的根因；SKILL.md 内容变更经 symlink 即时生效，无需重建。
