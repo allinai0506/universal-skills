@@ -26,3 +26,6 @@ __pycache__/
 
 # Trae 运行期缓存
 .trae/
+
+# 本项目的隔离 Git worktree
+.worktrees/

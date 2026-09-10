@@ -1,6 +1,6 @@
 # SKILLS-INDEX
 
-> 技能来源速查表 · 自动生成于 2026-09-10 19:33 · 共 353 个一级技能。
+> 技能来源速查表 · 自动生成于 2026-09-10 22:37 · 共 348 个一级技能。
 > 按「来源」检索：公开技能包（外部大神编写的成套技能） / 自建・单个技能。
 > 技能由 AI 按 description 自动触发，无需记住名字。
 
@@ -42,7 +42,6 @@ _Everything Claude Code 全家桶定制技能_
 | `canary` | Post-deploy canary monitoring. (gstack) |
 | `careful` | Safety guardrails for destructive commands. (gstack) |
 | `codex` | OpenAI Codex CLI wrapper — three modes. (gstack) |
-| `connect-chrome` | Launch GStack Browser — AI-controlled Chromium with the sidebar extension baked in. |
 | `context-restore` | Restore working context saved earlier by /context-save. (gstack) |
 | `context-save` | Save working context. (gstack) |
 | `cso` | Chief Security Officer mode. (gstack) |
@@ -300,10 +299,6 @@ _自动发现的第三方技能_
 | `golang-patterns` | Idiomatic Go patterns, best practices, and conventions for building robust, efficient, and maintainable Go applications. Use when writing or reviewing Go code and idiomatic structure or conventions are in question. |
 | `golang-testing` | Go testing patterns including table-driven tests, subtests, benchmarks, fuzzing, and test coverage. Follows TDD methodology with idiomatic Go practices. Use when writing Go tests — table-driven cases, subtests, benchmarks, fuzzing, or coverage. |
 | `growth-log` | Use after a complex task, failure, or when reviewing what was learned. Teaches how to write growth logs that extract reusable patterns — not diary entries. |
-| `gstack` | Router for the gstack skill suite. (gstack) |
-| `gstack-codex` | OpenAI Codex CLI wrapper — three modes. (gstack) |
-| `gstack-connect-chrome` | Launch GStack Browser — AI-controlled Chromium with the sidebar extension baked in. |
-| `gstack-gstack-upgrade` | Upgrade gstack to the latest version. |
 | `hexagonal-architecture` | Design, implement, and refactor Ports & Adapters systems with clear domain boundaries, dependency inversion, and testable use-case orchestration across TypeScript, Java, Kotlin, and Go services. Use when introducing or refactoring toward Ports and Adapters, or when domain logic has become entangled with I/O. |
 | `hookify-rules` | This skill should be used when the user asks to create a hookify rule, write a hook rule, configure hookify, add a hookify rule, or needs guidance on hookify rule syntax and patterns. |
 | `hud` | 配置 HUD 显示布局、预设与元素 |
