@@ -26,6 +26,30 @@ DUPLICATE_SKILL_NAMES=(
     "google-style-code-review"
 )
 
+# 已删除的过期技能：即使项目/工具副本里还有残留，也绝不重新 import。
+# （2026-09-10：gstack-codex 等是 imported/ 里的旧副本，与 gstack/ 下正版重名，
+# 删仓库后若不拉黑，import_orphans 会把 21 个项目的实体残留又捡回来。）
+STALE_ORPHAN_DENYLIST=(
+    "gstack"
+    "gstack-codex"
+    "gstack-connect-chrome"
+    "gstack-gstack-upgrade"
+    "connect-chrome"
+)
+
+is_stale_orphan() {
+    local skill_name="$1"
+    local stale
+
+    for stale in "${STALE_ORPHAN_DENYLIST[@]}"; do
+        if [ "$skill_name" = "$stale" ]; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
 # 项目专用技能：格式为 "技能名:项目名匹配模式"，匹配模式支持 bash 通配符
 # 这些技能不会同步到全局目录，只会同步到项目名匹配的项目级 skills 目录
 PROJECT_ONLY_SKILLS=()
@@ -222,6 +246,18 @@ import_orphans() {
 
         # 跳过自身和 system 内部技能
         if [ "$skill_name" = "imported" ] || [ "$skill_name" = ".system" ]; then
+            continue
+        fi
+
+        # 拉黑已删除的过期技能：项目残留副本不得复活
+        if is_stale_orphan "$skill_name"; then
+            continue
+        fi
+
+        # 容器目录不是技能：内部还嵌套着别的 SKILL.md（如整个 gstack 仓库被拷进来），
+        # 当单技能 import 会污染命名空间并造成大面积重名，跳过
+        if find "$skill_dir" -mindepth 2 -name "SKILL.md" -print -quit 2>/dev/null | grep -q .; then
+            warn "  跳过容器目录 [$source_label] $skill_name（内部嵌套多技能，非单一技能）"
             continue
         fi
 
@@ -607,7 +643,7 @@ sync_claude_global() {
             if is_project_only_skill "$skill_name"; then
                 continue
             fi
-            ln -sf "$skill_dir" "$target/$skill_name"
+            ln -sfh "$skill_dir" "$target/$skill_name"
             skill_count=$((skill_count + 1))
         fi
     done
@@ -863,7 +899,7 @@ sync_cursor() {
             elif [ -e "$link" ]; then
                 continue
             fi
-            ln -sf "$skill_dir" "$link"
+            ln -sfh "$skill_dir" "$link"
             g_count=$((g_count + 1))
         fi
     done
@@ -958,10 +994,15 @@ sync_codex() {
         backup "$target"
     fi
 
-    rm -rf "$target"
+    # 增量同步：绝不 rm -rf 整个目标目录。
+    # Codex 会自愈 ~/.codex/skills/.system/ 内置技能（marker: .codex-system-skills.marker），
+    # rm 过程中 .system 被并发重建会导致 rm 报错 + set -e 中断，目标被清空（2026-09-10 实测）。
+    # 只管理我们创建的 symlink：补缺失、更新指向、删孤立；点文件与实体原样保留。
     mkdir -p "$target"
 
     local skill_count=0
+    local wanted_list
+    wanted_list="$(mktemp)"
 
     for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
         if is_syncable_skill_dir "$skill_dir"; then
@@ -970,7 +1011,10 @@ sync_codex() {
             if is_project_only_skill "$skill_name"; then
                 continue
             fi
-            ln -sf "$skill_dir" "$target/$skill_name"
+            # -h：目标若是已存在的目录 symlink，必须替换链接本身；
+            # 裸 -sf 会解引用，在被指目录内建 D/N 嵌套链接（含自环），且原链接永远不更新
+            ln -sfh "$skill_dir" "$target/$skill_name"
+            echo "$skill_name" >> "$wanted_list"
             skill_count=$((skill_count + 1))
         fi
     done
@@ -979,11 +1023,24 @@ sync_codex() {
         if is_syncable_skill_dir "$skill_dir"; then
             local skill_name="$(basename "$skill_dir")"
             if [ ! -d "$target/$skill_name" ] && [ ! -L "$target/$skill_name" ]; then
-                ln -sf "$skill_dir" "$target/$skill_name"
+                ln -sfh "$skill_dir" "$target/$skill_name"
+                echo "$skill_name" >> "$wanted_list"
                 skill_count=$((skill_count + 1))
             fi
         fi
     done
+
+    # 清理孤立 symlink：仅删非点文件、且不在本轮清单中的 symlink；
+    # `$target/*` 不展开点文件，.system 等 Codex 自有内容天然跳过。
+    for entry in "$target"/*; do
+        [ -L "$entry" ] || continue
+        local entry_name
+        entry_name="$(basename "$entry")"
+        if ! grep -qx "$entry_name" "$wanted_list" 2>/dev/null; then
+            rm -f "$entry"
+        fi
+    done
+    rm -f "$wanted_list"
 
     success "Codex skills 已同步 ($skill_count 个技能，均为 symlink)"
 }
@@ -1038,7 +1095,7 @@ sync_zcode() {
                 continue
             fi
 
-            ln -sf "$skill_dir" "$link"
+            ln -sfh "$skill_dir" "$link"
             skill_count=$((skill_count + 1))
         fi
     done
@@ -1127,7 +1184,7 @@ sync_grok() {
                 continue
             fi
 
-            ln -sf "$skill_dir" "$link"
+            ln -sfh "$skill_dir" "$link"
             skill_count=$((skill_count + 1))
         fi
     done
@@ -1187,7 +1244,7 @@ sync_qoder() {
                 continue
             fi
 
-            ln -sf "$skill_dir" "$link"
+            ln -sfh "$skill_dir" "$link"
             skill_count=$((skill_count + 1))
         fi
     done
@@ -1247,7 +1304,7 @@ sync_opencode() {
                 continue
             fi
 
-            ln -sf "$skill_dir" "$link"
+            ln -sfh "$skill_dir" "$link"
             skill_count=$((skill_count + 1))
         fi
     done
@@ -1307,7 +1364,7 @@ sync_pi() {
                 continue
             fi
 
-            ln -sf "$skill_dir" "$link"
+            ln -sfh "$skill_dir" "$link"
             skill_count=$((skill_count + 1))
         fi
     done
@@ -1404,7 +1461,7 @@ sync_trae_cn() {
                         skipped=$((skipped + 1))
                         continue
                     fi
-                    ln -sf "$skill_dir" "$link"
+                    ln -sfh "$skill_dir" "$link"
                 fi
                 skill_count=$((skill_count + 1))
             fi
@@ -1456,7 +1513,7 @@ sync_kimi_code() {
                 # 非 symlink 的同名内容，跳过避免覆盖
                 continue
             fi
-            ln -sf "$skill_dir" "$link"
+            ln -sfh "$skill_dir" "$link"
         fi
     done
 
@@ -1708,7 +1765,8 @@ sync_antigravity_skills() {
                 # 用户同名自定义全局技能 — 优先用户版本
                 continue
             fi
-            ln -sf "$skill_dir" "$target"
+            # -h：同 sync_codex，裸 -sf 遇到目录 symlink 会解引用建嵌套链接
+            ln -sfh "$skill_dir" "$target"
             skill_count=$((skill_count + 1))
         fi
     done
@@ -1755,7 +1813,7 @@ EOF
             if is_project_only_skill "$skill_name"; then
                 continue
             fi
-            ln -sf "$skill_dir" "$plugin_dir/$version/skills/$skill_name"
+            ln -sfh "$skill_dir" "$plugin_dir/$version/skills/$skill_name"
         fi
     done
 
