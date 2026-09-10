@@ -7,108 +7,186 @@ description: 当开始非简单的功能开发、修 bug、重构或迁移，需
 
 # Unified Dev Flow
 
-## Overview
+A **policy-driven thin router**. It owns route selection, gate semantics,
+evidence freshness, resume rules, and delivery limits. It delegates domain work
+and execution loops to existing skills/controllers and never re-implements them.
 
-A **thin router**: selects and chains existing skills by name, never re-implements them.
-Alternatives and domain-specialist tables live in `references/alternatives.md`
-(load on demand, never by default). `WORKFLOW-MAP.md` at the repo root is the
-design doc behind this router — it is not installed with the skill.
+1. **Resume before classification.**
+2. **Read before committing.**
+3. **Intent selects the base route.**
+4. **Complexity determines planning depth.**
+5. **Risk determines assurance depth.**
+6. **One controller owns execution at a time.**
+7. **Any intersecting source change invalidates stale evidence.**
+8. **No completion claim without fresh evidence.**
+9. **Delivery never exceeds authorization.**
 
-The `speckit-*` names in the routes are external spec-kit commands, not skills
-shipped by this repository. Use them only when the project has spec-kit
-initialized (`.specify/`); otherwise use the local `speckit-chain` only when it
-is available in the target environment, or choose the documented light path.
+## R0 Read-only Recon
 
-1. **Gates before stages** — a failed gate stops progression until resolved.
-2. **Scale decides depth** — classify FIRST; only large tasks walk all 9 stages.
+Before Entry Gate or policy resolution, inspect repository/worktree state,
+project constraints, relevant code, test entry points, active workflow state,
+and available spec backends without writing files. `.codegraph/` is
+project-local and optional: use it first when it already exists and project
+instructions require it; never initialize it here.
 
-## Entry Gate (mandatory first output)
+## Resume Gate
 
-Before classifying or loading any stage skill, emit these 4 items. Missing any one = STOP.
-Each item feeds exactly one downstream gate — instantiate it for THIS task,
-never restate the rule (don't write "我将遵循 TDD"; write
-"失败测试：`tests/x_test.py::test_y`；验证命令：`pytest tests/x_test.py`"):
+Check existing `.superpowers/sdd/` ledgers (including nested `progress.md`),
+active specifications/changes, and controller-native state before creating a
+new route. Compare goal, branch/worktree, recorded base/head versus current
+HEAD, relevant task diff, and controller state:
 
-1. **理解和假设** → S1/S2: restate the problem in your own words, list uncertain
-   assumptions, and name the project constraint docs read (`RULES.md` /
-   `lessons-learned.md` / `AGENTS.md`, if present).
-2. **最小方案 + 文件范围** → S3: what changes and where (file list, new files prefixed `NEW:`); no code yet.
-3. **范围纪律** → S6: only directly-related code; side findings noted, never touched.
-4. **验证计划** → S5: failing test first + the exact commands whose output will prove it.
+- **FRESH**: no applicable recorded work; continue to Entry Gate.
+- **MATCH**: resume the recorded controller and stage, without reclassification.
+- **COMPATIBLE_DRIFT**: reconcile changed scope and evidence, then resume.
+- **CONFLICTING_DRIFT**: invalidate the stale plan/state and return to Entry Gate.
 
-First `Edit`/`Write` is mechanically gated (see `references/enforcement.md`):
-no well-formed `.omc/entry-gate-<sessionID>.md` on disk = tool call blocked.
-Micro-change writes the same 4 headers, one line each — no size exemption;
-keep ≥150 chars total (one substantive sentence per header) or the checker rejects it.
+Use existing native records; do not create a phase-two unified runtime or ledger.
 
-## Step 1 — Classify the task
+## Entry Gate (first commitment after recon)
 
-| Task type | Telltale signs | Route |
+For fresh or conflicting work, emit four task-specific sections before choosing
+a new route or writing implementation files. Resumed work must reconcile its
+existing gate with current evidence before further edits.
+
+1. **理解和假设** → S1/S2: state the problem, uncertain assumptions, project
+   constraint docs actually read, and authorized `delivery_target`.
+2. **最小方案 + 文件范围** → S3: describe the minimum change and list files
+   located through R0 evidence; prefix new files `NEW:`. No implementation yet.
+3. **范围纪律** → S6: map files to requested behavior, root-cause dependencies,
+   required tests, or migration/build artifacts; record unrelated findings.
+4. **验证计划** → S5: name the `proof_mode`, its baseline/reproduction or unmet
+   acceptance evidence, and the exact commands that will prove the change.
+
+Before gated edits, record the statement in `.omc/entry-gate-<sessionID>.md`
+using four `##` headings containing the labels above, a file-scope list, and
+≥150 characters total; see [enforcement.md](references/enforcement.md) for the
+existing checker contract. Micro work uses the same substantive four sections.
+Amend the gate before editing newly discovered root-cause dependencies.
+
+## Policy Resolution
+
+`Route = Resume + Intent + Complexity + Risk + Domain + Delivery`
+
+Read [policy-model.md](references/policy-model.md) for the detailed dimension,
+proof, scope, and adapter rules. Resolve the six axes once, then state the stage
+subset, `spec_backend`, controller (one or none), `proof_mode`,
+`assurance_level`, and `delivery_target` together as one route decision.
+
+| Intent | Base route |
+|---|---|
+| Bug | S0 → debug → S4 → S5 → S6 → S7(target) |
+| Feature | S0 → S1/S2/S3 (trim by complexity) → S4 → S5 → S6 → S7(target) |
+| Refactor | S0 → S3 → S4 → S5 → S6 → S7(target) |
+| Migration | S0 → S2/S3 → S4 → S5 → S6 → S7(target) |
+| Research | S1 → S3 → S8; stop without delivery |
+| Config | S0 → S4 → S5 → S6 as required by risk → S7(target) |
+
+Micro uses the Entry file list as its plan; small uses brief steps; medium
+requires spec/plan/tasks through one adapter; large adds plan review and
+checkpoints; intractable adds a playbook, audit trail, and escalation points.
+Complexity never lowers risk-driven assurance. **Bug + Micro + Security +
+Production** means light planning plus adversarial assurance plus production
+review, stopping at the authorized delivery target.
+
+## Controller Ownership Invariant
+
+At most one Controller owns the execution loop, retries, pause, and termination;
+controller-free routes are allowed. Controllers include `speckit-chain`, an
+OpenSpec change flow, `executing-plans`, `autopilot`, `ralph`, `team`, and
+`figure-it-out`. Never nest their main loops. A change of owner requires an
+explicit persisted handoff in existing controller-native records before the
+next owner starts.
+
+Stage Skills perform stages; Workers perform delegated units; Reviewers judge
+without editing reviewed source; Principles constrain all roles; Domain
+Specialists add method/evidence. Dispatch helpers such as
+`dispatching-parallel-agents`, and the local pstack `swarm`, are workers under
+the chosen owner. Local `swarm` is distinct from OMC's retired alias.
+
+## Spec Adapter Resolution
+
+Select one backend in order: safely resumable active backend → available
+explicit user choice → project configuration → sole initialized backend →
+`unified` light path. If both `openspec/` and `.specify/` exist with no resolved
+ownership, stop and request ownership before proceeding. Spec Kit and OpenSpec
+must never maintain the same request concurrently. External `speckit-*`
+commands require initialized Spec Kit; use only adapters/controllers available
+in the target environment. Adapter selection does not authorize nested loops.
+
+## Proof Before Change
+
+Keep RED-first for bugs (failing test or stable reproduction) and features
+(unmet acceptance test); TDD remains their default method. For other intents
+and domain overlays, select the proof mode from the policy reference before
+editing: characterization, dry-run/rollback, benchmark, security assertion,
+config validation, or visual/E2E evidence as applicable.
+
+Assurance is **deterministic** real checks, **adversarial** counterexamples, or
+**mutation** using a real runner on suitable core logic. Auth, permission,
+security, money, data integrity, critical state machines, and concurrency need
+at least adversarial evidence. Reviewer counter-cases are adversarial checks,
+not mutation testing; do not force mutation testing onto unsuitable changes.
+
+## Selected Stage Skills
+
+Load only the selected stages and needed specialists; each keeps its own
+procedures. Alternatives live in [alternatives.md](references/alternatives.md)
+(load on demand); the repo's `WORKFLOW-MAP.md` is not installed with this skill.
+
+| Stage | Delegate to | Exit when |
 |---|---|---|
-| 微改动 Micro-change | Single file, <50 lines, behavior clear | S4 direct → S5 (S3 compresses to the Entry-② file list, no formal plan; S0 skipped) |
-| Bug 修复 Bug fix | Reproducible failure, regression | S0 → debug chain → S4 (failing test first) → S5 → S6 (light) → S7 |
-| 纯重构 Refactor | Behavior-preserving, tech debt, modularity | S0 → S3 (`writing-plans`) → S4 (refactor + regression tests) → S5 → S6 → S7 |
-| 调研探路 Research/Spike | Tech evaluation, feasibility PoC, no ship | S1 → S3 (`research` / `prototype`) → S8 (file memo, stop) |
-| 小需求 Small feature | 1–3 files, clear scope | S0 → S4 (TDD) → S5 → S6 (light) → S7 |
-| 中型需求 Medium feature | Multi-module, needs step breakdown | S0 → `speckit-chain`（constitution→specify→plan→tasks→implement 全链）→ S5 → S6 → S7 |
-| 大型特性 Large feature | Cross-layer, high risk, vague requirements | S0 → `speckit-chain` 分段跑到 tasks 后暂停 → `architect` 会审 + `plan-eng-review`（多视角通过才进 S4；chain 系 one-shot、无中途注入点，不为此手工拆 S1–S4 其他部分）→ S4 → S5 → S6 → S7 → S8；追加门禁：`interrogate` + `production-risk-review` |
-| 复杂迁移 Intractable | Multi-week, needs audit trail | `figure-it-out` playbook mode |
+| S0 Prepare | `using-git-worktrees` as needed; `health` baseline before S4 | Workspace ready; resume resolved; applicable baseline captured |
+| S1 Intent | `brainstorming`; PRD: `parse-prd`; terms: `domain-modeling` | Scope confirmed; blocking assumptions resolved |
+| S2 Spec | Selected Spec Adapter; light: `to-spec` | Spec and governing principles named; ambiguity resolved |
+| S3 Plan | `writing-plans`; architecture: `architect`; large: `plan-eng-review`; design: `prototype` | Plan at required depth with verification, rejected alternatives, and principles check |
+| S4 Implement | Chosen owner; workers: `subagent-driven-development`; bugs/features: `test-driven-development`; DB: `create-migration` | Planned change and intent-appropriate tests implemented |
+| S5 Verify | `verification-before-completion`, `principle-prove-it-works`; E2E: `e2e-testing`; cross-layer: `self-verifying-tests` | Fresh command evidence meets selected proof and assurance requirements |
+| S6 Review | `ai-slop-cleaner` → `health` → `google-code-review`; spec-bearing: `code-review`; medium+: `interrogate`; risk specialists as applicable | MERGE_READY or explicit waiver within authorization |
+| S7 Deliver | `finishing-a-development-branch` / `ship` within target; unattended: `ai-release-engineer`; deployment: `deployment-patterns`, `canary` | Fulfill delivery target |
+| S8 Capture | `knowledge-capture`; large/intractable: `show-me-your-work` | Findings and required decision trail filed |
 
-## When NOT to use
+## Evidence and Review Gates
 
-- Trivial fix one skill covers (typo, rename, one-liner) — "just do it" means skip S0–S8, not the gate file: still write the 4-line micro entry-gate (≈30s), the mechanical hook blocks the first Edit otherwise.
-- Pure domain action with no code change (e.g. "make a PDF", "search docs") — route to domain specialist directly.
-- Already mid-flight in a structured flow (`speckit-chain`, active plan file) — finish it.
-- User named the exact workflow they want (e.g. 标讯项目点名 `blueprint-driven-development`).
-- User explicitly wants the lighter omc 4-phase flow (`standard-workflow`) — don't intercept.
+- No S4 without the required planning depth and first proof; micro/small
+  compress planning, never verification. Large plan review must pass first.
+- Every route reaching S6 requires `ai-slop-cleaner` and `google-code-review`;
+  spec-bearing routes add `code-review`. Compare `health` with baseline;
+  regression blocks; unavailable → `codehealth-mcp` or explicit waiver.
+- Independent reviewer receives spec/acceptance criteria, current diff, tests,
+  and fresh evidence, not merely implementer claims. Use a different model/lab
+  when available; otherwise require `interrogate`. Reviewer judges; S4 edits.
+- Any source or test change invalidates intersecting verification evidence
+  and review verdicts, including changes made during cleanup or review.
+  Reverify and re-review affected work before claiming completion.
+- NEEDS_FIXES follows **S6 → S4 → S5 → S6**. After three NEEDS_FIXES review
+  rounds, escalate to a human; do not bypass escalation by changing agents.
+- Live/production changes require `production-risk-review` before S7.
+  Unattended `autopilot`/`ralph` delivery also requires `ai-release-engineer`.
 
-## Step 2 — Walk only your route's stages
+## Delivery Limits
 
-Load stage skills for your route, plus any domain specialist (see Cross-cutting):
+`delivery_target` is an authorization ceiling: `patch` returns a proposed patch
+without worktree writes; `working_tree` edits/verifies locally; `commit` adds a
+local commit; `pr` permits push/PR creation; `merge` permits merge; `deploy`
+permits deployment after production gates. Default implementation requests to
+`working_tree`; higher targets require explicit authorization. S7 stops at the
+chosen target even when its delegated skill supports further delivery actions.
+The ceiling applies at every stage: for `patch`, keep recon/proof read-only and
+return the Entry Gate and proposed changes in the response without artifacts.
 
-| Stage | Question | Canonical skill | Exit when |
-|---|---|---|---|
-| S0 Prepare | Isolated workspace? Unfinished prior run? | 先查 `.superpowers/sdd/progress.md`：有未完成 ledger 则续跑、不重新分级；否则 `using-git-worktrees`（resume: `recall`）；首次 Edit/Write 由 entry-gate hook 机械拦截；S4 动手前首跑 `health` 留基线（`.omc/health-baseline-<session>.json`），供 S6 对照 | Workspace ready, breakpoint resumed or fresh, health baseline captured |
-| S1 Intent | Why do this? | `brainstorming`; PRD: `parse-prd`; product analysis: `product-analysis`; domain terms: `domain-modeling` | User confirms scope |
-| S2 Spec | What exactly? | `speckit-specify` → `speckit-clarify`; light path: `to-spec`; medium+: declare the governing-principles source — `speckit-constitution` when `.specify/` exists, else the Entry-① constraint docs act as constitution | Spec written & ambiguity resolved, principles source named |
-| S3 Plan | How, in what order? | `writing-plans`; architecture-first: `architect`; design validation: `prototype`; schema/query: `access-pattern-driven-data-modeling`; heavy path: `speckit-plan` → `speckit-tasks` | Plan with verification points + rejected alternatives (one line each: dropped, why) + constitution-violation check (medium+: no violation, or waivers listed) |
-| S4 Implement | Build it | `test-driven-development` via `subagent-driven-development` (fallback: `executing-plans`; unattended: `autopilot` / `ralph`; convergence: `speckit-converge`; DB scripts: `create-migration`) | Code + tests per plan |
-| S5 Verify | Prove it works | `verification-before-completion` (+ `principle-prove-it-works`); E2E: `e2e-testing`; adversarial (auth/data/security paths mandatory, else recommended): `self-verifying-tests` cross-layer + mutation bar — full bar on full-S6 routes only (every diff-level mutant killed: project runner if present, else reviewer-written counter-cases; light routes: reviewer counter-cases on changed lines only); surviving mutant = back to S4 (counts against the S6 fix-loop quota) | Real command evidence + zero surviving mutants (full-S6 routes) |
-| S6 Review | Find flaws | `ai-slop-cleaner` → `health` (external skill; 0–10 composite; drop vs S0 baseline blocks; unavailable → `codehealth-mcp` or explicit waiver) → `google-code-review` (mandatory, see Gates); spec-bearing routes add `code-review` for spec consistency; medium+ ends with `interrogate`; fix loop: verdict MERGE_READY / NEEDS_FIXES, max 3 S4-fix cycles then ESCALATE to human; reviewer judges only, never edits source (judge pattern); optional: live/prod `production-risk-review`, security `security-review`, impact `blast-radius`, architecture `architecture-defense` | MERGE_READY, or explicit human waiver |
-| S7 Ship | Integrate & deploy | `finishing-a-development-branch` → `ship`; unattended (`autopilot`/`ralph`): `ai-release-engineer`; migrations: `database-migrations`; deploy infra: `deployment-patterns`; post-deploy: `canary` | Merged, deployed |
-| S8 Capture | Get smarter | `knowledge-capture` (auto: `continuous-learning-v2`; review: `reflect`); large/intractable 追加 `show-me-your-work` 决策轨迹 | Knowledge filed (+ decision trail for large/intractable) |
+## Cross-cutting and Bypass
 
-Large-feature one-shot: `speckit-chain`.
-
-## Gates (hard stops)
-
-- **Entry → Step 1**: 4-item statement missing = STOP. First `Edit`/`Write` is
-  mechanically blocked until `.omc/entry-gate-<sessionID>.md` exists and is
-  well-formed (see `references/enforcement.md`).
-- **S1 → S2**: unclear intent blocks spec writing — clarify first.
-- **S3 → S4**: no written plan, no code — micro-change and small-feature fast paths exempt; S5 verification never exempt (mutation 全量仅完整 S6 路线，见 S5); large: plan review (`architect` + `plan-eng-review`) must pass.
-- **S5 → S6**: completion claims need real command evidence, not "it compiles".
-- **S6 进入即强制**：所有走到 S6 的路线（含 light）都必须过 `ai-slop-cleaner` + `google-code-review`，缺一不可跳过；有 spec 的路线加 `code-review` 做 spec 一致性。
-- **S6 收尾（中型及以上）**：评审通过后还需 `interrogate` 对抗性审查；light 路径（微改动/Bug/小需求）可选。
-- **S6 cross-model**：reviewer 与 implementer 异 lab（Claude 实现 → Codex/GPT 系评审，反之亦然）；`interrogate` 读环境变量 `PSTACK_REVIEW_MODELS`（逗号分隔模型名，如 `codex,gpt`），未配置则退化为同模型强制 `interrogate`；reviewer 只判不改（judge pattern）。
-- **S6 light 定义**（Bug/小需求路线）：免 `interrogate`、无 spec 时免 `code-review`、mutation 降为 reviewer changed-lines counter-cases；`ai-slop-cleaner` + `google-code-review` 不可免。
-- **S6 fix-loop（所有到 S6 的路线）**：NEEDS_FIXES 回 S4 修，feedback 文档是唯一的输入增量；同轮 NEEDS_FIXES 超 3 次转 ESCALATE，由人定夺（多半是 spec 模糊——回 S2 修 spec，不换 agent 硬试）；reviewer 只判不改，改代码的永远是 S4。
-- **S6 → S7 (production)**: PRs touching a live system MUST pass `production-risk-review`.
-- **S6 → S7 (unattended AI)**: `autopilot` / `ralph` 全自主产出必须过 `ai-release-engineer` gates；日常结对路线以 S7 `ship` 为准，不重复设卡。
-
-## Cross-cutting (enter at any stage)
-
-- **Domain specialists** (load alongside any route; pure non-code tasks run them alone): UI → `frontend-design` / `ui-ux-pro-max`; perf → `performance-tuning`; refactor → `clean-code-behavior-preserving-refactoring` / `entropy-reduction`; research → `research`; docs → `technical-writing` / `html-first-workflow`; API → `api-design`.
-- **Debug escalation**: `systematic-debugging` → `root-cause-hunter` → `paranoid-debugging`.
-- **Parallel dispatch** (subtasks strictly independent, no shared state): `dispatching-parallel-agents` for task fan-out; `team` for a shared task list; `swarm` for N workers, one report.
-- **Deep requirements**: `deep-interview` / `deep-dive` when S1 intent is highly ambiguous.
-- **Context & principles**: `strategic-compact`, `context-save`/`context-restore`; standing principles `principle-prove-it-works`, `principle-fix-root-causes`, `principle-sequence-verifiable-units`, `principle-guard-the-context-window`; remaining `principle-*` load on demand.
-
-## Common mistakes
-
-- Walking all 9 stages manually for a medium+ task — 中型及以上直接 `speckit-chain`，不要手工拆 S1–S4。
-- Re-classifying over an unfinished `.superpowers/sdd/` ledger instead of resuming it.
-- Skipping the S6 mandatory reviewers (`ai-slop-cleaner` / `google-code-review`) under time pressure; a waived gate must be explicit with the user.
-- Declaring work complete on "it compiles" without running real verification.
-- Forgetting to scan domain cross-cutting signals after scale classification.
-- Copying skill bodies into plans — reference by name, load on demand.
+- Domain overlays: UI → `frontend-design` / `ui-ux-pro-max`; API → `api-design`;
+  database → `access-pattern-driven-data-modeling` / `database-migrations`;
+  performance → `performance-tuning`; docs → `technical-writing` /
+  `html-first-workflow`; infrastructure → `deployment-patterns`.
+- Debug: `systematic-debugging` → `root-cause-hunter` → `paranoid-debugging`;
+  deep intent: `deep-interview` / `deep-dive`; refactor:
+  `clean-code-behavior-preserving-refactoring` / `entropy-reduction`.
+- Context/principles: `context-save` / `context-restore`, `strategic-compact`,
+  `principle-fix-root-causes`, `principle-sequence-verifiable-units`, and
+  `principle-guard-the-context-window`; load other principles on demand.
+- Pure non-code domain actions go directly to their specialist. Honor an
+  explicitly chosen workflow; safely resumable active work retains its owner.
+  Trivial edits can skip staged routing but still meet applicable write gates.
