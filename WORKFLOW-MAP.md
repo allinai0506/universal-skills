@@ -4,7 +4,7 @@
 > 编排到**一条统一生命周期**上。统一的是骨架（阶段 + 门禁），不统一的是肌肉（各技能实现）。
 >
 > 本文档是 `unified-dev-flow` 的仓库映射，2026-09-10 对齐 policy router。
-> 路由语义以该技能的 `SKILL.md` 与 `references/policy-model.md` 为准；本表保留各阶段的技能选择，不复制执行器内部流程。
+> 详细路由策略以该技能的 `references/policy-model.md` 为唯一权威；`SKILL.md` 是执行入口。本表保留各阶段的技能映射与中文速查，不复制执行器内部流程。
 >
 > **Canonical（首选）选取标准**：平台中立、描述与参考文档最完整、能与相邻阶段技能自然衔接。
 > 备选保留不删除，仅在特定条件下替换首选。
@@ -31,11 +31,13 @@ Policy Resolution = Resume + Intent + Complexity + Risk + Domain + Delivery
 - S1→S2：意图不清不得写规格（speckit clarify 精神）
 - S3→S4：先达到 Complexity 要求的规划深度并取得 Proof Before Change；micro 以 Entry 文件清单作压缩计划，small 用简短步骤，large 先通过计划评审。压缩规划不豁免验证。
 - S4→S5：声明完成前必须跑真实验证并出示证据（verification-before-completion / prove-it-works 精神）
-- S5 assurance：按风险选择 deterministic / adversarial / mutation。auth、permission、security、money、data integrity、关键状态机和 concurrency 至少 adversarial；mutation 仅用于有真实 runner 的合适核心逻辑。
+- S5 assurance：按风险选择 deterministic / adversarial / mutation。auth、permission、security、money、data_integrity、state_machine（关键状态机）和 concurrency 至少 adversarial；mutation 仅用于有真实 runner 的合适核心逻辑。
 - S5→S6→S7：live/production 变更在 S7 前过 `production-risk-review`；无人值守交付另需 `ai-release-engineer`。S7 仅履行已授权目标。
 - S6 fix-loop：reviewer 只判不改，NEEDS_FIXES 必走 **S6 → S4 → S5 → S6**；三轮 NEEDS_FIXES 后升级给人，不换代理重置计数。源码或测试变更使相交的验证证据和审查结论失效，修复后重新验证、审查。
 
 Controller Ownership Invariant：同一时刻至多一个 Controller 持有执行循环、重试、暂停和终止权，也可不选 Controller。`speckit-chain`、OpenSpec change flow、`executing-plans`、完整 `subagent-driven-development`、`autopilot`、`ralph`、`team`、`figure-it-out` 是候选 owner，主循环不得嵌套；切换前在已有原生记录中明确交接。Stage Skill 执行阶段，Worker 执行委派单元，Reviewer 独立判定，Principle 约束所有角色，Domain Specialist 提供领域方法与证据。
+
+选择或恢复前按 policy-model 的 Controller Eligibility 检查 delivery_target、三轮升级、证据失效和选定 adapter。完整 SDD 在 commit 以下不具资格，除非用户明确选择它并授权所需本地提交；此例外不授权 push/merge/deploy。未适配的 `speckit-chain` 不具资格；不得假定一句覆盖指令能停用其原生章程改写或一次执行全部任务的行为。能力不明时使用其他合格 owner、无 Controller 路线或明确记录交接。
 
 ---
 
@@ -66,7 +68,7 @@ Controller Ownership Invariant：同一时刻至多一个 Controller 持有执�
 |---|---|---|
 | **canonical** | 选定的 Spec Adapter（`unified` / `speckit` / `openspec`） | 一个需求只由一个 backend 持有；解析顺序见下文 |
 | Spec Kit 适配 | `speckit-specify` + `speckit-clarify` | 仅在选定 Spec Kit 且项目已初始化 `.specify/` 时使用 |
-| 轻量适配 | `to-spec` | Unified light path：对话综合成规格；仍满足对应 Complexity 的产物深度 |
+| 轻量适配 | Unified 本地 artifact；有条件使用 `to-spec` | 默认命名本地规格路径（沿用项目惯例或 `docs/specs/<task>.md`），兼容 working_tree；to-spec 仅在明确授权 issue 发布且 tracker/triage labels 已配置时具资格 |
 | 备选 | `spec` | 产出物直接是 issue/ticket、要与 GitHub 流衔接时 |
 | 配套 | constitution ensure/read-only | 确认并只读现有章程/项目原则；记录所依据文档，缺失时在选定 adapter 下补足必要约束，不因每次任务重复改写章程 |
 | 配套 | `domain-modeling` | 有领域建模诉求时沉淀统一语言 |
@@ -76,6 +78,8 @@ Controller Ownership Invariant：同一时刻至多一个 Controller 持有执�
 按顺序选择一个 backend：安全可续接的 active backend → 当前环境可用的用户明确选择 → 项目配置 → 唯一已初始化 backend → `unified` light path。如果 `openspec/` 与 `.specify/` 共存且仍无明确归属，停止并请求确认 ownership；二者不得同时维护同一需求。只调用目标环境中可用的 adapter/controller；外部 `speckit-*` 命令要求项目已初始化 Spec Kit，选择 adapter 不授权嵌套执行循环。
 
 constitution 的 `ensure/read-only` 表示先确认治理依据存在并读取；已有且适用的章程直接复用。未使用 Spec Kit 时，Entry Gate §1 实际读过的 AGENTS.md、架构约束等项目文档可作为 governing principles。缺失约束或真实冲突应明确记录并在授权范围内解决，不能将 ensure 解释为每个中型任务都运行 `speckit-constitution` 或重写项目治理。Medium 要求 spec/plan/tasks，通过选定 adapter 满足即可，不规定固定的 Spec Kit 命令链。
+
+Spec Kit 的可裁剪序列由 policy-model 定义：ensure/read-only constitution → specify → clarify → plan → checklist → tasks → analyze → implement slices → converge。章程只在缺失或用户明确改变项目原则时创建/更新；适用的 proof/review/planning 门禁不可裁掉。OpenSpec 解析目标项目已安装的 `core` 或 `expanded` profile，不写死命令数量；未知或不可用的必需能力应停止并报告。已选 backend 不可用时不静默替换，不隐式初始化或升级工具。
 
 ### S3 方案规划（怎么做）
 
@@ -121,16 +125,16 @@ constitution 的 `ensure/read-only` 表示先确认治理依据存在并读取�
 
 | 角色 | 技能 | 说明 |
 |---|---|---|
-| **canonical（门禁）** | `ai-slop-cleaner` → `health` → `google-code-review` | 所有到达 S6 的路线必须执行；health 相对 S4 前基线回退即拦，不可用则用 `codehealth-mcp` 或明确豁免；清理引发变更后重新验证 |
+| **canonical（门禁）** | `health` + `google-code-review` | 所有到达 S6 的路线必须执行；health 相对 S4 前基线回退即拦，不可用则用 `codehealth-mcp` 或明确豁免；清理引发变更后重新验证并审查 |
 | cross-model | `interrogate`（异 lab） | reviewer 与 implementer 异 lab（环境变量 `PSTACK_REVIEW_MODELS` / `pstack-models.mdc` 指定）；未配置退化同模型强制 `interrogate` |
 | fix-loop | NEEDS_FIXES / MERGE_READY / ESCALATE | reviewer 收到 spec/验收标准、当前 diff、tests 和新鲜证据，只判不改；NEEDS_FIXES 走 S6 → S4 → S5 → S6，三轮后 ESCALATE |
 | spec 一致性 | `code-review`（engineering） | 有 spec 的路线追加：规范轴 + spec 轴双线并行审查 |
-| 对抗审查 | `interrogate` / `cog-4d-audit` | medium+ 必须 `interrogate`；按风险追加隐藏缺陷挖掘 |
+| 对抗审查 | `interrogate` / `cog-4d-audit` | 按 adversarial assurance/risk 或独立 reviewer 不可用时的 fallback 选择 interrogate；复杂度本身不触发 |
 | 生产风险 | `production-risk-review` | live/production 变更在 S7 前追加，不替代普通 review |
 | 安全 | `security-review` / `gstack-cso` | 清单式安全审查 / OWASP+威胁建模 |
 | 影响面 | `blast-radius` | 改动前评估可能破坏什么 |
-| QA | `qa`（改）/ `qa-only`（只报不改） | 真机浏览器 QA |
-| AI 痕迹清理 | `ai-slop-cleaner` / `receiving-code-review` | 清理 AI slop；被审时不盲从反馈 |
+| QA | `qa-only`（只报不改） | 真机浏览器 QA；修复回 S4 |
+| AI 痕迹清理 | `ai-slop-cleaner --review` / `receiving-code-review` | 仅有实际 cleanup/slop/refactor 证据时选择 cleaner；审查保持 reviewer-only，只报不改，修复回 S4 |
 
 ### S7 交付集成（Fulfill delivery target）
 
@@ -148,10 +152,12 @@ constitution 的 `ensure/read-only` 表示先确认治理依据存在并读取�
 | 角色 | 技能 | 说明 |
 |---|---|---|
 | **canonical** | `knowledge-capture` | 按 docs/ 现有格式沉淀开发知识，归属明确 |
-| 决策轨迹 | `show-me-your-work` | large/intractable 必交：TSV 决策日志（决定了什么、为什么、证据在哪） |
+| 决策轨迹 | `show-me-your-work` | intractable 必须审计轨迹与 capture；无人值守 Controller 在适用时可选此技能 |
 | 自动提炼 | `continuous-learning-v2` | 会话观察 → 本能 → 技能演化（v2 优先于 v1） |
 | 回顾复盘 | `gstack-retro` | 周期性工程回顾 |
 | 元技能 | `learner` / `reflect` / `automate-me` | 把成功流程固化为新技能 |
+
+research 路线使用 S8；intractable 要求审计轨迹与 S8 capture。large 要求完整规格、评审、切片和 checkpoint，不自动追加 S8。patch 的 capture 保留在回复中，其余目标仅写授权的本地产物。
 
 ---
 
@@ -223,7 +229,7 @@ Complexity 只决定规划深度，不能降低 Risk 要求的 assurance。组�
 | 风险信号 | Assurance / 门禁 |
 |---|---|
 | 一般变更 | deterministic：相关真实验证命令 |
-| auth / permission / security / money / data_integrity / 关键状态机 / concurrency | 至少 adversarial：反例、边界、违规与状态转换证据 |
+| auth / permission / security / money / data_integrity / state_machine / concurrency | 至少 adversarial：反例、边界、违规与关键状态机转换证据 |
 | 适合 mutation 的核心逻辑且有真实 runner | 可选 mutation；运行真实测试，不以 reviewer 反例冒充 |
 | migration | dry-run、正向与回滚验证；涉及数据完整性时至少 adversarial |
 | production | S7 前追加 production-risk-review；其他风险所需 assurance 仍保留 |

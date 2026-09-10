@@ -82,27 +82,16 @@ subset, `spec_backend`, controller (one or none), `proof_mode`,
 | Research | S1 → S3 → S8; stop without delivery |
 | Config | S0 → S4 → S5 → S6 as required by risk → S7(target) |
 
-Micro uses the Entry file list as its plan; small uses brief steps; medium
-requires spec/plan/tasks through one adapter; large adds plan review and
-checkpoints; intractable adds a playbook, audit trail, and escalation points.
-Complexity never lowers risk-driven assurance. **Bug + Micro + Security +
+Before S4, insert complexity-required planning from the policy model; compose
+the base route with risk/domain overlays and the policy's capture selection.
+Complexity changes planning only. **Bug + Micro + Security +
 Production** means light planning plus adversarial assurance plus production
 review, stopping at the authorized delivery target.
 
-Compose the final stage subset from the base route and all overlays. Before any
-S4, insert the planning required by complexity: micro uses a compressed S3
-Entry plan, small uses brief S3 steps, medium uses S2/S3 spec-plan-tasks through
-the selected adapter, large adds S3 plan review and checkpoints, and
-intractable adds its playbook and escalation points. Large and intractable
-routes also select S8 capture. Capture must stay within the delivery ceiling:
-write its artifacts only when the target permits worktree changes, and keep
-patch-only capture in the response.
-
 Example: **Feature + Large + Security + API + Working Tree** composes
 S0 → S1 → S2(selected adapter) → S3(plan review/checkpoints) → S4(one
-controller + API specialist) → S5(adversarial) → S6 → S7(working tree) → S8.
-It stops with verified, reviewed code and the required decision trail in the
-working tree; it does not commit, push, merge, or deploy.
+eligible controller + API specialist) → S5(adversarial) → S6 → S7(working tree).
+It stops with verified, reviewed code and local planning/checkpoint artifacts.
 
 ## Controller Ownership Invariant
 
@@ -123,6 +112,11 @@ the chosen owner. Local `swarm` is distinct from OMC's retired alias.
 The router's gate and escalation requirements govern all delegation, including
 SDD: escalate after three NEEDS_FIXES rounds even if a delegated skill allows
 more retries.
+Before selection or resume, apply the policy model's Controller Eligibility
+checks: delivery ceiling, three-round escalation, evidence invalidation and
+selected adapter. Full SDD requires authorized local commits; an unadapted
+`speckit-chain` is ineligible. Missing capabilities require another eligible
+owner, a controller-free route, or an explicit persisted handoff.
 
 ## Spec Adapter Resolution
 
@@ -133,6 +127,10 @@ ownership, stop and request ownership before proceeding. Spec Kit and OpenSpec
 must never maintain the same request concurrently. External `speckit-*`
 commands require initialized Spec Kit; use only adapters/controllers available
 in the target environment. Adapter selection does not authorize nested loops.
+Apply the policy's artifact contract: Unified uses a named local path;
+`to-spec` requires authorized/configured issue publication. Spec Kit uses the
+trimmable sequence with constitution read-only by default; OpenSpec resolves
+the installed profile. Detailed procedures live only in the policy model.
 
 ## Proof Before Change
 
@@ -142,11 +140,8 @@ and domain overlays, select the proof mode from the policy reference before
 editing: characterization, dry-run/rollback, benchmark, security assertion,
 config validation, or visual/E2E evidence as applicable.
 
-Assurance is **deterministic** real checks, **adversarial** counterexamples, or
-**mutation** using a real runner on suitable core logic. Auth, permission,
-security, money, data integrity, critical state machines, and concurrency need
-at least adversarial evidence. Reviewer counter-cases are adversarial checks,
-not mutation testing; do not force mutation testing onto unsuitable changes.
+Apply the policy's risk-to-assurance mapping independently of complexity.
+Reviewer counter-cases are adversarial checks, not mutation testing.
 
 ## Selected Stage Skills
 
@@ -158,20 +153,23 @@ procedures. Alternatives live in [alternatives.md](references/alternatives.md)
 |---|---|---|
 | S0 Prepare | `using-git-worktrees` as needed; `health` baseline before S4 | Workspace ready; resume resolved; applicable baseline captured |
 | S1 Intent | `brainstorming`; PRD: `parse-prd`; terms: `domain-modeling` | Scope confirmed; blocking assumptions resolved |
-| S2 Spec | Selected Spec Adapter; light: `to-spec` | Spec and governing principles named; ambiguity resolved |
+| S2 Spec | Selected Spec Adapter and its eligible local/publishing path | Spec and governing principles named; ambiguity resolved |
 | S3 Plan | `writing-plans`; architecture: `architect`; large: `plan-eng-review`; design: `prototype` | Plan at required depth with verification, rejected alternatives, and principles check |
 | S4 Implement | Chosen controller and its delegated workers; bugs/features: `test-driven-development`; DB: `create-migration` | Planned change and intent-appropriate tests implemented |
 | S5 Verify | `verification-before-completion`, `principle-prove-it-works`; E2E: `e2e-testing`; cross-layer: `self-verifying-tests` | Fresh command evidence meets selected proof and assurance requirements |
-| S6 Review | `ai-slop-cleaner` → `health` → `google-code-review`; spec-bearing: `code-review`; medium+: `interrogate`; risk specialists as applicable | MERGE_READY or explicit waiver within authorization |
+| S6 Review | `health` + `google-code-review`; spec-bearing: `code-review`; conditional reviewers per policy Review Selection | MERGE_READY or explicit waiver within authorization |
 | S7 Deliver | `finishing-a-development-branch` / `ship` within target; unattended: `ai-release-engineer`; deployment: `deployment-patterns`, `canary` | Fulfill delivery target |
-| S8 Capture | `knowledge-capture`; large/intractable: `show-me-your-work` | Findings and required decision trail filed |
+| S8 Capture | `knowledge-capture`; `show-me-your-work` where selected by policy Capture Selection | Findings and required decision trail filed |
 
 ## Evidence and Review Gates
 
 - No S4 without the required planning depth and first proof; micro/small
   compress planning, never verification. Large plan review must pass first.
-- Every route reaching S6 requires `ai-slop-cleaner` and `google-code-review`;
-  spec-bearing routes add `code-review`. Compare `health` with baseline;
+- Every route reaching S6 requires `health` and `google-code-review`;
+  spec-bearing routes add `code-review`. Select `interrogate` for adversarial
+  assurance/risk or the independent-review fallback, never complexity alone.
+  Select `ai-slop-cleaner --review` only for actual cleanup/slop/refactor evidence;
+  keep reviewer-only posture. Compare `health` with baseline;
   regression blocks; unavailable → `codehealth-mcp` or explicit waiver.
 - Independent reviewer receives spec/acceptance criteria, current diff, tests,
   and fresh evidence, not merely implementer claims. Use a different model/lab
@@ -186,14 +184,11 @@ procedures. Alternatives live in [alternatives.md](references/alternatives.md)
 
 ## Delivery Limits
 
-`delivery_target` is an authorization ceiling: `patch` returns a proposed patch
-without worktree writes; `working_tree` edits/verifies locally; `commit` adds a
-local commit; `pr` permits push/PR creation; `merge` permits merge; `deploy`
-permits deployment after production gates. Default implementation requests to
-`working_tree`; higher targets require explicit authorization. S7 stops at the
-chosen target even when its delegated skill supports further delivery actions.
-The ceiling applies at every stage: for `patch`, keep recon/proof read-only and
-return the Entry Gate and proposed changes in the response without artifacts.
+Apply the policy model's Delivery Targets at every stage and to every delegate.
+Default implementation requests to `working_tree`; higher targets require
+explicit authorization. S7 stops at the authorized ceiling. For `patch`, keep
+recon/proof read-only and return the Entry Gate and proposed changes in the
+response without artifacts.
 
 ## Cross-cutting and Bypass
 

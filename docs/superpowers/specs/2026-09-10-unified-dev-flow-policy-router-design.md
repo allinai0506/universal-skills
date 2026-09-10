@@ -109,7 +109,7 @@ Router 生成的是一份组合决策，而不是单选任务类型：
 resume: fresh | match | compatible_drift | conflicting_drift
 intent: bug | feature | refactor | migration | research | config
 complexity: micro | small | medium | large | intractable
-risk: [auth, permission, security, money, data_integrity, production, concurrency, migration]
+risk: [auth, permission, security, money, data_integrity, production, state_machine, concurrency, migration]
 domain: [ui, api, database, performance, docs, infrastructure]
 delivery_target: patch | working_tree | commit | pr | merge | deploy
 spec_backend: unified | speckit | openspec

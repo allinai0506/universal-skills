@@ -1,6 +1,6 @@
 # Unified Dev Flow Policy Model
 
-This reference defines routing policy only. The router selects existing stage
+This reference is the authoritative source for detailed routing policy. The router selects existing stage
 skills and adapters; it does not reproduce their implementation procedures or
 create a phase-two runtime, ledger, or execution backend.
 
@@ -50,7 +50,7 @@ Policy is a composition of these exact values:
 resume: fresh | match | compatible_drift | conflicting_drift
 intent: bug | feature | refactor | migration | research | config
 complexity: micro | small | medium | large | intractable
-risk: [auth, permission, security, money, data_integrity, production, concurrency, migration]
+risk: [auth, permission, security, money, data_integrity, production, state_machine, concurrency, migration]
 domain: [ui, api, database, performance, docs, infrastructure]
 delivery_target: patch | working_tree | commit | pr | merge | deploy
 spec_backend: unified | speckit | openspec
@@ -87,7 +87,21 @@ Domain and risk signals are overlays, not mutually exclusive intents.
 | large | Require complete specification, plan review, task slices, and checkpoints. |
 | intractable | Require a playbook, audit trail, and human escalation points. |
 
-Complexity never reduces the assurance level required by risk.
+Before S4, insert the planning required by the selected complexity into the
+base route. Complexity changes planning depth only; it never selects assurance
+or adversarial reviewers. Risk independently determines assurance.
+
+## Capture Selection
+
+| Route condition | S8 requirement |
+|---|---|
+| research | Select S8 to capture findings; stop without delivery. |
+| intractable | Select S8 for the required audit trail and decision capture. |
+| large | Full spec, plan review, slices, and checkpoints; no automatic S8. |
+| unattended | May select S8 with `show-me-your-work` when decision capture is applicable. |
+
+Capture respects the delivery ceiling: `patch` keeps findings and the decision
+trail in the response; other targets may use authorized local artifacts.
 
 ## Risk and Assurance Depth
 
@@ -99,8 +113,19 @@ Complexity never reduces the assurance level required by risk.
 - **mutation**: run real mutation testing only for suitable core logic when a
   real runner is available.
 
-Auth, permission, security, money, data integrity, critical state machines,
-and concurrency require at least adversarial proof. Do not manufacture mutation
+| Risk signal | Required assurance or gate |
+|---|---|
+| auth | At least adversarial proof. |
+| permission | At least adversarial proof. |
+| security | At least adversarial proof. |
+| money | At least adversarial proof. |
+| data_integrity | At least adversarial proof. |
+| state_machine | Critical state machines require at least adversarial proof. |
+| concurrency | At least adversarial proof. |
+| migration | Dry-run, forward and rollback validation; data_integrity also requires adversarial proof. |
+| production | `production-risk-review` before S7, retaining assurance required by other risks. |
+
+Do not manufacture mutation
 requirements for CSS, layout, generated code, configuration, or migration glue;
 use applicable deterministic or adversarial evidence instead.
 
@@ -134,6 +159,11 @@ Delivery targets are increasing authorization ceilings:
 Default to `working_tree` when the user asks to fix or implement without a
 specific delivery authorization. Any higher target requires explicit user
 authorization. S7 means “fulfill delivery target,” not an automatic deployment.
+The ceiling applies at every stage and to every delegate, including hooks and
+capture. For `patch`, recon/proof remain read-only; return the Entry Gate,
+specification, and proposed patch in the response without writing artifacts.
+Issue-tracker publication requires separate explicit authorization and configured
+tracker access; a local delivery target does not authorize publication.
 
 ## Controller Roles
 
@@ -155,6 +185,35 @@ OMC's retired `swarm` alias is distinct from the local pstack `swarm` worker
 skill. This policy does not delete the local skill or treat the retired alias as
 the local fan-out worker tool.
 
+## Controller Eligibility
+
+Before selecting or resuming a Controller, inspect its installed native
+contract and any adapter/handoff against all of these capabilities:
+
+| Capability | Required behavior |
+|---|---|
+| delivery_target | Honor the ceiling at every stage, including native commits and hooks; never push, merge, or deploy above it. |
+| escalation | Escalate after three NEEDS_FIXES rounds, even if the native loop allows more; changing agents does not reset the count. |
+| evidence | Invalidate intersecting verification evidence and review verdicts after source or test changes; reverify and re-review. |
+| spec_backend | Honor the selected adapter, its artifacts, constitution restrictions, slices and convergence. |
+
+Full `subagent-driven-development` requires local commits for implementation
+and review packages. It is not eligible below `commit` unless the user explicitly
+selects full SDD and authorizes its required local commits. Record that narrow
+commit exception in the route; it grants no push, merge, or deploy authority.
+Selecting full SDD alone does not authorize the commits.
+
+`speckit-chain` is only a candidate when a verified compatible adapter/handoff
+can honor this contract. Its current unconditional constitution rewrite and
+one-shot implementation behavior are incompatible with the selected adapter's
+read-only constitution and sliced execution requirements. Do not select the
+unadapted chain or assume a prose instruction disables its native behavior.
+
+If capabilities are missing or unverified, reject that Controller; choose a
+compatible controller-free route or another eligible owner. Safely resumed
+work retains ownership only after these checks; otherwise pause for an explicit
+persisted handoff in existing controller-native records. Never nest main loops.
+
 ## Spec Adapter Resolution
 
 Choose exactly one spec backend in this order:
@@ -167,8 +226,51 @@ Choose exactly one spec backend in this order:
    coexist without explicit ownership.
 6. Otherwise select the Unified Dev Flow light path (`unified`).
 
-Spec Kit and OpenSpec never maintain the same request concurrently. This policy
-names adapters only; it does not prescribe their internal commands.
+Spec Kit and OpenSpec never maintain the same request concurrently. If a chosen
+backend or required capability is unavailable, stop and report the mismatch;
+do not silently switch a user's explicit choice or initialize tools. A resolved
+backend still must meet the following artifact contract within authorization.
+
+### Unified Light Adapter
+
+Use a local specification artifact compatible with `working_tree`: follow the
+project's existing docs convention, or use `docs/specs/<task>.md` when none
+exists. Name the path in the route. Medium requires spec/plan/tasks, which may
+be sections in that artifact or linked local files; large requires the complete
+specification and reviewed slices/checkpoints. For `patch`, return the proposed
+artifact content and path in the response without writing it.
+
+`to-spec` publishes to the project issue tracker as part of its native procedure.
+It is eligible only when issue-tracker publication is explicitly authorized and
+tracker access plus triage labels are configured. Otherwise use the local
+artifact path; do not treat `to-spec` as a local-only writer.
+
+### Spec Kit Adapter
+
+Require initialized `.specify/` and available installed commands. Expose this
+trimmable sequence, retaining the artifacts and gates required by the route:
+
+`ensure/read-only constitution → specify → clarify → plan → checklist → tasks → analyze → implement slices → converge`
+
+Read existing constitution by default. Create or update constitution only when
+missing or when the user explicitly changes project principles, within delivery
+authorization. Perceived age or a routine task is not permission to rewrite it.
+Trim optional stages according to scope and unresolved ambiguity, recording the
+reason; preserve selected proof, review and planning requirements. Large work
+uses slices and checkpoints under the same eligible Controller. Convergence
+checks the implementation against spec/plan/tasks; repairs return through S4,
+fresh S5 and S6 within the router's three-round escalation limit. Inspect native
+commands and hooks before dispatch; unavailable required stages need a verified
+compatible handoff or a reported blocker, not an invented command.
+
+### OpenSpec Adapter
+
+Resolve the installed `core` or `expanded` profile from target-project commands
+and configuration; do not hard-code command counts. Read the installed profile's
+artifact dependencies and available change flow, then select the stages needed
+for the route's specification, planning, verification and capture requirements.
+An unknown or unavailable profile is a blocker until resolved; do not install,
+change profiles, or invent missing commands implicitly.
 
 ## Proof Before Change
 
@@ -185,6 +287,23 @@ names adapters only; it does not prescribe their internal commands.
 
 TDD remains the default implementation method for bugs and features, but no
 single proof form is forced onto every intent.
+
+## Review Selection
+
+| Condition | S6 selection |
+|---|---|
+| ordinary | `health` against the S4 baseline and `google-code-review`. |
+| spec-bearing | Add `code-review` for spec consistency. |
+| adversarial assurance/risk | Add `interrogate` and applicable risk specialists. |
+| independent reviewer unavailable | If a different-model/lab reviewer is unavailable, require `interrogate` as the fallback. |
+| cleanup evidence | Select `ai-slop-cleaner --review` only with actual cleanup/slop/refactor evidence such as duplication, dead code or needless wrappers; use reviewer-only posture after a cleanup draft. |
+
+Complexity alone never selects `interrogate`. Generic refactoring without
+simplification/slop evidence does not select `ai-slop-cleaner`. Any S6 reviewer
+reports repairs to S4 without editing reviewed source. Health regression blocks;
+if unavailable, use `codehealth-mcp` or an explicit waiver. Live/production
+changes require `production-risk-review` before S7; unattended delivery also
+requires `ai-release-engineer`.
 
 ## Scope Mapping
 

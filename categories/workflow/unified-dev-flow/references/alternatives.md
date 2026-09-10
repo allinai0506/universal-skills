@@ -4,6 +4,10 @@ On-demand reference for the `unified-dev-flow` router. The canonical
 stage→skill mapping lives in `SKILL.md`; this file only lists **conditional
 stage selections and specialist tables** that were compressed out of the main
 file. Load it only when a route condition needs more detail.
+Detailed eligibility and routing rules are authoritative in
+[policy-model.md](policy-model.md). This installed reference is part of the
+active static contract because its conditional dispatch advice can change
+delegate selection; checks prevent it from bypassing the policy's gates.
 
 Design rationale lives in `WORKFLOW-MAP.md` at the repo root (repo checkout
 only, not installed with the skill).
@@ -23,11 +27,12 @@ work or evidence to that owner; they do not take ownership implicitly.
   `deep-interview` (extreme ambiguity, Socratic probing).
 - S2: use the selected Spec Adapter; `spec` fits when that adapter's output is
   issues/tickets for a GitHub flow; `domain-modeling` adds ubiquitous language.
-  Constitution handling is ensure/read-only: identify and read the applicable
-  governance first. Use `speckit-constitution` only when Spec Kit is the
-  selected adapter and missing or outdated governance must be created or
-  amended within the delivery authorization; never run or rewrite it
-  unconditionally for each task.
+  Unified uses a named local artifact; `to-spec` is eligible only with explicit
+  issue publication authorization and configured tracker/triage labels.
+  Constitution handling is ensure/read-only: create/update only when missing
+  or when the user explicitly changes project principles, within delivery
+  authorization. Apply the policy's Spec Kit sequence and installed OpenSpec
+  `core`/`expanded` profile resolution.
 - S3: under a selected Spec Kit adapter, `speckit-plan` + `speckit-tasks` can
   provide the heavy doc pipeline;
   `plan-eng-review` / `plan-ceo-review` / `plan-design-review`
@@ -39,7 +44,10 @@ work or evidence to that owner; they do not take ownership implicitly.
   tickets as a Stage Skill under the selected owner. `executing-plans` may be
   selected as the sole Controller in a no-subagent environment. `autopilot` or
   `ralph` may be selected as the sole Controller for an unattended long run;
-  the route also selects the required S8 `show-me-your-work` capture. Do not
+  the route may select S8 `show-me-your-work` capture where applicable. Apply
+  Controller Eligibility before selection: delivery ceiling, three-round
+  escalation, evidence invalidation and selected adapter. Full SDD needs
+  authorized local commits; unadapted `speckit-chain` is ineligible. Do not
   introduce any of them as an ad-hoc replacement while another Controller owns
   the route.
 - S5: `self-verifying-tests` is now a canonical adversarial branch (see SKILL.md),
@@ -51,15 +59,21 @@ work or evidence to that owner; they do not take ownership implicitly.
 - S6: `cog-4d-audit` (CI-green but uneasy); `health` is now canonical
   (see SKILL.md S6), `codehealth-mcp` stays the alt when a live structural
   score via MCP is preferred over the CLI dashboard; `blast-radius` before the change
-  (impact); `cso` (OWASP + threat model); `qa` (fix) / `qa-only` (report
-  only); `receiving-code-review` (when being reviewed: verify feedback,
+  (impact); `cso` (OWASP + threat model); `qa-only` (report only; fixes return
+  to S4); `receiving-code-review` (when being reviewed: verify feedback,
   don't blindly obey); **cross-model gate** — reviewer from different lab
   than implementer (env `PSTACK_REVIEW_MODELS` or `~/.config/opencode/skills/pstack-models.mdc`,
-  missing → same-model `interrogate` fallback).
+  missing → same-model `interrogate` fallback). Select `interrogate` for
+  adversarial assurance/risk or that fallback, never complexity alone.
+  `ai-slop-cleaner --review` requires actual cleanup/slop/refactor evidence and
+  reviewer-only posture; ordinary S6 uses `health` + `google-code-review`,
+  adding `code-review` for spec-bearing routes.
 - S7: `release` (repo-rule-driven release); `deployment-patterns` /
   `docker-patterns` / `database-migrations` / project deploys
   (e.g. `xiyu-server-deploy`).
-- S8: `continuous-learning-v2` (auto distill); `retro` (periodic review);
+- S8: research captures findings; intractable requires audit trail/capture;
+  large does not automatically select S8. See policy Capture Selection.
+  `continuous-learning-v2` (auto distill); `retro` (periodic review);
   `learner` / `automate-me` (freeze success into a skill).
 
 ## Domain specialists (full table)
