@@ -3,7 +3,8 @@
 > 目标：把 speckit / gstack / ohmyclaude(omc) / pstack(poteto) / superpowers / matt pocock 六套范式的精华，
 > 编排到**一条统一生命周期**上。统一的是骨架（阶段 + 门禁），不统一的是肌肉（各技能实现）。
 >
-> 本文档是未来 router 元技能的数据基础。生成于 2026-08-22，基于 SKILLS-INDEX.md（236 技能）+ 核心流程技能精读。
+> 本文档是 `unified-dev-flow` 的仓库映射，2026-09-10 对齐 policy router。
+> 路由语义以该技能的 `SKILL.md` 与 `references/policy-model.md` 为准；本表保留各阶段的技能选择，不复制执行器内部流程。
 >
 > **Canonical（首选）选取标准**：平台中立、描述与参考文档最完整、能与相邻阶段技能自然衔接。
 > 备选保留不删除，仅在特定条件下替换首选。
@@ -13,21 +14,28 @@
 ## 一、生命周期总览
 
 ```
-S0 准备 → S1 意图 → S2 规格 → S3 规划 → S4 实现 → S5 验证 → S6 审查 → S7 交付 → S8 沉淀
- worktree  为什么做   做什么    怎么做    动手做    证明对    挑毛病    上上线    变聪明
+R0 → Resume Gate → Entry Gate → Policy Resolution → Controller → selected S0–S8 stages
+Policy Resolution = Resume + Intent + Complexity + Risk + Domain + Delivery
+
+可选阶段：S0 准备 / S1 意图 / S2 规格 / S3 规划 / S4 实现 / S5 验证 / S6 审查 / S7 交付 / S8 沉淀
 
 横切关注点（任何阶段可介入）：
   🎯 领域专项   🔍 调试诊断   🧠 上下文管理   📐 工程原则约束（pstack principle-*）
 ```
 
 **门禁规则**（借鉴各范式之长）：
-- Entry→Step 1：无 4 项入口声明不动代码；首次 Edit/Write 由 hook 机械拦截（契约见 unified-dev-flow `references/enforcement.md`）
+
+- R0 Read-only Recon：先读项目约束、代码、工作区、验证入口和已有状态；shell/read 工具可用，侦察阶段不写文件。已有 `.codegraph/` 时按项目规则使用，不创建索引。
+- Resume Gate：分类前比较目标、branch/worktree、记录的 base/head、当前 HEAD、相关 diff 与 controller 状态；FRESH 进 Entry，MATCH 原位续接，COMPATIBLE_DRIFT 先协调证据再续接，CONFLICTING_DRIFT 使冲突状态失效并回 Entry。沿用原生记录，不引入新 runtime/ledger。
+- Entry Gate：R0 后提交 4 项入口声明，记录理解、最小文件范围、范围纪律、`proof_mode` 与基线/复现/未满足验收及精确验证命令；首次 Edit/Write 由 hook 机械拦截（契约见 unified-dev-flow `references/enforcement.md`）。续接工作先协调已有 gate；patch 目标仅在回复中提供声明与补丁。
 - S1→S2：意图不清不得写规格（speckit clarify 精神）
-- S3→S4：无书面计划不动代码，微改动 / 小需求 fast path 豁免（S5 验证永不豁免）
+- S3→S4：先达到 Complexity 要求的规划深度并取得 Proof Before Change；micro 以 Entry 文件清单作压缩计划，small 用简短步骤，large 先通过计划评审。压缩规划不豁免验证。
 - S4→S5：声明完成前必须跑真实验证并出示证据（verification-before-completion / prove-it-works 精神）
-- S5 对抗门：auth/数据/安全路径必过跨层自验证 + diff 级 mutation 全杀（self-verifying-tests；存活 mutant = NEEDS_FIXES 进 S6 循环）
-- S5→S6→S7：已上线系统的 PR 必须过生产风险审计（production-risk-review）
-- S6 fix-loop：reviewer 只判不改（judge pattern），NEEDS_FIXES 回 S4（feedback 文档为唯一输入增量），超 3 次转 ESCALATE 由人定夺（回 S2 修 spec）
+- S5 assurance：按风险选择 deterministic / adversarial / mutation。auth、permission、security、money、data integrity、关键状态机和 concurrency 至少 adversarial；mutation 仅用于有真实 runner 的合适核心逻辑。
+- S5→S6→S7：live/production 变更在 S7 前过 `production-risk-review`；无人值守交付另需 `ai-release-engineer`。S7 仅履行已授权目标。
+- S6 fix-loop：reviewer 只判不改，NEEDS_FIXES 必走 **S6 → S4 → S5 → S6**；三轮 NEEDS_FIXES 后升级给人，不换代理重置计数。源码或测试变更使相交的验证证据和审查结论失效，修复后重新验证、审查。
+
+Controller Ownership Invariant：同一时刻至多一个 Controller 持有执行循环、重试、暂停和终止权，也可不选 Controller。`speckit-chain`、OpenSpec change flow、`executing-plans`、完整 `subagent-driven-development`、`autopilot`、`ralph`、`team`、`figure-it-out` 是候选 owner，主循环不得嵌套；切换前在已有原生记录中明确交接。Stage Skill 执行阶段，Worker 执行委派单元，Reviewer 独立判定，Principle 约束所有角色，Domain Specialist 提供领域方法与证据。
 
 ---
 
@@ -41,6 +49,7 @@ S0 准备 → S1 意图 → S2 规格 → S3 规划 → S4 实现 → S5 验证 
 | 备选 | `project-session-manager` | 多工单/多 worktree 并行场景升级替代 |
 | 备选 | `recall` | 接续之前的工作时先重建上下文 |
 | 辅助 | `deepinit` | 新代码库首次进入时生成分层 AGENTS.md |
+| 验证基线 | `health` | S4 前取得适用基线，供 S6 比较 |
 
 ### S1 意图澄清（为什么做）
 
@@ -55,11 +64,18 @@ S0 准备 → S1 意图 → S2 规格 → S3 规划 → S4 实现 → S5 验证 
 
 | 角色 | 技能 | 说明 |
 |---|---|---|
-| **canonical** | `speckit-specify` + `speckit-clarify` | 最严谨：章程支撑 + 定向澄清；大型特性必用 |
-| 备选 | `to-spec` | 中型任务轻量路线：对话直接综合成规格并入 tracker |
+| **canonical** | 选定的 Spec Adapter（`unified` / `speckit` / `openspec`） | 一个需求只由一个 backend 持有；解析顺序见下文 |
+| Spec Kit 适配 | `speckit-specify` + `speckit-clarify` | 仅在选定 Spec Kit 且项目已初始化 `.specify/` 时使用 |
+| 轻量适配 | `to-spec` | Unified light path：对话综合成规格；仍满足对应 Complexity 的产物深度 |
 | 备选 | `spec` | 产出物直接是 issue/ticket、要与 GitHub 流衔接时 |
-| 配套 | `speckit-constitution` | 项目级章程，**中型以上必选**（无 `.specify/` 则 Entry Gate §1 约束文档作章程） |
+| 配套 | constitution ensure/read-only | 确认并只读现有章程/项目原则；记录所依据文档，缺失时在选定 adapter 下补足必要约束，不因每次任务重复改写章程 |
 | 配套 | `domain-modeling` | 有领域建模诉求时沉淀统一语言 |
+
+#### Spec Adapter Resolution
+
+按顺序选择一个 backend：安全可续接的 active backend → 当前环境可用的用户明确选择 → 项目配置 → 唯一已初始化 backend → `unified` light path。如果 `openspec/` 与 `.specify/` 共存且仍无明确归属，停止并请求确认 ownership；二者不得同时维护同一需求。只调用目标环境中可用的 adapter/controller；外部 `speckit-*` 命令要求项目已初始化 Spec Kit，选择 adapter 不授权嵌套执行循环。
+
+constitution 的 `ensure/read-only` 表示先确认治理依据存在并读取；已有且适用的章程直接复用。未使用 Spec Kit 时，Entry Gate §1 实际读过的 AGENTS.md、架构约束等项目文档可作为 governing principles。缺失约束或真实冲突应明确记录并在授权范围内解决，不能将 ensure 解释为每个中型任务都运行 `speckit-constitution` 或重写项目治理。Medium 要求 spec/plan/tasks，通过选定 adapter 满足即可，不规定固定的 Spec Kit 命令链。
 
 ### S3 方案规划（怎么做）
 
@@ -67,23 +83,25 @@ S0 准备 → S1 意图 → S2 规格 → S3 规划 → S4 实现 → S5 验证 
 |---|---|---|
 | **canonical** | `writing-plans` | 动代码前写实现计划，bite-sized 步骤 + 预埋验证点 |
 | 架构先行 | `architect`（pstack） | 先勾勒类型签名与模块结构再填实现 |
-| 大型加码 | `speckit-plan` + `speckit-tasks` | 文档流水线式计划 + 有序任务清单 |
+| 规格计划 | 选定 Spec Adapter；Spec Kit 下为 `speckit-plan` + `speckit-tasks` | medium+ 要求 spec/plan/tasks，large 增加评审和检查点 |
 | 计划评审 | `plan-eng-review` / `plan-ceo-review` / `plan-design-review` | 大型特性必过（门禁），其余可选 |
-| 一致性检查 | `speckit-analyze` / `speckit-checklist` | 规格-计划-任务交叉校验 |
+| 一致性检查 | 选定 adapter 的检查；Spec Kit 下为 `speckit-analyze` / `speckit-checklist` | 规格-计划-任务交叉校验 |
 | 章程违规检查 | （内置） | 中型以上：plan 无 constitution 违规，或豁免列表已列出（S3 exit 门禁） |
 | 原型探路 | `prototype` / `arena` / `principle-exhaust-the-design-space` | 无先例的交互或设计决策，先对比再定案 |
 | 数据建模 | `access-pattern-driven-data-modeling` | 涉及建表/改表、加索引、列表/搜索/报表查询路径、反规范化或读模型设计时；从访问模式倒推 schema，每个索引对应具体查询 |
 
 ### S4 实现执行（动手做）
 
+**Proof Before Change**：bug 先有失败测试或稳定复现，feature 先有未满足的验收测试，二者默认 TDD；refactor 先取得 characterization/regression 基线，migration 先准备 dry-run 与正向/回滚验证，performance 先有 benchmark，security 先有复现或安全断言，config 使用 schema/lint/load 验证，UI 使用 visual/E2E 验收证据。
+
 | 角色 | 技能 | 说明 |
 |---|---|---|
-| **canonical（方法论）** | `coding/test-driven-development` | RED→GREEN→REFACTOR 主循环，附 writing-good-tests.md |
-| canonical（编排） | `subagent-driven-development` | 有子代理能力时的默认执行引擎（executing-plans 自述优先推荐它） |
-| 备选（编排） | `executing-plans` | 无子代理环境下的顺序执行 + 检查点 |
-| 并行加速 | `dispatching-parallel-agents` / `swarm` / `team` / `ultrawork` | 任务相互独立时才并行，共享状态禁止 |
+| **canonical（bug/feature 方法论）** | `coding/test-driven-development` | RED→GREEN→REFACTOR；其他 intent 使用选定 proof_mode |
+| Controller 候选 | `subagent-driven-development` / `executing-plans` | 完整 SDD 或顺序执行必须被选为唯一 owner，或先接受明确交接 |
+| Worker 分派 | `dispatching-parallel-agents` / 本地 pstack `swarm` | 独立任务才可并行，由已选 Controller 管理；本地 swarm 与 OMC 已退役别名不同 |
+| Controller 候选 | `team` | 选为唯一 owner 后管理多 worker；不能嵌入另一 Controller 的主循环 |
 | 直改路线 | `implement`（matt pocock） | 已有规格/ticket 的中小型实现 |
-| 无人值守 | `autopilot` / `ralph` / `figure-it-out` | 夜间/长任务自治模式，需配 show-me-your-work 决策日志 |
+| 无人值守 Controller 候选 | `autopilot` / `ralph` / `figure-it-out` | 唯一 owner；按复杂度记录决策轨迹，交付受 delivery_target 与发布门禁约束 |
 | TDD 去重 | ~~`tdd-workflow`~~ `engineering/tdd` `pstack/tdd` | 见「五、冗余去重清单」 |
 
 ### S5 验证测试（证明对）
@@ -92,31 +110,35 @@ S0 准备 → S1 意图 → S2 规格 → S3 规划 → S4 实现 → S5 验证 
 |---|---|---|
 | **canonical** | `verification-before-completion` | 完成声明前必须跑命令、看输出、留证据 |
 | 原则兜底 | `principle-prove-it-works` | 对真实产物验证，拒绝"编译通过就算完" |
-| 对抗测试 | `self-verifying-tests` + mutation bar | 跨层 UI/DB/doc 一致性；auth/数据/安全路径强制，diff 级 mutant 全杀，存活即 NEEDS_FIXES |
+| deterministic | 相关 test/build/lint/schema/dry-run | 运行真实检查，证据必须对应当前变更 |
+| adversarial | `self-verifying-tests` 与领域反例 | 授权违规、边界、跨层一致性、攻击复现和状态转换；高风险至少达到此级别 |
+| mutation | 合适核心逻辑的真实 mutation runner | 按选定 assurance 判定；reviewer 反例不是 mutation，不强加于 CSS/layout、生成代码、配置或迁移胶水 |
 | 测试专项 | `e2e-testing` / `cpp-testing` / `eval-harness` | 按层按语言选用 |
-| 循环验证 | `ultraqa` | 测试-修复-再测直至目标达成 |
+| 验证与修复 | 已选 Controller 管理 | 验证发现问题回 S4 修改，再取得新证据；不另启嵌套主循环 |
 | 项目级 | `create-verification-skill` + `maintain-verification-skill` | 把"这个项目怎么验"固化成技能 |
 
 ### S6 审查质检（挑毛病）
 
 | 角色 | 技能 | 说明 |
 |---|---|---|
-| **canonical（门禁）** | `ai-slop-cleaner` → `health` → `google-code-review` | router S6 强制三步：先清 slop，再跑 health 0–10 综合分（相对改前基线下降即拦），再正式评审 |
+| **canonical（门禁）** | `ai-slop-cleaner` → `health` → `google-code-review` | 所有到达 S6 的路线必须执行；health 相对 S4 前基线回退即拦，不可用则用 `codehealth-mcp` 或明确豁免；清理引发变更后重新验证 |
 | cross-model | `interrogate`（异 lab） | reviewer 与 implementer 异 lab（环境变量 `PSTACK_REVIEW_MODELS` / `pstack-models.mdc` 指定）；未配置退化同模型强制 `interrogate` |
-| fix-loop | NEEDS_FIXES / MERGE_READY / ESCALATE | reviewer 只判不改，NEEDS_FIXES 回 S4（feedback 唯一增量），超 3 次 ESCALATE 由人定夺 |
+| fix-loop | NEEDS_FIXES / MERGE_READY / ESCALATE | reviewer 收到 spec/验收标准、当前 diff、tests 和新鲜证据，只判不改；NEEDS_FIXES 走 S6 → S4 → S5 → S6，三轮后 ESCALATE |
 | spec 一致性 | `code-review`（engineering） | 有 spec 的路线追加：规范轴 + spec 轴双线并行审查 |
-| 对抗审查 | `interrogate` / `cog-4d-audit` | CI 全绿但仍不放心的隐藏缺陷挖掘 |
-| 生产风险 | `production-risk-review` | **已上线系统 PR 必过**，替代普通 review |
+| 对抗审查 | `interrogate` / `cog-4d-audit` | medium+ 必须 `interrogate`；按风险追加隐藏缺陷挖掘 |
+| 生产风险 | `production-risk-review` | live/production 变更在 S7 前追加，不替代普通 review |
 | 安全 | `security-review` / `gstack-cso` | 清单式安全审查 / OWASP+威胁建模 |
 | 影响面 | `blast-radius` | 改动前评估可能破坏什么 |
 | QA | `qa`（改）/ `qa-only`（只报不改） | 真机浏览器 QA |
 | AI 痕迹清理 | `ai-slop-cleaner` / `receiving-code-review` | 清理 AI slop；被审时不盲从反馈 |
 
-### S7 交付集成（上上线）
+### S7 交付集成（Fulfill delivery target）
+
+只完成授权的 `delivery_target`；默认实现请求停在 `working_tree`，更高目标需用户明确授权。调用的交付技能即使支持后续步骤，也必须在目标处停止。
 
 | 角色 | 技能 | 说明 |
 |---|---|---|
-| **canonical** | `finishing-a-development-branch` → `ship` | 分支集成决策 → 合基线、测试、版本、PR 一条龙 |
+| **canonical** | `finishing-a-development-branch` / `ship` | 按目标选择所需交付步骤：patch / working_tree / commit / pr / merge / deploy |
 | 发布工程 | `ai-release-engineer` / `release` | AI 代码合并前的验证门禁 / 仓库规则驱动发布 |
 | 部署专项 | `deployment/*`（docker/migrations/deployment-patterns）、项目专属如 `xiyu-server-deploy` | 按项目选用 |
 | 上线后 | `canary` | 金丝雀监控与回滚决策 |
@@ -126,7 +148,7 @@ S0 准备 → S1 意图 → S2 规格 → S3 规划 → S4 实现 → S5 验证 
 | 角色 | 技能 | 说明 |
 |---|---|---|
 | **canonical** | `knowledge-capture` | 按 docs/ 现有格式沉淀开发知识，归属明确 |
-| 决策轨迹 | `show-me-your-work` | 大型/复杂迁移必交：TSV 决策日志（决定了什么、为什么、证据在哪） |
+| 决策轨迹 | `show-me-your-work` | large/intractable 必交：TSV 决策日志（决定了什么、为什么、证据在哪） |
 | 自动提炼 | `continuous-learning-v2` | 会话观察 → 本能 → 技能演化（v2 优先于 v1） |
 | 回顾复盘 | `gstack-retro` | 周期性工程回顾 |
 | 元技能 | `learner` / `reflect` / `automate-me` | 把成功流程固化为新技能 |
@@ -137,8 +159,8 @@ S0 准备 → S1 意图 → S2 规格 → S3 规划 → S4 实现 → S5 验证 
 
 ### 🎯 领域专项（Domain Specialists）
 
-任务命中领域信号时**与任意路由并行加载**；纯非代码任务（调研、文档）单独运行、免走开发流程。
-SKILL.md 只保留压缩版，本表是完整数据基础。路由器现含三分派轴：**规模 × 阶段 × 领域**。
+任务命中领域信号时按需加载 Domain Specialists，不改变 Controller ownership；纯非代码领域操作可直接调用专项技能。
+SKILL.md 保留压缩版，本表补充阶段候选。完整路由由 Resume、Intent、Complexity、Risk、Domain、Delivery 六个独立维度组合。
 
 | 领域信号 | 首选 | 备选/说明 |
 |---|---|---|
@@ -171,18 +193,64 @@ pstack 的 21 条 `principle-*` 不属于任何阶段，是**所有阶段共享�
 
 ---
 
-## 四、任务规模路由表
+## 四、独立策略维度
 
-| 任务类型 | 判定特征 | 路径 |
-|---|---|---|
-| 微改动 | 单文件、<50 行、行为明确 | S4 直改 → S5 验证（跳过 S0-S3） |
-| Bug 修复 | 有复现路径 | S0 → 调试横切链 → S4(TDD 先写失败测试) → S5 → S6(轻量) → S7 |
-| 纯重构 | 行为保持、技术债 | S0 → S3(`writing-plans`) → S4(重构 + 回归测试) → S5 → S6 → S7 |
-| 调研探路 | 技术评估、可行性 PoC、不交付 | S1 → S3(`research` / `prototype`) → S8(记备忘，止) |
-| 小功能 | 1-3 文件 | S0 → S4(TDD) → S5 → S6(轻量) → S7 |
-| 中型功能 | 多模块、需拆步 | S0 → `speckit-chain`（S1–S4 全链）→ S5 → S6 → S7 |
-| 大型特性/新系统 | 跨层、高风险、需求模糊 | S0 → `speckit-chain`（S1–S4，plan 追加 `architect` 会审 + `plan-eng-review`，多视角通过才进 S4）→ S5 → S6(`interrogate` + `production-risk-review`) → S7(`ship`) → S8 |
-| 疑难杂症/大迁移 | 跨周、需审计 | `figure-it-out` 剧本模式 |
+### Intent Base Route
+
+| Intent | 基础路径 |
+|---|---|
+| bug | S0 → debug → S4 → S5 → S6 → S7(target) |
+| feature | S0 → S1/S2/S3（按 Complexity 裁剪）→ S4 → S5 → S6 → S7(target) |
+| refactor | S0 → S3 → S4 → S5 → S6 → S7(target) |
+| migration | S0 → S2/S3 → S4 → S5 → S6 → S7(target) |
+| research | S1 → S3 → S8；不交付，止 |
+| config | S0 → S4 → S5 → 按 Risk 要求 S6 → S7(target) |
+
+### Complexity / Planning
+
+| Complexity | 规划深度 |
+|---|---|
+| micro | Entry Gate 的文件清单即压缩计划 |
+| small | 简短实现步骤 |
+| medium | 经一个 Spec Adapter 形成书面 spec、plan、tasks |
+| large | 完整规格、计划评审、任务切片与检查点 |
+| intractable | playbook、审计轨迹与人工升级点 |
+
+Complexity 只决定规划深度，不能降低 Risk 要求的 assurance。组合路由时保留对应规划要求；不把 micro 解释为门禁豁免。
+
+### Risk / Assurance
+
+| 风险信号 | Assurance / 门禁 |
+|---|---|
+| 一般变更 | deterministic：相关真实验证命令 |
+| auth / permission / security / money / data_integrity / 关键状态机 / concurrency | 至少 adversarial：反例、边界、违规与状态转换证据 |
+| 适合 mutation 的核心逻辑且有真实 runner | 可选 mutation；运行真实测试，不以 reviewer 反例冒充 |
+| migration | dry-run、正向与回滚验证；涉及数据完整性时至少 adversarial |
+| production | S7 前追加 production-risk-review；其他风险所需 assurance 仍保留 |
+
+### Domain Adapter
+
+| Domain | 专项方法与证据 |
+|---|---|
+| ui | `frontend-design` / `ui-ux-pro-max`；visual/E2E 验收 |
+| api | `api-design` |
+| database | `access-pattern-driven-data-modeling`；需要时 `create-migration` / `database-migrations` |
+| performance | `performance-tuning`；可复现 benchmark 基线 |
+| docs | `technical-writing` / `html-first-workflow` |
+| infrastructure | `deployment-patterns`；迁移时追加 `database-migrations` |
+
+### Delivery Target
+
+| delivery_target | 授权终点 |
+|---|---|
+| patch | 仅返回建议补丁，整个流程不写 worktree 或 gate artifact |
+| working_tree | 本地修改、验证并停在工作区（默认实现目标） |
+| commit | 创建本地提交 |
+| pr | 允许 push 并创建 PR |
+| merge | 允许合并 |
+| deploy | 通过适用生产门禁后允许部署 |
+
+路由决定同时写明 stage subset、spec_backend、Controller（一个或无）、proof_mode、assurance_level、delivery_target。示例：Bug + Micro + Security + Production = 轻规划 + adversarial 验证 + 生产风险审查，最终停在用户授权的交付目标。
 
 ---
 
@@ -219,11 +287,11 @@ pstack 的 21 条 `principle-*` 不属于任何阶段，是**所有阶段共享�
 ## 七、验证计划（怎么证明这张地图是对的）
 
 1. **存在性校验**：本仓库内的技能引用必须真实存在；`speckit-*` 是外部 spec-kit 命令，不计入本仓库技能清单，使用前必须确认项目已初始化 `.specify/`。
-2. **实战校验**：取 3 个真实任务各跑一遍对应路由——① 一个微改动（快速路径）② 一个中型功能（writing-plans → subagent → verification）③ 一个大型特性（speckit 全流程 + 会审）。
+2. **实战校验**：取 3 个真实任务各跑一遍组合路由——① micro 安全 bug（轻规划 + 对抗证据）② medium 功能（一个 spec adapter + spec/plan/tasks）③ large 特性（完整规划 + 会审 + 检查点）；均验证 delivery_target 与 controller ownership。
 3. **对照指标**：返工次数、验证证据完整度、context 消耗，与传统单技能方式对比。
 4. **迭代门槛**：只有实战出现失败证据，才允许增加复杂度（新增阶段/新部门禁）；否则冻结当前粒度。
 
-## 八、下一步（2026-08-23 更新）
+## 八、历史进展（2026-08-23 记录，路由语义以当前策略为准）
 
 1. ✅ 薄 router 元技能已创建：`workflow/unified-dev-flow`——本地技能引用已机器校验，外部 `speckit-*` 命令已明确标注依赖 `.specify/`；quick_validate 结构验证通过，sync.sh 已传播到全部同步目标（SKILLS-INDEX / GEMINI.md 均收录）；
 2. ✅ 第五节去重清单已执行完毕（结果见第五节表格）；

@@ -5,6 +5,28 @@ Prompt text is probabilistic (the agent may skip it); this hook is
 deterministic (the tool call cannot proceed). Same philosophy as
 `delivery-gate`: check machine-verifiable facts, never trust self-reports.
 
+## R0 Read-only Recon
+
+Read project instructions, repository/worktree state, active workflow records,
+relevant code, and test entry points before committing scope or proof. Shell
+and read tools remain allowed; file-write tools remain blocked until the gate
+passes, except for the existing artifact self-exemption below. R0 itself is
+read-only: an ungated shell is not permission to write files during recon.
+
+After R0 and the Resume Gate, fresh or conflicting work writes the four-section
+artifact before gated implementation edits. Resumed work reconciles its existing
+gate with current evidence. Section 4 records:
+
+```text
+proof_mode + baseline/reproduction/unmet acceptance + exact verification commands
+```
+
+Choose intent-appropriate proof rather than requiring a failing unit test for
+every task. For `delivery_target: patch`, keep all work read-only and return
+the four sections and proposed patch in the response; no artifact is written
+because no gated edit is attempted. These are policy semantics; the mechanical
+checker continues to validate only the contract below.
+
 ## Contract
 
 - Artifact: `<project>/.omc/entry-gate-<sessionID>.md` (sessionID in the
@@ -42,18 +64,17 @@ Micro form (passes the checker):
 
 ```md
 ## 1. 理解和假设
-把错别字 X 改成 Y；假设无其他引用；已读 AGENTS.md。
+把文档中的错别字 X 改成 Y；已读 AGENTS.md，R0 已定位该处；delivery_target 为 working_tree。
 
 ## 2. 最小方案
 - 只改这一处，不碰周边。
-- path/to/file.py
-- NEW: path/to/brand-new.py
+- path/to/file.md
 
 ## 3. 范围纪律
 只改该行；顺带问题只记录。
 
 ## 4. 验证计划
-先跑复现 grep（RED），改后重跑（GREEN）；验证命令：rg X path/to/file.py
+proof_mode：typo-search；改前基线命令 `rg -n -F 'X' path/to/file.md` 应命中目标行；改后同命令应无匹配（exit 1），`rg -n -F 'Y' path/to/file.md` 应命中更正内容，`git diff --check` 应通过。
 ```
 
 (`NEW:` = yet-to-create files, skipped from existence checks.)
