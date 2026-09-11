@@ -336,24 +336,27 @@ The sequence property describes the last successfully read/committed head.
         state = self._append(run_fd, blobs_fd, batches, command, fingerprint, events, batch_id)
         return self._result(state, decision.outcome, status)
 
-    def _control_is_absent(self):
-        root_fd = os.open(self.project_root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-        try:
-            try:
-                os.stat(".unified-dev-flow", dir_fd=root_fd, follow_symlinks=False)
-            except FileNotFoundError:
-                return True
+    def _run_is_absent(self):
+        with ExitStack() as stack:
+            current = os.open(self.project_root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            stack.callback(os.close, current)
+            for name in (".unified-dev-flow", "runs", self.work_id):
+                try:
+                    current = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=current)
+                except FileNotFoundError:
+                    return True
+                except OSError as exc:
+                    raise ValidationError("UNSAFE_CONTROL_PATH", f"Invalid control directory {name}") from exc
+                stack.callback(os.close, current)
             return False
-        finally:
-            os.close(root_fd)
 
     def execute(self, command, facts=None) -> CommandResult:
         command = Command.from_dict(command.to_dict())
-        if command.command_type == "INIT_RUN" and self._control_is_absent():
+        if command.command_type == "INIT_RUN" and self._run_is_absent():
             preflight = decide(initial_state(), command, facts)
             # Recheck after preflight: a concurrent creator must enter the normal
             # locked replay path. This final absent lookup linearizes a no-write denial.
-            if isinstance(preflight.outcome, Denied) and self._control_is_absent():
+            if isinstance(preflight.outcome, Denied) and self._run_is_absent():
                 return self._result(initial_state(), preflight.outcome)
         fingerprint = canonical_sha256(command.to_dict())
         try:

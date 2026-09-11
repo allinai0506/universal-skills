@@ -271,6 +271,61 @@ class StoreTests(unittest.TestCase):
             self.assertEqual(result.outcome.reason_code, "EXPECTED_SEQUENCE_MISMATCH")
             self.assertEqual(result.state.status, "active")
 
+    def test_patch_init_for_absent_sibling_run_creates_no_target_runtime(self):
+        route = valid_route()
+        route["delivery_target"] = "patch"
+        before = self.store.events_path.read_bytes()
+        target = RunStore(self.root, "work-2")
+        result = target.execute(replace(command("INIT_RUN", route=route), work_id="work-2"))
+        self.assertEqual(result.outcome.reason_code, "RUNTIME_NOT_AUTHORIZED")
+        self.assertEqual(result.state.status, "new")
+        self.assertFalse(target.run_dir.exists())
+        self.assertEqual(self.store.events_path.read_bytes(), before)
+
+    def test_patch_init_rejects_unsafe_target_run_components(self):
+        for kind in ("symlink", "dangling-symlink", "file", "hardlink"):
+            with self.subTest(kind=kind), TemporaryDirectory() as root:
+                root = Path(root)
+                control = root / ".unified-dev-flow/runs"
+                control.mkdir(parents=True)
+                target = control / "work-2"
+                sentinel = root / "sentinel"
+                sentinel.write_bytes(b"untouched")
+                if kind == "symlink":
+                    target.symlink_to(root, target_is_directory=True)
+                elif kind == "dangling-symlink":
+                    target.symlink_to(root / "absent", target_is_directory=True)
+                elif kind == "file":
+                    target.write_bytes(b"not a directory")
+                else:
+                    os.link(sentinel, target)
+                route = valid_route()
+                route["delivery_target"] = "patch"
+                with self.assertRaisesRegex(ValidationError, "UNSAFE_CONTROL_PATH"):
+                    RunStore(root, "work-2").execute(
+                        replace(command("INIT_RUN", route=route), work_id="work-2"))
+                self.assertEqual(sentinel.read_bytes(), b"untouched")
+                self.assertFalse((root / "absent").exists())
+
+    def test_patch_init_observes_target_created_between_checks_with_sibling_present(self):
+        target = RunStore(self.root, "work-2")
+        route = valid_route()
+        route["delivery_target"] = "patch"
+        from unified_workflow.gate_kernel import decide as real_decide
+        def preflight(state, cmd, facts):
+            result = real_decide(state, cmd, facts)
+            if cmd.request_id != "creator":
+                other = RunStore(self.root, "work-2")
+                created = other.execute(replace(command("INIT_RUN", route=valid_route()),
+                                               request_id="creator", work_id="work-2"))
+                self.assertIsInstance(created.outcome, Allowed)
+            return result
+        with patch("unified_workflow.store.decide", side_effect=preflight):
+            result = target.execute(replace(command("INIT_RUN", route=route), work_id="work-2"))
+        self.assertEqual(result.outcome.reason_code, "EXPECTED_SEQUENCE_MISMATCH")
+        self.assertEqual(result.state.status, "active")
+        self.assertIn("creator", result.state.requests)
+
     def test_process_crashes_leave_in_doubt_without_rerunning_provider(self):
         for phase in ("reserved", "provider", "blobs"):
             with self.subTest(phase=phase):
