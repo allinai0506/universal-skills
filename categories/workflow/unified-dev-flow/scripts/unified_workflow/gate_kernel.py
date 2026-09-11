@@ -217,10 +217,8 @@ def _record_verification(state, command, route, observations):
         return Decision((failed,), Denied("EVIDENCE_MISSING", ("Retry a successful bounded verification.",)))
     if workspace is None:
         return Decision((failed,), Denied("EVIDENCE_MISSING", ("Observe the current workspace before verifying freshness.",)))
-    binding_valid = (evidence.task_id == task.task_id and evidence.task_revision == task.task_revision
-        and evidence.task_contract_sha256 == canonical_sha256(task.contract.to_dict())
-        and any(item.command_id == evidence.command_id and canonical_sha256(item.to_dict()) == evidence.command_sha256
-                for item in task.contract.verification_commands))
+    binding_valid = any(item.evidence_sha256 == evidence.evidence_sha256
+                        for item in fresh_evidence(candidate, evidence.commit_revision))
     events = (failed,)
     if binding_valid and workspace.verification_input_fingerprint != evidence.verification_input_fingerprint:
         events += (DomainEvent("TASK_INVALIDATED", {"task_id": task.task_id,

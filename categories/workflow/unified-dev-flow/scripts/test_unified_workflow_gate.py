@@ -386,6 +386,24 @@ class GateTests(unittest.TestCase):
         self.denied(result, "EVIDENCE_STALE", ["VERIFICATION_RECORDED", "TASK_INVALIDATED"])
         self.assertEqual(apply(state, result).tasks["task-001"].task_revision, 2)
 
+    def test_inconsistent_top_level_fingerprint_is_not_observed_input_drift(self):
+        state = task(status="running")
+        observed = workspace(NEW)
+        raw = evidence(state, pre_command_revision=observed.to_dict(),
+                       post_command_revision=observed.to_dict(), commit_revision=observed.to_dict(),
+                       verification_input_fingerprint=OLD)
+        result = decide(state, command("RECORD_VERIFICATION", "task-001", evidence=raw), observed)
+        self.denied(result, "EVIDENCE_STALE", ["VERIFICATION_RECORDED"])
+        self.assertEqual(apply(state, result).tasks["task-001"].task_revision, 1)
+
+    def test_inconsistent_recorded_revisions_cannot_establish_old_input_binding(self):
+        state = task(status="running")
+        for field in ("pre_command_revision", "post_command_revision", "commit_revision"):
+            with self.subTest(field=field):
+                raw = evidence(state, **{field: workspace(NEW).to_dict()})
+                result = decide(state, command("RECORD_VERIFICATION", "task-001", evidence=raw), workspace(NEW))
+                self.denied(result, "EVIDENCE_STALE", ["VERIFICATION_RECORDED"])
+
     def test_rejected_evidence_cannot_become_a_later_invalidation_baseline(self):
         state = task(status="running")
         result = decide(state, command("RECORD_VERIFICATION", "task-001", evidence=evidence(state)))
