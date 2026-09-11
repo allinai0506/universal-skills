@@ -22,7 +22,7 @@ from .events import DomainEvent, EventBatch, IntegrityError, ZERO_HASH
 from .gate_kernel import decide
 from .model import (EvidenceRecord, TaskContract, ValidationError, WorkspaceRevision,
                     canonical_json, canonical_sha256, validate_id, _json_plain)
-from .reducer import RunState, initial_state, replay
+from .reducer import RunState, initial_state, reduce_event, replay
 
 
 @dataclass(frozen=True)
@@ -191,9 +191,13 @@ The sequence property describes the last successfully read/committed head.
                 if batch.work_id != self.work_id:
                     raise IntegrityError("EVENT_WORK_ID_MISMATCH", "Batch belongs to another run")
                 batches.append(batch)
+            state = replay(batches)
         except (UnicodeError, json.JSONDecodeError) as exc:
             raise IntegrityError("EVENT_JSON_CORRUPT", "Cannot decode event record") from exc
-        state = replay(batches)
+        except ValidationError as exc:
+            # Only persisted input is being validated at this boundary; callers'
+            # command/contract errors keep their original ValidationError type.
+            raise IntegrityError(exc.code, exc.message) from exc
         if state.work_id not in (None, self.work_id):
             raise IntegrityError("EVENT_WORK_ID_MISMATCH", "Run belongs to another work ID")
         self.sequence = len(batches)
@@ -351,6 +355,38 @@ The sequence property describes the last successfully read/committed head.
             return False
 
     def execute(self, command, facts=None) -> CommandResult:
+        return self._execute(command, facts)
+
+    def execute_review(self, command, facts=None, *, use_current_sequence=False) -> CommandResult:
+        """Atomically gate readiness and the supplied review under its caller ID.
+
+        With an omitted CLI sequence, bind to the locked head for a new request,
+        or the original reservation sequence for an exact retry fingerprint.
+        No independently durable wait request is needed: there is no Provider
+        side effect between these pure Gate decisions.
+        """
+        command = Command.from_dict(command.to_dict())
+        if command.command_type != "RECORD_REVIEW":
+            raise ValidationError("INVALID_CONTRACT", "execute_review requires RECORD_REVIEW")
+        if type(use_current_sequence) is not bool:
+            raise ValidationError("INVALID_TYPE", "use_current_sequence must be a boolean")
+        return self._execute(command, facts, prepare_review=True, use_current_sequence=use_current_sequence)
+
+    @staticmethod
+    def _review_decision(state, command, facts):
+        task = state.tasks.get(command.task_id)
+        waiting_events = ()
+        if task is not None and task.status == "running":
+            waiting = decide(state, replace(command, command_type="WAIT_FOR_REVIEW", payload={}), facts)
+            if isinstance(waiting.outcome, Denied):
+                return waiting
+            waiting_events = waiting.events
+            for event in waiting_events:
+                state = reduce_event(state, event)
+        review = decide(state, command, facts)
+        return Decision(waiting_events + review.events, review.outcome)
+
+    def _execute(self, command, facts=None, *, prepare_review=False, use_current_sequence=False) -> CommandResult:
         command = Command.from_dict(command.to_dict())
         if command.command_type == "INIT_RUN" and self._run_is_absent():
             preflight = decide(initial_state(), command, facts)
@@ -358,17 +394,22 @@ The sequence property describes the last successfully read/committed head.
             # locked replay path. This final absent lookup linearizes a no-write denial.
             if isinstance(preflight.outcome, Denied) and self._run_is_absent():
                 return self._result(initial_state(), preflight.outcome)
-        fingerprint = canonical_sha256(command.to_dict())
         try:
             with self._locked() as (run_fd, blobs_fd):
                 batches, state = self._read(run_fd, blobs_fd)
+                if use_current_sequence:
+                    existing = state.requests.get(command.request_id)
+                    sequence = existing.reservation_sequence - 1 if existing else self.sequence
+                    command = replace(command, expected_sequence=sequence)
+                fingerprint = canonical_sha256(command.to_dict())
                 if command.command_type == "RECORD_VERIFICATION":
                     return self._result(state, _denied("INVALID_CONTRACT",
                         "Use execute_verification with a registered command ID and Provider."))
                 prior = self._prior(run_fd, state, command, fingerprint)
                 if prior is not None:
                     return prior
-                decision = decide(state, command, facts)
+                decision = (self._review_decision(state, command, facts) if prepare_review
+                            else decide(state, command, facts))
                 return self._finish(run_fd, blobs_fd, batches, command, fingerprint, decision, reserve=True)
         except LockBusy:
             return CommandResult(_denied("LOCK_BUSY", "Retry when the writer releases the lock."), None, (), "denied")

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Mapping, Sequence
-from dataclasses import fields, is_dataclass, replace
+from dataclasses import fields, is_dataclass
 import json
 from pathlib import Path
 import sys
@@ -166,12 +166,7 @@ def _execute(args):
     store = RunStore(root, work_id)
     # A patch init must reach Store's no-write Gate preflight before any load.
     patch_init = args.operation == "INIT_RUN" and payload["route"]["delivery_target"] == "patch"
-    try:
-        state = initial_state() if patch_init else store.load()
-    except ValidationError as exc:
-        if exc.code == "UNSAFE_CONTROL_PATH":
-            raise
-        raise IntegrityError(exc.code, exc.message) from exc
+    state = initial_state() if patch_init else store.load()
     if args.operation == "READ_STATE":
         return 0, {"status": "success", "sequence": store.sequence,
                    "state": _plain(state), "diagnostics": list(store.diagnostics)}
@@ -193,10 +188,6 @@ def _execute(args):
     sequence = args.expected_sequence
     if sequence is None:
         sequence = prior.reservation_sequence - 1 if prior else store.sequence
-    wait_id = "review-wait-" + canonical_sha256(args.request_id).removeprefix("sha256:")
-    waited = state.requests.get(wait_id) if args.operation == "RECORD_REVIEW" else None
-    if prior is not None and waited is not None and args.expected_sequence is not None:
-        sequence += 1
     cmd = Command.from_dict(dict(schema_version=1, request_id=args.request_id, command_type=args.operation,
         work_id=work_id, task_id=getattr(args, "task_id", None), actor=actor,
         expected_sequence=sequence, payload=payload))
@@ -206,20 +197,12 @@ def _execute(args):
         provider = TrustedLocalVerifier(root, task.contract) if task else None
         unregistered = task is not None and args.command_id not in {c.command_id for c in task.contract.verification_commands}
         return _result(store.execute_verification(cmd, provider), verification=True, unregistered=unregistered)
+    if args.operation == "RECORD_REVIEW":
+        facts = None if prior is not None else _observations(root, state)
+        return _result(store.execute_review(cmd, facts, use_current_sequence=args.expected_sequence is None))
     if prior is not None:
         return _result(store.execute(cmd))
     facts = None if patch_init else _observations(root, state)
-    if args.operation == "RECORD_REVIEW" and args.task_id in state.tasks:
-        if state.tasks[args.task_id].status == "running" or waited is not None:
-            wait_sequence = waited.reservation_sequence - 1 if waited and args.expected_sequence is None else sequence
-            wait = replace(cmd, command_type="WAIT_FOR_REVIEW", request_id=wait_id,
-                           expected_sequence=wait_sequence, payload={})
-            outcome = store.execute(wait, facts)
-            if not isinstance(outcome.outcome, Allowed):
-                return _result(outcome)
-            cmd = replace(cmd, expected_sequence=wait_sequence + 1)
-            # Observe again after the separately durable wait gate.
-            facts = _observations(root, outcome.state)
     return _result(store.execute(cmd, facts))
 
 

@@ -163,6 +163,18 @@ class CLITests(CLIProject):
         path.write_text(json.dumps(event) + "\n")
         self.call("replay", code=4)
 
+    def test_patch_init_with_existing_invalid_event_schema_exits_four(self):
+        self.initialize()
+        path = self.store()[0].events_path
+        event = json.loads(path.read_text())
+        event["schema_version"] = 999
+        path.write_text(json.dumps(event) + "\n")
+        before = path.read_bytes()
+        route = valid_route()
+        route["delivery_target"] = "patch"
+        self.mutate("init", "--route-file", self.document(route), code=4)
+        self.assertEqual(before, path.read_bytes())
+
     def test_busy_lock_exit_five(self):
         self.initialize()
         with self.store()[0].lock_path.open("rb") as lock:
@@ -242,6 +254,7 @@ class CLITests(CLIProject):
         store.execute(Command.from_dict(dict(schema_version=1, request_id=wait_id,
             command_type="WAIT_FOR_REVIEW", work_id="work-1", task_id="A", actor={"type": "cli", "id": "local"},
             expected_sequence=store.sequence, payload={})), self.observation())
+        self.add("B")  # Another mutation after the interrupted, durable wait.
         assertion = self.document(self.review())
         first = self.mutate("review", "record", "--task-id", "A", "--assertion-file", assertion, request="review")
         before = store.events_path.read_bytes()
@@ -261,6 +274,31 @@ class CLITests(CLIProject):
         first = self.mutate(*args, request="explicit-review")
         before = self.store()[0].events_path.read_bytes()
         self.assertEqual(first, self.mutate(*args, request="explicit-review"))
+        self.assertEqual(before, self.store()[0].events_path.read_bytes())
+
+    def test_wait_denial_is_queryable_and_reserves_full_review_identity(self):
+        self.initialize()
+        self.add()
+        self.start()
+        assertion = self.review()
+        path = self.document(assertion)
+        result = self.mutate("review", "record", "--task-id", "A", "--assertion-file", path,
+                             request="denied-review", code=3)
+        self.assertEqual(result["reason_code"], "EVIDENCE_MISSING")
+        status = self.call("request", "status", "--request-id", "denied-review")
+        self.assertEqual(status["request"]["outcome"], "denied")
+        self.assertEqual(status["request"]["reason_code"], "EVIDENCE_MISSING")
+        before = self.store()[0].events_path.read_bytes()
+        self.assertEqual(result, self.mutate("review", "record", "--task-id", "A", "--assertion-file", path,
+                                             request="denied-review", code=3))
+        conflict = self.mutate("task", "start", "--task-id", "A", request="denied-review", code=3)
+        self.assertEqual(conflict["reason_code"], "IDEMPOTENCY_CONFLICT")
+        assertion["reviewer"] = "changed-reviewer"
+        assertion.pop("assertion_sha256")
+        assertion["assertion_sha256"] = canonical_sha256(assertion)
+        conflict = self.mutate("review", "record", "--task-id", "A", "--assertion-file", self.document(assertion),
+                               request="denied-review", code=3)
+        self.assertEqual(conflict["reason_code"], "IDEMPOTENCY_CONFLICT")
         self.assertEqual(before, self.store()[0].events_path.read_bytes())
 
 

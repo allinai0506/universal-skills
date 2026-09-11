@@ -76,11 +76,14 @@ accepts only `--command-id`, never an arbitrary command string. External
 callers can use the Provider API for workspace observations; recorded successful
 verification evidence in `status --json` supplies review bindings.
 
-`review record` composes `WAIT_FOR_REVIEW` and `RECORD_REVIEW` through Store,
-with a deterministic internal request ID for the wait. Its optional expected
-sequence addresses the state before that wait; retry the same request ID and
-arguments after interruption. Other mutations map to their corresponding Gate
-command. `request status --request-id <id>` inspects a reservation;
+`review record` composes `WAIT_FOR_REVIEW` and `RECORD_REVIEW` through Store in
+one atomic batch. The caller request ID and complete assertion fingerprint
+cover success or denial of either Gate; there is no partial durable wait step.
+An explicit expected sequence is authoritative. When omitted, Store binds to
+the current head under its writer lock, or the original reservation for a retry.
+Existing tasks already waiting for review continue directly to `RECORD_REVIEW`.
+Other mutations map to their corresponding Gate command.
+`request status --request-id <id>` inspects a reservation;
 `request resolve --request-id <id> --resolution-file resolution.json` resolves
 that existing in-doubt attempt using `{outcome, actor: {type, id}, note}`.
 Outcomes are `abandoned` or the manually verified `success`, `denied`, or

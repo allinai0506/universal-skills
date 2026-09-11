@@ -58,7 +58,8 @@ Use `--help` on each CLI command for its named JSON file inputs. Mutations
 require a request ID and optionally an expected sequence. Verification selects
 a registered `command_id` from the TaskContract; trusted local execution has
 caller authority and provides no OS sandbox. `review record` passes the Gate's
-separate durable wait-for-review check before recording the external assertion.
+wait-for-review check and records the external assertion in one atomic Store
+batch under the caller's request ID.
 `status --json` and `replay --json` expose the same canonical replayed state;
 runtime records live only under the target project's `.unified-dev-flow/`.
 Existing `.omc/` and `.superpowers/sdd/` records retain their native roles.

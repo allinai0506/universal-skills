@@ -12,7 +12,7 @@ from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
-from test_unified_workflow_gate import command, evidence, workspace
+from test_unified_workflow_gate import command, evidence, review, workspace
 from test_unified_workflow_model import valid_route, valid_task
 from unified_workflow.commands import Allowed, Denied
 from unified_workflow.events import IntegrityError
@@ -106,6 +106,53 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(provider.calls, 1)
         self.assertEqual(provider.observations, 3)
         self.assertEqual(second.state.requests[cmd.request_id].outcome, "success")
+
+    def test_review_composition_is_one_atomic_caller_request(self):
+        self.store.execute_verification(self.verify_command(), CountingProvider())
+        cmd = self.cmd("RECORD_REVIEW", "task-001", assertion=review(self.store.load()))
+        before_sequence = self.store.sequence
+        first = self.store.execute_review(cmd, workspace())
+        self.assertIsInstance(first.outcome, Allowed)
+        self.assertEqual(self.store.sequence, before_sequence + 1)
+        last = json.loads(self.store.events_path.read_text().splitlines()[-1])
+        self.assertEqual(last["request_id"], cmd.request_id)
+        self.assertEqual([event["event_type"] for event in last["events"]],
+            ["REQUEST_RESERVED", "TASK_WAITING_REVIEW", "REVIEW_RECORDED", "REQUEST_RESOLVED"])
+        original = self.store.events_path.read_bytes()
+        self.assertEqual(self.store.execute_review(cmd, workspace()).outcome, first.outcome)
+        self.assertEqual(original, self.store.events_path.read_bytes())
+
+    def test_review_implicit_sequence_binds_locked_head_and_original_retry(self):
+        self.store.execute_verification(self.verify_command(), CountingProvider())
+        cmd = self.cmd("RECORD_REVIEW", "task-001", request_id="implicit-review", assertion=review(self.store.load()))
+        self.send("REPORT_TASK", "task-001", report={"summary": "unrelated report"},
+                  workspace_revision=workspace().to_dict(), facts=workspace())
+        denied = self.store.execute_review(cmd, workspace())
+        self.assertEqual(denied.outcome.reason_code, "EXPECTED_SEQUENCE_MISMATCH")
+        first = self.store.execute_review(cmd, workspace(), use_current_sequence=True)
+        self.assertIsInstance(first.outcome, Allowed)
+        original = self.store.events_path.read_bytes()
+        self.assertEqual(self.store.execute_review(cmd, workspace(), use_current_sequence=True).outcome, first.outcome)
+        changed = replace(cmd, payload={"assertion": review(first.state, reviewer="other")})
+        self.assertEqual(self.store.execute_review(changed, workspace(), use_current_sequence=True).outcome.reason_code,
+                         "IDEMPOTENCY_CONFLICT")
+        self.assertEqual(original, self.store.events_path.read_bytes())
+
+    def test_review_gate_crash_cannot_leave_only_wait_committed(self):
+        self.store.execute_verification(self.verify_command(), CountingProvider())
+        cmd = self.cmd("RECORD_REVIEW", "task-001", assertion=review(self.store.load()))
+        from unified_workflow.gate_kernel import decide as real_decide
+        def stop_at_review(state, command, facts):
+            if command.command_type == "RECORD_REVIEW":
+                raise KeyboardInterrupt
+            return real_decide(state, command, facts)
+        before = self.store.events_path.read_bytes()
+        with patch("unified_workflow.store.decide", side_effect=stop_at_review):
+            with self.assertRaises(KeyboardInterrupt):
+                self.store.execute_review(cmd, workspace())
+        self.assertEqual(before, self.store.events_path.read_bytes())
+        self.assertEqual(self.store.load().tasks["task-001"].status, "running")
+        self.assertIsInstance(self.store.execute_review(cmd, workspace()).outcome, Allowed)
 
     def test_retry_syncs_readable_resolution_after_transient_final_fsync_failure(self):
         cmd = self.verify_command()
