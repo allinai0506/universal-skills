@@ -180,7 +180,14 @@ def _invalidate(state: RunState, task_id: str, revision: int, event: DomainEvent
     tasks = dict(state.tasks)
     for identifier in affected:
         task = tasks[identifier]
-        task = _clear_acceptance(task, status="stale", reset_origin=identifier == task_id)
+        unresolved_scope = False
+        for fact in task.history:
+            if fact.event_type == "SCOPE_VIOLATION":
+                unresolved_scope = True
+            elif fact.event_type == "TASK_UNBLOCKED":
+                unresolved_scope = False
+        reset_origin = identifier == task_id and revision > task.task_revision and not unresolved_scope
+        task = _clear_acceptance(task, status="stale", reset_origin=reset_origin)
         if identifier == task_id:
             task = replace(task, task_revision=revision)
         tasks[identifier] = _task_with_history(task, event)
@@ -262,8 +269,8 @@ def reduce_event(state: RunState, event: DomainEvent) -> RunState:
     elif event_type == "TASK_INVALIDATED":
         task = _task(state, payload)
         revision = payload.get("new_task_revision")
-        if not isinstance(revision, int) or isinstance(revision, bool) or revision <= task.task_revision:
-            _error("EVENT_SCHEMA_MISMATCH", "new_task_revision must advance the task revision")
+        if not isinstance(revision, int) or isinstance(revision, bool) or revision < task.task_revision:
+            _error("EVENT_SCHEMA_MISMATCH", "new_task_revision must not regress the task revision")
         state = _invalidate(state, task.task_id, revision, event)
     elif event_type == "DELIVERY_RECORDED":
         state = replace(state, deliveries=state.deliveries + (_freeze(payload),))
@@ -273,6 +280,8 @@ def reduce_event(state: RunState, event: DomainEvent) -> RunState:
             task = replace(task, status="ready")
         elif event_type == "TASK_STARTED":
             origin = payload.get("scope_origin", task.scope_origin)
+            if task.scope_origin is not None and origin != task.scope_origin:
+                _error("EVENT_SCHEMA_MISMATCH", "scope_origin cannot replace an existing revision origin")
             task = replace(task, status="running", scope_origin=origin)
         elif event_type == "TASK_REPORTED":
             task = replace(task, reports=task.reports + (_freeze(payload),))

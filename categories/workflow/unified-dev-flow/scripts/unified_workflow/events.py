@@ -189,15 +189,15 @@ def _decode_event_payload(event_type: str, raw: Any) -> Mapping[str, Any]:
         raw = _strict_fields(raw, ("task",), event_type)
         return {"task": TaskContract.from_dict(_plain(raw["task"])).to_dict()}
     if event_type == "TASK_STARTED":
-        raw = _strict_fields_optional(raw, ("task_id",), ("scope_origin",), event_type)
-        result = {"task_id": validate_id(raw["task_id"], "task_id")}
-        if "scope_origin" in raw:
-            result["scope_origin"] = _json_value(raw["scope_origin"], "scope_origin")
-        return result
+        raw = _strict_fields(raw, ("task_id", "scope_origin"), event_type)
+        return {"task_id": validate_id(raw["task_id"], "task_id"),
+                "scope_origin": WorkspaceRevision.from_dict(_plain(raw["scope_origin"])).to_dict()}
     if event_type == "TASK_REPORTED":
         raw = _strict_fields(raw, ("task_id", "report"), event_type)
+        report = _strict_fields(raw["report"], ("summary", "workspace_revision"), "report")
         return {"task_id": validate_id(raw["task_id"], "task_id"),
-                "report": _frozen_json_mapping(raw["report"], "report")}
+                "report": {"summary": _string(report["summary"], "report.summary"),
+                           "workspace_revision": WorkspaceRevision.from_dict(_plain(report["workspace_revision"])).to_dict()}}
     if event_type == "VERIFICATION_RECORDED":
         raw = _strict_fields_optional(raw, ("task_id", "success"), ("evidence",), event_type)
         result = {"task_id": validate_id(raw["task_id"], "task_id"),
@@ -224,21 +224,22 @@ def _decode_event_payload(event_type: str, raw: Any) -> Mapping[str, Any]:
         return {"task_id": validate_id(raw["task_id"], "task_id"),
                 "new_task_revision": _integer(raw["new_task_revision"], "new_task_revision", 1)}
     if event_type == "DELIVERY_RECORDED":
-        raw = _strict_fields_optional(raw, ("delivery_target", "acceptance_set_sha256", "provenance"),
-                                     ("workspace_revision",), event_type)
+        raw = _strict_fields(raw, ("delivery_target", "acceptance_set_sha256", "provenance",
+                                  "workspace_revision"), event_type)
+        provenance = _strict_fields(raw["provenance"], ("provider", "reference"), "provenance")
         result = {"delivery_target": _enum(raw["delivery_target"], "delivery_target", _DELIVERY_TARGETS),
                 "acceptance_set_sha256": _digest_payload(raw["acceptance_set_sha256"],
                                                            "acceptance_set_sha256"),
-                "provenance": _frozen_json_mapping(raw["provenance"], "provenance")}
-        if "workspace_revision" in raw:
-            result["workspace_revision"] = WorkspaceRevision.from_dict(_plain(raw["workspace_revision"])).to_dict()
+                "provenance": {"provider": validate_id(provenance["provider"], "provenance.provider"),
+                               "reference": _string(provenance["reference"], "provenance.reference")},
+                "workspace_revision": WorkspaceRevision.from_dict(_plain(raw["workspace_revision"])).to_dict()}
         return result
     if event_type == "TASK_UNBLOCKED":
-        raw = _strict_fields_optional(raw, ("task_id",), ("provenance",), event_type)
-        result = {"task_id": validate_id(raw["task_id"], "task_id")}
-        if "provenance" in raw:
-            result["provenance"] = _frozen_json_mapping(raw["provenance"], "provenance")
-        return result
+        raw = _strict_fields(raw, ("task_id", "provenance"), event_type)
+        provenance = _strict_fields(raw["provenance"], ("actor", "resolution"), "provenance")
+        return {"task_id": validate_id(raw["task_id"], "task_id"),
+                "provenance": {"actor": validate_id(provenance["actor"], "provenance.actor"),
+                               "resolution": _string(provenance["resolution"], "provenance.resolution")}}
     if event_type == "TASK_BLOCKED":
         raw = _strict_fields_optional(raw, ("task_id",), ("review_round",), event_type)
         result = {"task_id": validate_id(raw["task_id"], "task_id")}

@@ -215,9 +215,17 @@ def _record_verification(state, command, route, observations):
                         Denied("SCOPE_VIOLATION", ("Resolve verification side effects outside scope.",)))
     if evidence.exit_code != 0 or evidence.timed_out or evidence.output_truncated:
         return Decision((failed,), Denied("EVIDENCE_MISSING", ("Retry a successful bounded verification.",)))
-    return Decision((failed, DomainEvent("TASK_INVALIDATED", {"task_id": task.task_id,
-                    "new_task_revision": task.task_revision + 1})),
-                    Denied("EVIDENCE_STALE", ("Reverify the current task and workspace.",)))
+    if workspace is None:
+        return Decision((failed,), Denied("EVIDENCE_MISSING", ("Observe the current workspace before verifying freshness.",)))
+    binding_valid = (evidence.task_id == task.task_id and evidence.task_revision == task.task_revision
+        and evidence.task_contract_sha256 == canonical_sha256(task.contract.to_dict())
+        and any(item.command_id == evidence.command_id and canonical_sha256(item.to_dict()) == evidence.command_sha256
+                for item in task.contract.verification_commands))
+    events = (failed,)
+    if binding_valid and workspace.verification_input_fingerprint != evidence.verification_input_fingerprint:
+        events += (DomainEvent("TASK_INVALIDATED", {"task_id": task.task_id,
+                   "new_task_revision": task.task_revision + 1}),)
+    return Decision(events, Denied("EVIDENCE_STALE", ("Reverify the current task and workspace.",)))
 
 
 def _wait_for_review(state, command, route, observations):
@@ -247,7 +255,7 @@ def _record_review(state, command, route, observations):
         "verdict_fingerprint": assertion.assertion_sha256, "assertion": assertion.to_dict()})]
     if assertion.verdict == "NEEDS_FIXES" and task.review_round + 1 >= min(route.review_limit, 3):
         events.extend((DomainEvent("TASK_INVALIDATED", {"task_id": task.task_id,
-            "new_task_revision": task.task_revision + 1}),
+            "new_task_revision": task.task_revision}),
             DomainEvent("TASK_BLOCKED", {"task_id": task.task_id, "review_round": task.review_round + 1}), DomainEvent("RUN_BLOCKED", {}),
             DomainEvent("ESCALATE_TO_HUMAN", {"task_id": task.task_id})))
         return Decision(tuple(events), Denied("REVIEW_LIMIT_REACHED", ("Resolve the review blocker with human provenance.",)))
@@ -410,7 +418,8 @@ def decide(state: RunState, command: Command, observed_facts=None) -> Decision:
             for identifier, workspace in sorted(observations.items()):
                 task = state.tasks.get(identifier)
                 if (task is not None and task.scope_origin is not None
-                        and task.status in ("running", "waiting_review")
+                        and (task.status in ("running", "waiting_review")
+                             or task.status == "accepted" and command.command_type in ("RECORD_DELIVERY", "COMPLETE_RUN"))
                         and scope_violations(task, workspace.changed_paths)):
                     return Decision((DomainEvent("SCOPE_VIOLATION", {"task_id": identifier}),),
                                     Denied("SCOPE_VIOLATION", ("Resolve changes outside the write scope.",)))
@@ -424,7 +433,8 @@ def decide(state: RunState, command: Command, observed_facts=None) -> Decision:
                     for fact in task.history:
                         if fact.event_type in ("TASK_INVALIDATED", "TASK_NEEDS_FIXES"):
                             fingerprint = None
-                        elif fact.event_type == "VERIFICATION_RECORDED" and "evidence" in fact.payload:
+                        elif (fact.event_type == "VERIFICATION_RECORDED" and fact.payload["success"]
+                              and "evidence" in fact.payload):
                             fingerprint = fact.payload["evidence"]["verification_input_fingerprint"]
                 if fingerprint is not None and fingerprint != workspace.verification_input_fingerprint:
                     event = DomainEvent("TASK_INVALIDATED", {"task_id": identifier, "new_task_revision": task.task_revision + 1})

@@ -17,6 +17,12 @@ from unified_workflow.reducer import initial_state, reduce_event, replay
 DIGEST = "sha256:" + "a" * 64
 
 
+def revision(identifier="origin-1"):
+    return {"schema_version": 1, "provider": "mock", "revision_id": identifier,
+            "verification_input_fingerprint": DIGEST, "changed_paths": [],
+            "observed_at": "2026-09-11T00:00:00Z"}
+
+
 def task_contract(task_id: str, dependencies: list[str] | None = None) -> dict:
     return {
         "schema_version": 1,
@@ -66,7 +72,7 @@ def accepted_history() -> list[EventBatch]:
         event("RUN_CREATED", {"work_id": "work-1"}),
         event("TASK_ADDED", {"task": task_contract("a")}),
         event("TASK_READIED", {"task_id": "a"}),
-        event("TASK_STARTED", {"task_id": "a", "scope_origin": "origin-1"}),
+        event("TASK_STARTED", {"task_id": "a", "scope_origin": revision()}),
         event("TASK_WAITING_REVIEW", {"task_id": "a"}),
         event("REVIEW_RECORDED", {"task_id": "a", "verdict_fingerprint": DIGEST}),
         event("TASK_ACCEPTED", {"task_id": "a", "input_fingerprint": DIGEST,
@@ -102,7 +108,7 @@ class EventReplayTests(unittest.TestCase):
         with self.assertRaisesRegex(ValidationError, "UNKNOWN_ENUM"):
             event("DELIVERY_RECORDED", {
                 "delivery_target": "email", "acceptance_set_sha256": DIGEST,
-                "provenance": {"commit": "abc123"},
+                "provenance": {"provider": "git", "reference": "abc123"}, "workspace_revision": revision(),
             })
 
     def test_event_batch_rejects_invalid_utc_timestamp_and_actor(self):
@@ -197,10 +203,10 @@ class EventReplayTests(unittest.TestCase):
             event("RUN_CREATED", {"work_id": "work-1"}),
             event("TASK_ADDED", {"task": task_contract("a")}),
             event("TASK_READIED", {"task_id": "a"}),
-            event("TASK_STARTED", {"task_id": "a", "scope_origin": "origin-1"}),
-            event("TASK_REPORTED", {"task_id": "a", "report": {"revision": "r1"}}),
+            event("TASK_STARTED", {"task_id": "a", "scope_origin": revision()}),
+            event("TASK_REPORTED", {"task_id": "a", "report": {"summary": "done", "workspace_revision": revision()}}),
             event("VERIFICATION_RECORDED", {"task_id": "a", "success": False}),
-            event("TASK_STARTED", {"task_id": "a"}),
+            event("TASK_STARTED", {"task_id": "a", "scope_origin": revision()}),
             event("TASK_WAITING_REVIEW", {"task_id": "a"}),
             event("TASK_NEEDS_FIXES", {"task_id": "a"}),
             event("TASK_WAITING_REVIEW", {"task_id": "a"}),
@@ -209,13 +215,13 @@ class EventReplayTests(unittest.TestCase):
         task = state.tasks["a"]
         self.assertEqual(task.status, "ready")
         self.assertEqual(task.review_round, 2)
-        self.assertEqual(task.scope_origin, "origin-1")
+        self.assertEqual(task.scope_origin["revision_id"], "origin-1")
 
         state = replay(batches(
             event("RUN_CREATED", {"work_id": "work-1"}),
             event("TASK_ADDED", {"task": task_contract("a")}),
             event("TASK_BLOCKED", {"task_id": "a"}),
-            event("TASK_UNBLOCKED", {"task_id": "a"}),
+            event("TASK_UNBLOCKED", {"task_id": "a", "provenance": {"actor": "human", "resolution": "fixed"}}),
             event("TASK_FAILED", {"task_id": "a"}),
             event("TASK_CANCELLED", {"task_id": "a"}),
         ))
@@ -259,7 +265,7 @@ class EventReplayTests(unittest.TestCase):
         history = accepted_history()
         history.append(make_batch(8, history[-1].batch_hash, [event("DELIVERY_RECORDED", {
             "delivery_target": "commit", "acceptance_set_sha256": state.acceptance_set_sha256,
-            "provenance": {"commit": "abc123"},
+            "provenance": {"provider": "git", "reference": "abc123"}, "workspace_revision": revision(),
         })]))
         replayed = replay(history)
         self.assertEqual(replayed.deliveries[0]["delivery_target"], "commit")
@@ -270,13 +276,13 @@ class EventReplayTests(unittest.TestCase):
             event("RUN_CREATED", {"work_id": "work-1"}),
             event("TASK_ADDED", {"task": task_contract("a")}),
             event("TASK_READIED", {"task_id": "a"}),
-            event("TASK_STARTED", {"task_id": "a", "scope_origin": "origin-a"}),
+            event("TASK_STARTED", {"task_id": "a", "scope_origin": revision("origin-a")}),
             event("TASK_WAITING_REVIEW", {"task_id": "a"}),
             event("TASK_ACCEPTED", {"task_id": "a", "input_fingerprint": DIGEST,
                                     "verdict_fingerprint": DIGEST}),
             event("TASK_ADDED", {"task": task_contract("b", ["a"])}),
             event("TASK_READIED", {"task_id": "b"}),
-            event("TASK_STARTED", {"task_id": "b", "scope_origin": "origin-b"}),
+            event("TASK_STARTED", {"task_id": "b", "scope_origin": revision("origin-b")}),
             event("TASK_WAITING_REVIEW", {"task_id": "b"}),
             event("TASK_ACCEPTED", {"task_id": "b", "input_fingerprint": DIGEST,
                                     "verdict_fingerprint": DIGEST}),
@@ -289,6 +295,54 @@ class EventReplayTests(unittest.TestCase):
         self.assertEqual(left, right)
         with self.assertRaises(TypeError):
             left.tasks["new"] = left.tasks["a"]  # type: ignore[index]
+
+    def test_same_revision_invalidation_preserves_origin(self):
+        state = replay(accepted_history())
+        origin = state.tasks["a"].scope_origin
+        changed = reduce_event(state, event("TASK_INVALIDATED", {"task_id": "a", "new_task_revision": 1}))
+        self.assertEqual(changed.tasks["a"].scope_origin, origin)
+        self.assertEqual(changed.tasks["a"].task_revision, 1)
+        self.assertFalse(changed.tasks["a"].currently_satisfied)
+
+    def test_started_event_cannot_replace_an_existing_scope_origin(self):
+        state = replay(accepted_history())
+        state = reduce_event(state, event("TASK_NEEDS_FIXES", {"task_id": "a"}))
+        with self.assertRaisesRegex(IntegrityError, "EVENT_SCHEMA_MISMATCH"):
+            reduce_event(state, event("TASK_STARTED", {"task_id": "a", "scope_origin": revision("replacement")}))
+
+    def test_invalidation_rejects_revision_regression(self):
+        state = replay(accepted_history())
+        state = reduce_event(state, event("TASK_INVALIDATED", {"task_id": "a", "new_task_revision": 2}))
+        with self.assertRaisesRegex(IntegrityError, "EVENT_SCHEMA_MISMATCH"):
+            reduce_event(state, event("TASK_INVALIDATED", {"task_id": "a", "new_task_revision": 1}))
+
+    def test_revision_advance_preserves_origin_until_scope_violation_resolved(self):
+        state = replay(accepted_history())
+        origin = state.tasks["a"].scope_origin
+        state = reduce_event(state, event("SCOPE_VIOLATION", {"task_id": "a"}))
+        state = reduce_event(state, event("TASK_INVALIDATED", {"task_id": "a", "new_task_revision": 2}))
+        self.assertEqual(state.tasks["a"].scope_origin, origin)
+        state = reduce_event(state, event("TASK_UNBLOCKED", {"task_id": "a", "provenance": {"actor": "human", "resolution": "reverted"}}))
+        state = reduce_event(state, event("TASK_INVALIDATED", {"task_id": "a", "new_task_revision": 3}))
+        self.assertIsNone(state.tasks["a"].scope_origin)
+
+    def test_nested_semantic_event_payloads_are_strict(self):
+        valid = [
+            ("TASK_STARTED", {"task_id": "a", "scope_origin": revision()}, "scope_origin"),
+            ("TASK_REPORTED", {"task_id": "a", "report": {"summary": "done", "workspace_revision": revision()}}, "report"),
+            ("DELIVERY_RECORDED", {"delivery_target": "commit", "acceptance_set_sha256": DIGEST,
+                "workspace_revision": revision(), "provenance": {"provider": "git", "reference": "abc"}}, "provenance"),
+            ("TASK_UNBLOCKED", {"task_id": "a", "provenance": {"actor": "human", "resolution": "fixed"}}, "provenance"),
+        ]
+        for kind, payload, field in valid:
+            event(kind, payload)
+            for nested in ({}, "nonsense", {**payload[field], "surprise": True},
+                           {**payload[field], next(iter(payload[field])): []}):
+                with self.subTest(kind=kind, nested=nested):
+                    with self.assertRaises(ValidationError):
+                        event(kind, {**payload, field: nested})
+        with self.assertRaises(ValidationError):
+            event("TASK_UNBLOCKED", {"task_id": "a"})
 
 
 if __name__ == "__main__":

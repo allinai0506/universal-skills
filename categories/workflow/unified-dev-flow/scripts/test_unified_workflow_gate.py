@@ -159,7 +159,7 @@ class GateTests(unittest.TestCase):
         self.denied(decide(state, command("RESOLVE_BLOCKER", "task-001")), "PROVENANCE_INSUFFICIENT")
         state = advance(state, "RESOLVE_BLOCKER", "task-001", provenance={"actor": "human", "resolution": "reverted"})
         state = advance(state, "START_TASK", "task-001", facts=workspace(NEW))
-        self.assertEqual(state.tasks["task-001"].scope_origin["verification_input_fingerprint"], NEW)
+        self.assertEqual(state.tasks["task-001"].scope_origin["verification_input_fingerprint"], OLD)
 
     def test_report_requires_matching_commit_observation(self):
         state = task(status="running")
@@ -181,7 +181,7 @@ class GateTests(unittest.TestCase):
         state = task(status="running")
         result = decide(state, command("RECORD_VERIFICATION", "task-001",
             evidence=evidence(state, post_command_revision=workspace(NEW).to_dict())), workspace())
-        self.denied(result, "EVIDENCE_STALE", ["VERIFICATION_RECORDED", "TASK_INVALIDATED"])
+        self.denied(result, "EVIDENCE_STALE", ["VERIFICATION_RECORDED"])
         result = decide(state, command("RECORD_VERIFICATION", "task-001",
             evidence=evidence(state, scope_diff=["secret.txt"])), workspace())
         self.denied(result, "SCOPE_VIOLATION", ["VERIFICATION_RECORDED", "SCOPE_VIOLATION"])
@@ -353,6 +353,57 @@ class GateTests(unittest.TestCase):
         state = advance(state, "RECORD_VERIFICATION", "task-001", facts=workspace(), evidence=evidence(state))
         self.denied(decide(state, command("WAIT_FOR_REVIEW", "task-001"), workspace(NEW)),
                     "EVIDENCE_STALE", ["TASK_INVALIDATED"])
+
+    def test_accepted_scope_violation_blocks_delivery_and_completion(self):
+        state = task(status="accepted")
+        state = apply(state, decide(state, delivery(state), workspace()))
+        for operation in (delivery(state), command("COMPLETE_RUN")):
+            with self.subTest(command=operation.command_type):
+                result = decide(state, operation, workspace(paths=["secret.txt"]))
+                self.denied(result, "SCOPE_VIOLATION", ["SCOPE_VIOLATION"])
+                self.assertEqual(apply(state, result).tasks["task-001"].status, "blocked")
+
+    def test_missing_observation_records_failure_without_invalidation(self):
+        state = task(status="running")
+        origin = state.tasks["task-001"].scope_origin
+        result = decide(state, command("RECORD_VERIFICATION", "task-001", evidence=evidence(state)))
+        self.denied(result, "EVIDENCE_MISSING", ["VERIFICATION_RECORDED"])
+        changed = apply(state, result)
+        self.assertEqual(changed.tasks["task-001"].task_revision, 1)
+        self.assertEqual(changed.tasks["task-001"].scope_origin, origin)
+
+    def test_malformed_evidence_binding_does_not_invalidate_even_with_new_observation(self):
+        state = task(status="running")
+        for changes in ({"task_id": "wrong"}, {"task_revision": 2}, {"task_contract_sha256": NEW}, {"command_sha256": NEW}):
+            with self.subTest(changes=changes):
+                result = decide(state, command("RECORD_VERIFICATION", "task-001", evidence=evidence(state, **changes)), workspace(NEW))
+                self.denied(result, "EVIDENCE_STALE", ["VERIFICATION_RECORDED"])
+                self.assertEqual(apply(state, result).tasks["task-001"].task_revision, 1)
+
+    def test_current_observation_proving_drift_does_invalidate(self):
+        state = task(status="running")
+        result = decide(state, command("RECORD_VERIFICATION", "task-001", evidence=evidence(state)), workspace(NEW))
+        self.denied(result, "EVIDENCE_STALE", ["VERIFICATION_RECORDED", "TASK_INVALIDATED"])
+        self.assertEqual(apply(state, result).tasks["task-001"].task_revision, 2)
+
+    def test_rejected_evidence_cannot_become_a_later_invalidation_baseline(self):
+        state = task(status="running")
+        result = decide(state, command("RECORD_VERIFICATION", "task-001", evidence=evidence(state)))
+        state = apply(state, result)
+        state = advance(state, "START_TASK", "task-001", facts=workspace(NEW))
+        self.denied(decide(state, command("WAIT_FOR_REVIEW", "task-001"), workspace(NEW)), "EVIDENCE_MISSING")
+
+    def test_review_limit_preserves_revision_origin_for_human_retry(self):
+        state = task(status="waiting_review")
+        state = replace(state, tasks={"task-001": replace(state.tasks["task-001"], review_round=2)})
+        origin = state.tasks["task-001"].scope_origin
+        result = decide(state, command("RECORD_REVIEW", "task-001", assertion=review(state, verdict="NEEDS_FIXES")), workspace())
+        state = apply(state, result)
+        self.assertEqual(state.tasks["task-001"].task_revision, 1)
+        self.assertEqual(state.tasks["task-001"].scope_origin, origin)
+        state = advance(state, "RESOLVE_BLOCKER", "task-001", provenance={"actor": "human", "resolution": "approved retry"})
+        state = advance(state, "START_TASK", "task-001", facts=workspace(NEW))
+        self.assertEqual(state.tasks["task-001"].scope_origin, origin)
 
 
 if __name__ == "__main__":
