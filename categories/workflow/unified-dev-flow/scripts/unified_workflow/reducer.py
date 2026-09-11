@@ -300,7 +300,7 @@ def reduce_event(state: RunState, event: DomainEvent) -> RunState:
                            accepted_input_fingerprint=input_fingerprint,
                            accepted_verdict_fingerprint=verdict_fingerprint)
         elif event_type == "TASK_BLOCKED":
-            task = replace(task, status="blocked")
+            task = replace(task, status="blocked", review_round=payload.get("review_round", task.review_round))
         elif event_type == "TASK_UNBLOCKED":
             task = replace(task, status="ready")
         elif event_type == "TASK_FAILED":

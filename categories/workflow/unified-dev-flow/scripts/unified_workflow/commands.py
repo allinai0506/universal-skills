@@ -122,7 +122,9 @@ class Decision:
             outcome = {"kind": "allowed", **self.outcome.to_dict()}
         else:
             outcome = {"kind": "denied", **self.outcome.to_dict()}
-        return {"events": [_json_plain(event) for event in self.events], "outcome": outcome}
+        from .events import DomainEvent
+        return {"events": [event.to_dict() if isinstance(event, DomainEvent) else _json_plain(event)
+                           for event in self.events], "outcome": outcome}
 
 
 def _command_type(value: Any) -> str:

@@ -8,7 +8,8 @@ import re
 from types import MappingProxyType
 from typing import Any, ClassVar, Mapping
 
-from .model import TaskContract, ValidationError, canonical_sha256, validate_id
+from .model import (EvidenceRecord, ReviewAssertion, RouteContract, TaskContract,
+                    ValidationError, WorkspaceRevision, canonical_sha256, validate_id)
 
 
 ZERO_HASH = "sha256:" + "0" * 64
@@ -176,8 +177,11 @@ def _decode_event_payload(event_type: str, raw: Any) -> Mapping[str, Any]:
                 "outcome": _enum(raw["outcome"], "outcome", _OUTCOMES),
                 "reason_code": reason_code, "result_summary": summary, "event_ids": event_ids}
     if event_type == "RUN_CREATED":
-        raw = _strict_fields(raw, ("work_id",), event_type)
-        return {"work_id": validate_id(raw["work_id"], "work_id")}
+        raw = _strict_fields_optional(raw, ("work_id",), ("route",), event_type)
+        result = {"work_id": validate_id(raw["work_id"], "work_id")}
+        if "route" in raw:
+            result["route"] = RouteContract.from_dict(_plain(raw["route"])).to_dict()
+        return result
     if event_type in ("RUN_BLOCKED", "RUN_RESUMED", "RUN_COMPLETED", "RUN_CANCELLED"):
         _strict_fields(raw, (), event_type)
         return {}
@@ -195,14 +199,20 @@ def _decode_event_payload(event_type: str, raw: Any) -> Mapping[str, Any]:
         return {"task_id": validate_id(raw["task_id"], "task_id"),
                 "report": _frozen_json_mapping(raw["report"], "report")}
     if event_type == "VERIFICATION_RECORDED":
-        raw = _strict_fields(raw, ("task_id", "success"), event_type)
-        return {"task_id": validate_id(raw["task_id"], "task_id"),
-                "success": _boolean(raw["success"], "success")}
+        raw = _strict_fields_optional(raw, ("task_id", "success"), ("evidence",), event_type)
+        result = {"task_id": validate_id(raw["task_id"], "task_id"),
+                  "success": _boolean(raw["success"], "success")}
+        if "evidence" in raw:
+            result["evidence"] = EvidenceRecord.from_dict(_plain(raw["evidence"])).to_dict()
+        return result
     if event_type == "REVIEW_RECORDED":
-        raw = _strict_fields(raw, ("task_id", "verdict_fingerprint"), event_type)
-        return {"task_id": validate_id(raw["task_id"], "task_id"),
+        raw = _strict_fields_optional(raw, ("task_id", "verdict_fingerprint"), ("assertion",), event_type)
+        result = {"task_id": validate_id(raw["task_id"], "task_id"),
                 "verdict_fingerprint": _digest_payload(raw["verdict_fingerprint"],
                                                         "verdict_fingerprint")}
+        if "assertion" in raw:
+            result["assertion"] = ReviewAssertion.from_dict(_plain(raw["assertion"])).to_dict()
+        return result
     if event_type == "TASK_ACCEPTED":
         raw = _strict_fields(raw, ("task_id", "input_fingerprint", "verdict_fingerprint"), event_type)
         return {"task_id": validate_id(raw["task_id"], "task_id"),
@@ -214,11 +224,27 @@ def _decode_event_payload(event_type: str, raw: Any) -> Mapping[str, Any]:
         return {"task_id": validate_id(raw["task_id"], "task_id"),
                 "new_task_revision": _integer(raw["new_task_revision"], "new_task_revision", 1)}
     if event_type == "DELIVERY_RECORDED":
-        raw = _strict_fields(raw, ("delivery_target", "acceptance_set_sha256", "provenance"), event_type)
-        return {"delivery_target": _enum(raw["delivery_target"], "delivery_target", _DELIVERY_TARGETS),
+        raw = _strict_fields_optional(raw, ("delivery_target", "acceptance_set_sha256", "provenance"),
+                                     ("workspace_revision",), event_type)
+        result = {"delivery_target": _enum(raw["delivery_target"], "delivery_target", _DELIVERY_TARGETS),
                 "acceptance_set_sha256": _digest_payload(raw["acceptance_set_sha256"],
                                                            "acceptance_set_sha256"),
                 "provenance": _frozen_json_mapping(raw["provenance"], "provenance")}
+        if "workspace_revision" in raw:
+            result["workspace_revision"] = WorkspaceRevision.from_dict(_plain(raw["workspace_revision"])).to_dict()
+        return result
+    if event_type == "TASK_UNBLOCKED":
+        raw = _strict_fields_optional(raw, ("task_id",), ("provenance",), event_type)
+        result = {"task_id": validate_id(raw["task_id"], "task_id")}
+        if "provenance" in raw:
+            result["provenance"] = _frozen_json_mapping(raw["provenance"], "provenance")
+        return result
+    if event_type == "TASK_BLOCKED":
+        raw = _strict_fields_optional(raw, ("task_id",), ("review_round",), event_type)
+        result = {"task_id": validate_id(raw["task_id"], "task_id")}
+        if "review_round" in raw:
+            result["review_round"] = _integer(raw["review_round"], "review_round", 1)
+        return result
     return _task_id_payload(raw, event_type)
 
 
