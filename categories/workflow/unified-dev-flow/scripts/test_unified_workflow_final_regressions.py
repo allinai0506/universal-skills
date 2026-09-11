@@ -436,9 +436,76 @@ class CLIWholeWorkspaceRegressions(CLIProject):
         self.assertEqual(result.returncode, 0)
         self.assertTrue((linked / ".git").is_file())
 
-    def test_ignore_validation_timeout_has_a_typed_failure(self):
+    def test_invalid_git_pointers_leave_external_targets_untouched(self):
+        for pointer_kind in ("gitdir", "commondir"):
+            for contents in ("missing", "empty", "existing"):
+                with self.subTest(pointer_kind=pointer_kind, contents=contents), TemporaryDirectory() as temporary:
+                    project = Path(temporary) / "project"
+                    target = Path(temporary) / "not-git"
+                    project.mkdir()
+                    if contents != "missing":
+                        target.mkdir()
+                    if contents == "existing":
+                        (target / "info").mkdir()
+                        (target / "info/exclude").write_bytes(b"# unrelated local configuration\nkeep-me")
+                    if pointer_kind == "gitdir":
+                        (project / ".git").write_text("gitdir: ../not-git\n")
+                    else:
+                        subprocess.run(["git", "init", "-q", str(project)], check=True)
+                        (project / ".git/commondir").write_text("../../not-git\n")
+                    before = {path.relative_to(target).as_posix(): path.read_bytes() if path.is_file() else None
+                              for path in target.rglob("*")}
+                    existed = target.exists()
+                    with self.assertRaisesRegex(ValidationError, "INVALID_GIT_DIRECTORY"):
+                        RunStore(project, "work-1").execute(command("INIT_RUN", route=valid_route()))
+                    after = {path.relative_to(target).as_posix(): path.read_bytes() if path.is_file() else None
+                             for path in target.rglob("*")}
+                    self.assertEqual(after, before)
+                    self.assertEqual(target.exists(), existed)
+                    self.assertFalse((project / ".gitignore").exists())
+
+    def test_ignore_preflight_rejects_invalid_git_directory_output_before_writes(self):
+        excludes = self.root / ".git/info/exclude"
+        before = excludes.read_bytes()
+        outputs = ("", "relative/git\n", str(self.root / ".git") + "\nextra\n",
+                   str(Path(self.temp.name) / "unrelated") + "\n")
+        for index, output in enumerate(outputs):
+            with self.subTest(output=output):
+                identifier = "invalid-" + str(index)
+                with patch("unified_workflow.store.subprocess.run",
+                           return_value=subprocess.CompletedProcess(["git"], 0, stdout=output)):
+                    with self.assertRaisesRegex(ValidationError, "INVALID_GIT_DIRECTORY"):
+                        RunStore(self.root, identifier).execute(replace(command("INIT_RUN", route=valid_route()),
+                                                                        work_id=identifier))
+                self.assertEqual(excludes.read_bytes(), before)
+
+    def test_init_without_root_dotgit_keeps_plain_directory_ignore_fallback(self):
+        for bare in (False, True):
+            with self.subTest(bare=bare), TemporaryDirectory() as temporary:
+                project = Path(temporary)
+                if bare:
+                    subprocess.run(["git", "init", "--bare", "-q", str(project)], check=True)
+                original = b"# keep local rules"
+                (project / ".gitignore").write_bytes(original)
+                with patch("unified_workflow.store.subprocess.run",
+                           side_effect=AssertionError("No root .git metadata to preflight")):
+                    result = RunStore(project, "work-1").execute(command("INIT_RUN", route=valid_route()))
+                self.assertIsInstance(result.outcome, Allowed)
+                self.assertEqual((project / ".gitignore").read_bytes(), original + b"\n/.unified-dev-flow/\n")
+
+    def test_ignore_preflight_timeout_leaves_configuration_untouched(self):
+        excludes = self.root / ".git/info/exclude"
+        before = excludes.read_bytes()
         with patch("unified_workflow.store.subprocess.run",
-                   side_effect=subprocess.TimeoutExpired("git check-ignore", 10)):
+                   side_effect=subprocess.TimeoutExpired("git rev-parse", 10)):
+            with self.assertRaisesRegex(ValidationError, "RUNTIME_IGNORE_FAILED"):
+                RunStore(self.root, "work-1").execute(command("INIT_RUN", route=valid_route()))
+        self.assertEqual(excludes.read_bytes(), before)
+
+    def test_ignore_validation_timeout_has_a_typed_failure(self):
+        preflight = subprocess.CompletedProcess(["git"], 0, stdout=str(self.root.resolve() / ".git") + "\n")
+        with patch("unified_workflow.store.subprocess.run",
+                   side_effect=[preflight, subprocess.TimeoutExpired("git check-ignore", 10)]):
             with self.assertRaisesRegex(ValidationError, "RUNTIME_IGNORE_FAILED"):
                 RunStore(self.root, "work-1").execute(command("INIT_RUN", route=valid_route()))
 

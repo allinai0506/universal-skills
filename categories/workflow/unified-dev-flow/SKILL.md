@@ -63,8 +63,9 @@ batch under the caller's request ID.
 `status --json` and `replay --json` expose the same canonical replayed state,
 including the pinned goal/route, review rounds, blockers, timestamps, and log head;
 runtime records live only under the target project's `.unified-dev-flow/`.
-Authorized initialization adds a local Git ignore rule (with a minimal root
-`.gitignore` fallback when required) and validates it with `git check-ignore`.
+Authorized initialization first validates root Git metadata with read-only
+`git rev-parse --absolute-git-dir`, then adds a local Git ignore rule (with a
+minimal root `.gitignore` fallback when required) and validates it with `git check-ignore`.
 Existing `.omc/` and `.superpowers/sdd/` records retain their native roles.
 
 ## Entry Gate (first commitment after recon)

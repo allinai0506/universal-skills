@@ -373,11 +373,25 @@ The sequence property describes the last successfully read/committed head.
             pointer = git_entry.read_text(encoding="utf-8").strip()
             if not pointer.startswith("gitdir: ") or "\n" in pointer:
                 raise ValidationError("INVALID_GIT_DIRECTORY", "Invalid Git directory pointer")
-            git_dir = (self.project_root / pointer[8:]).resolve(strict=True)
+            git_dir = self.project_root / pointer[8:]
         elif git_entry.exists():
             raise ValidationError("INVALID_GIT_DIRECTORY", "Invalid Git metadata entry")
         else:
             git_dir = None
+        if git_dir is not None:
+            try:
+                result = subprocess.run(["git", "rev-parse", "--absolute-git-dir"], shell=False,
+                    cwd=self.project_root, env={"PATH": os.defpath, "LANG": "C", "LC_ALL": "C"},
+                    stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=10)
+            except (OSError, UnicodeError, subprocess.SubprocessError) as exc:
+                raise ValidationError("RUNTIME_IGNORE_FAILED", "Git could not validate the repository metadata") from exc
+            observed = result.stdout.removesuffix("\n") if isinstance(result.stdout, str) else ""
+            if (result.returncode != 0 or not Path(observed).is_absolute()
+                    or any(character in observed for character in ("\n", "\r", "\0"))):
+                raise ValidationError("INVALID_GIT_DIRECTORY", "Invalid Git repository metadata")
+            git_dir = git_dir.resolve(strict=True)
+            if git_dir != Path(observed):
+                raise ValidationError("INVALID_GIT_DIRECTORY", "Git directory does not match the repository metadata")
         with ExitStack() as stack:
             if git_dir is None:
                 directory = self.project_root

@@ -111,7 +111,7 @@ categories/workflow/unified-dev-flow/scripts/
 - `work-id`、`task-id`、`command-id`、`request-id` 仅允许 `[A-Za-z0-9][A-Za-z0-9._-]{0,127}`。
 - 所有业务和 runtime 路径必须 `resolve` 后仍位于项目根或对应 run 目录内；控制目录及其父路径不得是符号链接。仅初始化忽略规则允许访问项目 Git 元数据声明的 `gitdir` / `commondir`，以支持 linked worktree 的共享 `info/exclude`；不能通过符号链接改写忽略文件。
 - `.unified-dev-flow/**` 必须加入项目忽略规则，并从业务 workspace revision、scope diff 和 verification inputs 中排除。
-- 非 patch 的已授权 `init` 优先保留原字节并向 Git `info/exclude` 追加 `/.unified-dev-flow/`；用固定 argv、`shell=False` 的只读 `git check-ignore` 校验。若根 `.gitignore` 的更高优先级规则抵消了它，再向根 `.gitignore` 末尾追加同一规则并复验。无 Git 元数据的项目使用根 `.gitignore`。重复初始化不重复追加，patch 拒绝分支保持零写入。
+- 非 patch 的已授权 `init` 在解析根 `.git` 指针目标或写入忽略配置前，先用固定 argv、`shell=False` 的只读 `git rev-parse --absolute-git-dir` 验证仓库；无效 `gitdir` / `commondir`、异常输出及超时必须在外部目标写入前失败。随后优先保留原字节并向 Git `info/exclude` 追加 `/.unified-dev-flow/`；用同样受限的只读 `git check-ignore` 校验。若根 `.gitignore` 的更高优先级规则抵消了它，再向根 `.gitignore` 末尾追加同一规则并复验。无根 `.git` 元数据的项目使用根 `.gitignore`。重复初始化不重复追加，patch 拒绝分支保持零写入。
 - 控制目录和事件文件分别使用仅当前用户可访问的目录/文件权限；CLI 默认不输出完整命令环境或未截断的敏感输出。
 - `delivery_target: patch` 是只读路线，不得创建 runtime；`init` 对该 RouteContract 返回 `RUNTIME_NOT_AUTHORIZED`。
 

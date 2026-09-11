@@ -6,7 +6,7 @@
 
 **Architecture:** Phase One supplies an immutable resolved `RouteContract`. The Kernel accepts strict commands, returns `Decision(events, outcome)`, appends request-aware `EventBatch` records, and derives all state through one pure Reducer. Providers observe workspaces or run registered verification commands; they never own workflow state.
 
-**Tech Stack:** Python 3.11+ standard library, `unittest`, JSON/JSONL, `fcntl` on supported Unix hosts. Git CLI is limited to optional Provider observation and fixed-argv read-only `git check-ignore` during authorized runtime initialization.
+**Tech Stack:** Python 3.11+ standard library, `unittest`, JSON/JSONL, `fcntl` on supported Unix hosts. Git CLI is limited to optional Provider observation and fixed-argv read-only `git rev-parse --absolute-git-dir` / `git check-ignore` for metadata preflight and ignore validation during authorized runtime initialization.
 
 ## Global Constraints
 
