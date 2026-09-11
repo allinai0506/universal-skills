@@ -12,7 +12,7 @@ from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
-from test_unified_workflow_gate import command, workspace
+from test_unified_workflow_gate import command, evidence, workspace
 from test_unified_workflow_model import valid_route, valid_task
 from unified_workflow.commands import Allowed, Denied
 from unified_workflow.events import IntegrityError
@@ -106,6 +106,114 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(provider.calls, 1)
         self.assertEqual(provider.observations, 3)
         self.assertEqual(second.state.requests[cmd.request_id].outcome, "success")
+
+    def test_retry_syncs_readable_resolution_after_transient_final_fsync_failure(self):
+        cmd = self.verify_command()
+        provider = CountingProvider()
+        real_sync = os.fsync
+        final_attempts = []
+        synced_after_retry = []
+        def sync(fd):
+            info = os.fstat(fd)
+            if info.st_ino == self.store.events_path.stat().st_ino:
+                batch = json.loads(self.store.events_path.read_text().splitlines()[-1])
+                if batch["request_id"] == cmd.request_id and batch["events"][-1]["event_type"] == "REQUEST_RESOLVED":
+                    final_attempts.append(fd)
+                    if len(final_attempts) == 1:
+                        raise OSError("transient event fsync failure")
+                    synced_after_retry.append("events")
+            elif info.st_ino == self.store.run_dir.stat().st_ino and len(final_attempts) > 1:
+                synced_after_retry.append("directory")
+            return real_sync(fd)
+        with patch("unified_workflow.store.os.fsync", side_effect=sync):
+            with self.assertRaisesRegex(OSError, "transient event fsync failure"):
+                self.store.execute_verification(cmd, provider)
+            retry = RunStore(self.root, "work-1").execute_verification(cmd, provider)
+        self.assertIsInstance(retry.outcome, Allowed)
+        self.assertEqual(provider.calls, 1)
+        self.assertEqual(len(final_attempts), 2)
+        self.assertEqual(synced_after_retry, ["events", "directory"])
+
+    def test_retry_fails_closed_while_final_event_fsync_keeps_failing(self):
+        cmd = self.verify_command()
+        provider = CountingProvider()
+        real_sync = os.fsync
+        failures = []
+        def sync(fd):
+            if os.fstat(fd).st_ino == self.store.events_path.stat().st_ino:
+                batch = json.loads(self.store.events_path.read_text().splitlines()[-1])
+                if batch["request_id"] == cmd.request_id and batch["events"][-1]["event_type"] == "REQUEST_RESOLVED":
+                    failures.append(fd)
+                    raise OSError("persistent event fsync failure")
+            return real_sync(fd)
+        with patch("unified_workflow.store.os.fsync", side_effect=sync):
+            for _ in range(2):
+                with self.assertRaisesRegex(OSError, "persistent event fsync failure"):
+                    self.store.execute_verification(cmd, provider)
+        self.assertEqual(provider.calls, 1)
+        self.assertEqual(len(failures), 2)
+
+    def test_generic_execute_rejects_supplied_verification_evidence_stably(self):
+        state = self.store.load()
+        cmd = self.cmd("RECORD_VERIFICATION", "task-001", evidence=evidence(state))
+        result = self.store.execute(cmd, workspace())
+        self.assertIsInstance(result.outcome, Denied)
+        self.assertEqual(result.outcome.reason_code, "INVALID_CONTRACT")
+        self.assertEqual(result.state.tasks["task-001"].verifications, ())
+        sequence = self.store.sequence
+        self.assertEqual(self.store.execute(cmd, workspace()).outcome, result.outcome)
+        self.assertEqual(self.store.sequence, sequence)
+
+    def test_generic_execute_rejects_even_a_previously_executed_verification(self):
+        cmd = self.verify_command()
+        self.store.execute_verification(cmd, CountingProvider())
+        before = self.store.events_path.read_bytes()
+        result = self.store.execute(cmd)
+        self.assertEqual(result.outcome.reason_code, "INVALID_CONTRACT")
+        self.assertEqual(self.store.events_path.read_bytes(), before)
+
+    def test_retry_reestablishes_directory_durability_after_final_directory_sync_failure(self):
+        cmd = self.verify_command()
+        provider = CountingProvider()
+        real_sync = os.fsync
+        directory_attempts = []
+        sync_order = []
+        def sync(fd):
+            batch = json.loads(self.store.events_path.read_text().splitlines()[-1])
+            if batch["request_id"] == cmd.request_id and batch["events"][-1]["event_type"] == "REQUEST_RESOLVED":
+                inode = os.fstat(fd).st_ino
+                if inode == self.store.events_path.stat().st_ino:
+                    sync_order.append("events")
+                elif inode == self.store.run_dir.stat().st_ino:
+                    directory_attempts.append(fd)
+                    sync_order.append("directory")
+                    if len(directory_attempts) == 1:
+                        raise OSError("transient directory fsync failure")
+            return real_sync(fd)
+        with patch("unified_workflow.store.os.fsync", side_effect=sync):
+            with self.assertRaisesRegex(OSError, "transient directory fsync failure"):
+                self.store.execute_verification(cmd, provider)
+            sync_order.clear()
+            retry = self.store.execute_verification(cmd, provider)
+        self.assertIsInstance(retry.outcome, Allowed)
+        self.assertEqual(provider.calls, 1)
+        self.assertEqual(sync_order[-2:], ["events", "directory"])
+
+    def test_constructing_store_does_not_create_runtime(self):
+        with TemporaryDirectory() as root:
+            store = RunStore(Path(root), "work-1")
+            self.assertEqual(store.sequence, 0)
+            self.assertFalse((Path(root) / ".unified-dev-flow").exists())
+
+    def test_patch_init_denial_does_not_create_control_directory(self):
+        with TemporaryDirectory() as root:
+            store = RunStore(Path(root), "work-1")
+            route = valid_route()
+            route["delivery_target"] = "patch"
+            result = store.execute(command("INIT_RUN", route=route))
+            self.assertEqual(result.outcome.reason_code, "RUNTIME_NOT_AUTHORIZED")
+            self.assertEqual(result.state.status, "new")
+            self.assertFalse((Path(root) / ".unified-dev-flow").exists())
 
     def test_process_crashes_leave_in_doubt_without_rerunning_provider(self):
         for phase in ("reserved", "provider", "blobs"):

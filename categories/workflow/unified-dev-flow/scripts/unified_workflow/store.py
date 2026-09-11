@@ -22,7 +22,7 @@ from .events import DomainEvent, EventBatch, IntegrityError, ZERO_HASH
 from .gate_kernel import decide
 from .model import (EvidenceRecord, TaskContract, ValidationError, WorkspaceRevision,
                     canonical_json, canonical_sha256, validate_id, _json_plain)
-from .reducer import RunState, replay
+from .reducer import RunState, initial_state, replay
 
 
 @dataclass(frozen=True)
@@ -109,9 +109,6 @@ The sequence property describes the last successfully read/committed head.
         self.lock_path = self.run_dir / "run.lock"
         self.sequence = 0
         self.diagnostics: tuple[str, ...] = ()
-        with self._layout() as (run_fd, _):
-            for name in ("run.lock", "events.jsonl"):
-                os.close(self._file(run_fd, name, os.O_RDWR | os.O_CREAT))
 
     @staticmethod
     def _directory(parent_fd, name):
@@ -175,6 +172,7 @@ The sequence property describes the last successfully read/committed head.
                     fcntl.flock(lock, (fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH) | fcntl.LOCK_NB)
                 except BlockingIOError as exc:
                     raise LockBusy() from exc
+                os.close(self._file(run_fd, "events.jsonl", os.O_RDWR | os.O_CREAT))
                 yield run_fd, blobs_fd
             finally:
                 os.close(lock)
@@ -273,7 +271,7 @@ The sequence property describes the last successfully read/committed head.
         return CommandResult(outcome, state, self.diagnostics,
                              status or ("success" if isinstance(outcome, Allowed) else "denied"))
 
-    def _prior(self, state, command, fingerprint):
+    def _prior(self, run_fd, state, command, fingerprint):
         if command.work_id != self.work_id:
             return self._result(state, _denied("INVALID_CONTRACT", "Address this store's work ID."))
         existing = state.requests.get(command.request_id)
@@ -284,6 +282,14 @@ The sequence property describes the last successfully read/committed head.
                 return self._result(state, _denied("REQUEST_IN_DOUBT", "Inspect the prior attempt and explicitly resolve it."))
             summary = _json_plain(existing.result_summary)
             outcome = Decision.from_dict({"events": [], "outcome": summary["outcome"]}).outcome
+            # A prior append may be readable even if its fsync raised. Reestablish
+            # durability under the writer lock before acknowledging that outcome.
+            fd = self._file(run_fd, "events.jsonl", os.O_RDONLY)
+            try:
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+            os.fsync(run_fd)
             return self._result(state, outcome, existing.outcome)
         if command.expected_sequence != self.sequence:
             return self._result(state, _denied("EXPECTED_SEQUENCE_MISMATCH", "Reload the run and use its current sequence."))
@@ -332,11 +338,18 @@ The sequence property describes the last successfully read/committed head.
 
     def execute(self, command, facts=None) -> CommandResult:
         command = Command.from_dict(command.to_dict())
+        if command.command_type == "INIT_RUN":
+            preflight = decide(initial_state(), command, facts)
+            if isinstance(preflight.outcome, Denied):
+                return self._result(initial_state(), preflight.outcome)
         fingerprint = canonical_sha256(command.to_dict())
         try:
             with self._locked() as (run_fd, blobs_fd):
                 batches, state = self._read(run_fd, blobs_fd)
-                prior = self._prior(state, command, fingerprint)
+                if command.command_type == "RECORD_VERIFICATION":
+                    return self._result(state, _denied("INVALID_CONTRACT",
+                        "Use execute_verification with a registered command ID and Provider."))
+                prior = self._prior(run_fd, state, command, fingerprint)
                 if prior is not None:
                     return prior
                 decision = decide(state, command, facts)
@@ -350,7 +363,7 @@ The sequence property describes the last successfully read/committed head.
         try:
             with self._locked() as (run_fd, blobs_fd):
                 batches, state = self._read(run_fd, blobs_fd)
-                prior = self._prior(state, command, fingerprint)
+                prior = self._prior(run_fd, state, command, fingerprint)
                 if prior is not None:
                     return prior
                 task = state.tasks.get(command.task_id)
