@@ -12,6 +12,7 @@ from unified_workflow.model import (
     RouteContract,
     TaskContract,
     ValidationError,
+    WorkspaceRevision,
     canonical_sha256,
     resolve_project_path,
 )
@@ -198,6 +199,23 @@ class StrictModelTests(unittest.TestCase):
         raw_review["provenance"] = "invented"
         with self.assertRaisesRegex(ValidationError, "UNKNOWN_ENUM"):
             ReviewAssertion.from_dict(raw_review)
+
+    def test_workspace_manifest_is_strict_immutable_and_round_trips(self):
+        raw = {"schema_version": 1, "provider": "trusted-local", "revision_id": "rev-1",
+               "verification_input_fingerprint": "sha256:" + "a" * 64,
+               "changed_paths": ["src/a.py"], "observed_at": "2026-09-11T00:00:00Z",
+               "file_manifest": {"src/a.py": "sha256:" + "b" * 64}}
+        revision = WorkspaceRevision.from_dict(raw)
+        self.assertEqual(revision.to_dict(), raw)
+        with self.assertRaises(TypeError):
+            revision.file_manifest["src/b.py"] = "sha256:" + "c" * 64
+        for path, digest in ((".git/config", "sha256:" + "d" * 64),
+                             ("../escape", "sha256:" + "d" * 64),
+                             ("src/b.py", "not-a-digest")):
+            invalid = {**raw, "file_manifest": {path: digest}}
+            with self.subTest(path=path, digest=digest):
+                with self.assertRaises(ValidationError):
+                    WorkspaceRevision.from_dict(invalid)
 
 
 if __name__ == "__main__":

@@ -52,21 +52,34 @@ class TrustedLocalVerifier:
     def observe_workspace(self, request: ObserveRequest) -> WorkspaceRevision:
         """Hash requested real files only; control state never alters business revision."""
         digest = sha256()
+        manifest: dict[str, str] = {}
         for relative, path in self._relevant_files(request.task_contract.verification_inputs):
             digest.update(relative.encode("utf-8", "surrogateescape"))
             digest.update(b"\0")
+            file_digest = sha256()
             with path.open("rb") as stream:
                 while block := stream.read(1024 * 1024):
                     digest.update(block)
+                    file_digest.update(block)
             digest.update(b"\0")
+            manifest[relative] = "sha256:" + file_digest.hexdigest()
         fingerprint = "sha256:" + digest.hexdigest()
+        origin_manifest = request.scope_origin.file_manifest
+        if request.scope_origin.provider == self.name and origin_manifest:
+            changed_paths = tuple(sorted(path for path in set(manifest) | set(origin_manifest)
+                                         if manifest.get(path) != origin_manifest.get(path)))
+        else:
+            # A foreign or legacy local origin cannot support task attribution.
+            # Report every relevant path rather than treating Git's HEAD as its origin.
+            changed_paths = tuple(manifest)
         return WorkspaceRevision.from_dict({
             "schema_version": 1,
             "provider": self.name,
             "revision_id": "workspace-" + digest.hexdigest(),
             "verification_input_fingerprint": fingerprint,
-            "changed_paths": list(self._git_changed_paths()),
+            "changed_paths": list(changed_paths),
             "observed_at": _timestamp(),
+            "file_manifest": manifest,
         })
 
     def run_verification(self, command_id: str) -> VerificationResult:
@@ -117,6 +130,8 @@ class TrustedLocalVerifier:
             for name in sorted(file_names):
                 path = current_path / name
                 relative = path.relative_to(self.project_root).as_posix()
+                if PurePosixPath(relative).parts[0] in _EXCLUDED_ROOTS:
+                    continue
                 if path.is_symlink():
                     self._check_symlink(path)
                     continue
@@ -124,7 +139,7 @@ class TrustedLocalVerifier:
                     continue
                 if self._matches(relative, patterns):
                     files.append((relative, path))
-        return files
+        return sorted(files)
 
     def _check_symlink(self, path: Path) -> None:
         try:
@@ -143,37 +158,6 @@ class TrustedLocalVerifier:
                 return True
         return False
 
-    def _git_changed_paths(self) -> tuple[str, ...]:
-        try:
-            completed = subprocess.run(["git", "-C", str(self.project_root), "status",
-                "--porcelain=v1", "-z", "--untracked-files=all"], stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False, timeout=5,
-                env={"PATH": os.defpath, "LANG": "C", "LC_ALL": "C"})
-        except (OSError, subprocess.TimeoutExpired):
-            return ()
-        if completed.returncode:
-            return ()
-        entries = completed.stdout.split(b"\0")
-        paths: set[str] = set()
-        index = 0
-        while index < len(entries):
-            entry = entries[index]
-            index += 1
-            if not entry:
-                continue
-            status, raw_path = entry[:2], entry[3:]
-            if b"\0" in raw_path:
-                continue
-            if b"R" in status or b"C" in status:
-                index += 1
-            path = raw_path.decode("utf-8", "surrogateescape")
-            pure = PurePosixPath(path)
-            if (not path or pure.is_absolute() or ".." in pure.parts or "\\" in path
-                    or pure.parts[0] in _EXCLUDED_ROOTS):
-                continue
-            paths.add(path)
-        return tuple(sorted(paths))
-
     @staticmethod
     def _collect_output(process: subprocess.Popen, timeout_seconds: int, limit: int):
         retained = {"stdout": bytearray(), "stderr": bytearray()}
@@ -186,16 +170,24 @@ class TrustedLocalVerifier:
             selector.register(stream, selectors.EVENT_READ, label)
         deadline = time.monotonic() + timeout_seconds
         timed_out = False
+        cleanup_deadline: float | None = None
         try:
-            while selector.get_map():
-                remaining = deadline - time.monotonic()
-                if not timed_out and remaining <= 0 and process.poll() is None:
+            while selector.get_map() or process.poll() is None:
+                now = time.monotonic()
+                if not timed_out and now >= deadline:
                     timed_out = True
+                    cleanup_deadline = now + 1
                     try:
                         os.killpg(process.pid, signal.SIGKILL)
                     except ProcessLookupError:
                         pass
-                wait = .05 if timed_out else max(0, min(.05, remaining))
+                if timed_out and cleanup_deadline is not None and now >= cleanup_deadline:
+                    for key in list(selector.get_map().values()):
+                        selector.unregister(key.fileobj)
+                        key.fileobj.close()
+                    break
+                until = cleanup_deadline if timed_out else deadline
+                wait = max(0, min(.05, until - now))
                 for key, _ in selector.select(wait):
                     data = os.read(key.fileobj.fileno(), 65536)
                     if not data:
@@ -208,14 +200,15 @@ class TrustedLocalVerifier:
                     room = limit - len(retained[label])
                     if room > 0:
                         retained[label].extend(data[:room])
-            process.wait()
+            if process.poll() is None:
+                process.wait(timeout=1)
         finally:
             if process.poll() is None:
                 try:
                     os.killpg(process.pid, signal.SIGKILL)
                 except ProcessLookupError:
                     pass
-                process.wait()
+                process.wait(timeout=1)
             selector.close()
         streams = []
         for label in ("stdout", "stderr"):

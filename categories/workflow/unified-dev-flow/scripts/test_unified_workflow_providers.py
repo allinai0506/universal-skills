@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from hashlib import sha256
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 from tempfile import TemporaryDirectory
@@ -98,6 +99,11 @@ class TrustedLocalVerifierTests(unittest.TestCase):
             command("timeout", [sys.executable, "-c",
                     "import pathlib, subprocess, sys, time; child=subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)']); pathlib.Path('child.pid').write_text(str(child.pid)); time.sleep(30)"],
                     timeout=1),
+            command("parent-exits-child-holds-pipes", [sys.executable, "-c",
+                    "import pathlib, subprocess, sys; child=subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(3)']); pathlib.Path('pipe-child.pid').write_text(str(child.pid))"],
+                    timeout=1),
+            command("parent-closes-pipes", [sys.executable, "-c",
+                    "import os, time; os.close(1); os.close(2); time.sleep(3)"], timeout=1),
             command("nonzero", [sys.executable, "-c", "import sys; sys.exit(7)"], limit=self.limit),
             command("environment", [sys.executable, "-c",
                     "import os,sys;sys.stdout.write(os.getenv('MARK', 'none') + '|' + os.getenv('LEAK', 'none'))"],
@@ -134,6 +140,21 @@ class TrustedLocalVerifierTests(unittest.TestCase):
             time.sleep(.02)
         else:
             self.fail("timed-out child process remains alive")
+
+    def test_timeout_deadline_kills_descendant_when_parent_exits_with_pipes_open(self):
+        started = time.monotonic()
+        result = self.provider.run_verification("parent-exits-child-holds-pipes")
+        self.assertLess(time.monotonic() - started, 1.8)
+        self.assertTrue(result.timed_out)
+        child_pid = int((self.root / "pipe-child.pid").read_text())
+        with self.assertRaises(ProcessLookupError):
+            os.kill(child_pid, 0)
+
+    def test_timeout_deadline_applies_after_parent_closes_pipes(self):
+        started = time.monotonic()
+        result = self.provider.run_verification("parent-closes-pipes")
+        self.assertLess(time.monotonic() - started, 1.8)
+        self.assertTrue(result.timed_out)
 
     def test_nonzero_exit_is_preserved(self):
         result = self.provider.run_verification("nonzero")
@@ -172,6 +193,57 @@ class TrustedLocalVerifierTests(unittest.TestCase):
         git_only = self.provider.observe_workspace(request)
         self.assertEqual(after.verification_input_fingerprint,
                          git_only.verification_input_fingerprint)
+
+    def test_local_manifest_attributes_changes_since_its_origin(self):
+        request = request_for(["src/**"])
+        (self.root / "src" / "already-untracked.txt").write_text("old\n")
+        before = self.provider.observe_workspace(request)
+        self.assertIn("src/already-untracked.txt", before.file_manifest)
+        (self.root / "src" / "tracked.txt").write_text("after\n")
+        (self.root / "src" / "added-after-origin.txt").write_text("new\n")
+        after = self.provider.observe_workspace(replace(request, scope_origin=before))
+        self.assertEqual(after.changed_paths,
+                         ("src/added-after-origin.txt", "src/tracked.txt"))
+        with self.assertRaises(TypeError):
+            after.file_manifest["src/forbidden.txt"] = "sha256:" + "0" * 64
+
+    def test_local_origin_without_manifest_reports_current_scope_conservatively(self):
+        request = request_for(["src/**"])
+        incomplete_origin = replace(origin(), provider="trusted-local")
+        after = self.provider.observe_workspace(replace(request, scope_origin=incomplete_origin))
+        self.assertEqual(after.changed_paths, ("src/tracked.txt",))
+
+    def test_fingerprint_is_sorted_globally_by_posix_path(self):
+        (self.root / "a").mkdir()
+        (self.root / "a" / "x.txt").write_text("a\n")
+        (self.root / "z.txt").write_text("z\n")
+        observed = self.provider.observe_workspace(request_for(["**/*"]))
+        expected = sha256()
+        for relative in sorted(observed.file_manifest):
+            expected.update(relative.encode())
+            expected.update(b"\0")
+            expected.update((self.root / relative).read_bytes())
+            expected.update(b"\0")
+        self.assertEqual(observed.verification_input_fingerprint,
+                         "sha256:" + expected.hexdigest())
+        self.assertEqual(tuple(observed.file_manifest), tuple(sorted(observed.file_manifest)))
+
+    def test_git_regular_file_and_symlink_are_excluded_from_manifest(self):
+        before = self.provider.observe_workspace(request_for(["**/*"]))
+        shutil.rmtree(self.root / ".git")
+        (self.root / ".git").write_text("gitdir: elsewhere\n")
+        regular = self.provider.observe_workspace(request_for(["**/*"]))
+        self.assertEqual(before.verification_input_fingerprint,
+                         regular.verification_input_fingerprint)
+        self.assertNotIn(".git", regular.file_manifest)
+        (self.root / ".git").unlink()
+        outside = self.root.parent / ("linked-git-" + self.root.name)
+        outside.mkdir()
+        (self.root / ".git").symlink_to(outside, target_is_directory=True)
+        linked = self.provider.observe_workspace(request_for(["**/*"]))
+        self.assertEqual(before.verification_input_fingerprint,
+                         linked.verification_input_fingerprint)
+        self.assertNotIn(".git", linked.file_manifest)
 
     def test_runtime_directory_does_not_change_business_revision(self):
         before = self.provider.observe_workspace(request_for(["**/*"]))

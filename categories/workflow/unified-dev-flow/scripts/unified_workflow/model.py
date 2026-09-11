@@ -1,7 +1,7 @@
 """Strict, immutable protocol values for the Unified Workflow kernel."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from hashlib import sha256
 import json
 from math import isfinite
@@ -121,6 +121,21 @@ def _relative_path(value: Any, field: str, *, allow_dot: bool = False,
     if not allow_control and path.parts and path.parts[0] in CONTROL_PREFIXES:
         _error("CONTROL_PATH", f"{field} must not address a control directory")
     return value
+
+
+def _file_manifest(value: Any) -> Mapping[str, str]:
+    """Validate and freeze a canonical project-relative path-to-digest mapping."""
+    if not isinstance(value, Mapping):
+        _error("INVALID_TYPE", "file_manifest must be an object")
+    parsed: dict[str, str] = {}
+    for raw_path, raw_digest in value.items():
+        path = _relative_path(raw_path, "file_manifest path")
+        if PurePosixPath(path).as_posix() != path:
+            _error("INVALID_PATH", "file_manifest path must be canonical POSIX")
+        if path in parsed:
+            _error("DUPLICATE_VALUE", "file_manifest contains a duplicate path")
+        parsed[path] = _sha256(raw_digest, "file_manifest digest")
+    return MappingProxyType(dict(sorted(parsed.items())))
 
 
 def resolve_project_path(root: Path, value: Any, field: str) -> Path:
@@ -417,6 +432,7 @@ class WorkspaceRevision:
     verification_input_fingerprint: str
     changed_paths: tuple[str, ...]
     observed_at: str
+    file_manifest: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
 
     _FIELDS: ClassVar[tuple[str, ...]] = (
         "schema_version", "provider", "revision_id", "verification_input_fingerprint",
@@ -424,6 +440,10 @@ class WorkspaceRevision:
 
     @classmethod
     def from_dict(cls, raw: Any) -> "WorkspaceRevision":
+        if not isinstance(raw, dict):
+            _error("INVALID_TYPE", "WorkspaceRevision must be an object")
+        raw = dict(raw)
+        manifest = raw.pop("file_manifest", {})
         raw = _expect_fields(raw, cls._FIELDS, "WorkspaceRevision")
         return cls(
             schema_version=_schema_version(raw["schema_version"]),
@@ -433,13 +453,15 @@ class WorkspaceRevision:
                 raw["verification_input_fingerprint"], "verification_input_fingerprint"),
             changed_paths=_unique_strings(raw["changed_paths"], "changed_paths", paths=True),
             observed_at=_string(raw["observed_at"], "observed_at"),
+            file_manifest=_file_manifest(manifest),
         )
 
     def to_dict(self) -> dict[str, Any]:
         return {"schema_version": self.schema_version, "provider": self.provider,
                 "revision_id": self.revision_id,
                 "verification_input_fingerprint": self.verification_input_fingerprint,
-                "changed_paths": list(self.changed_paths), "observed_at": self.observed_at}
+                "changed_paths": list(self.changed_paths), "observed_at": self.observed_at,
+                "file_manifest": dict(self.file_manifest)}
 
 
 @dataclass(frozen=True)

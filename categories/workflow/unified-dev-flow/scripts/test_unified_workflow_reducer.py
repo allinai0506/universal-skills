@@ -344,6 +344,14 @@ class EventReplayTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             event("TASK_UNBLOCKED", {"task_id": "a"})
 
+    def test_nested_workspace_manifest_is_strictly_decoded(self):
+        payload = revision()
+        payload["file_manifest"] = {"src/a.py": "sha256:" + "a" * 64}
+        event("TASK_STARTED", {"task_id": "a", "scope_origin": payload})
+        invalid = {**payload, "file_manifest": {".git/config": "sha256:" + "a" * 64}}
+        with self.assertRaisesRegex(ValidationError, "CONTROL_PATH"):
+            event("TASK_STARTED", {"task_id": "a", "scope_origin": invalid})
+
 
 if __name__ == "__main__":
     unittest.main()
