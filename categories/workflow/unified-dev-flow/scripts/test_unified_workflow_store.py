@@ -18,6 +18,7 @@ from unified_workflow.commands import Allowed, Denied
 from unified_workflow.events import IntegrityError
 from unified_workflow.model import ValidationError, canonical_json
 from unified_workflow.store import RunStore, VerificationResult
+from unified_workflow.providers.base import ProviderError
 
 
 class CountingProvider:
@@ -117,7 +118,7 @@ class StoreTests(unittest.TestCase):
         last = json.loads(self.store.events_path.read_text().splitlines()[-1])
         self.assertEqual(last["request_id"], cmd.request_id)
         self.assertEqual([event["event_type"] for event in last["events"]],
-            ["REQUEST_RESERVED", "TASK_WAITING_REVIEW", "REVIEW_RECORDED", "REQUEST_RESOLVED"])
+            ["TASK_WAITING_REVIEW", "REVIEW_RECORDED", "REQUEST_RESOLVED"])
         original = self.store.events_path.read_bytes()
         self.assertEqual(self.store.execute_review(cmd, workspace()).outcome, first.outcome)
         self.assertEqual(original, self.store.events_path.read_bytes())
@@ -497,7 +498,7 @@ class StoreTests(unittest.TestCase):
     def test_provider_failure_is_resolved_and_stable(self):
         cmd = self.verify_command()
         provider = CountingProvider()
-        with patch.object(provider, "run_verification", side_effect=RuntimeError("offline")):
+        with patch.object(provider, "run_verification", side_effect=ProviderError("OFFLINE", "offline")):
             first = self.store.execute_verification(cmd, provider)
         second = self.store.execute_verification(cmd, provider)
         self.assertEqual(first.status, "provider_failure")

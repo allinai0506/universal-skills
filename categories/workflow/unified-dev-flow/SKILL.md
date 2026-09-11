@@ -47,7 +47,7 @@ or conversion of its ledger.
 ## Phase Two Runtime
 
 After policy resolution, an eligible non-`patch` Route may be pinned as a
-`RouteContract` through `scripts/unified-workflow init --route-file route.json
+`RouteContract` through `scripts/unified-workflow init --goal "<goal>" --route-file route.json
 --project-root <project> --work-id <id> --request-id <id> --json`.
 The Router remains policy authority; the Kernel enforces the pinned finite
 obligations described in [policy-model.md](references/policy-model.md).
@@ -60,8 +60,11 @@ a registered `command_id` from the TaskContract; trusted local execution has
 caller authority and provides no OS sandbox. `review record` passes the Gate's
 wait-for-review check and records the external assertion in one atomic Store
 batch under the caller's request ID.
-`status --json` and `replay --json` expose the same canonical replayed state;
+`status --json` and `replay --json` expose the same canonical replayed state,
+including the pinned goal/route, review rounds, blockers, timestamps, and log head;
 runtime records live only under the target project's `.unified-dev-flow/`.
+Authorized initialization adds a local Git ignore rule (with a minimal root
+`.gitignore` fallback when required) and validates it with `git check-ignore`.
 Existing `.omc/` and `.superpowers/sdd/` records retain their native roles.
 
 ## Entry Gate (first commitment after recon)

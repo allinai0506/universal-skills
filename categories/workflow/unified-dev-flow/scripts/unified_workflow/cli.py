@@ -48,7 +48,7 @@ def _parser():
     def group(name):
         return commands.add_parser(name, parents=[common]).add_subparsers(required=True)
 
-    leaf(commands, "init", "INIT_RUN", document="route")
+    leaf(commands, "init", "INIT_RUN", document="route").add_argument("--goal", required=True)
     task = group("task")
     leaf(task, "add", "ADD_TASK", document="task")
     for name, operation in (("ready", "READY_TASK"), ("start", "START_TASK"), ("accept", "ACCEPT_TASK")):
@@ -103,7 +103,7 @@ def _plain(value):
 
 def _payload(args):
     if args.operation == "INIT_RUN":
-        return {"route": RouteContract.from_dict(_document(args.route_file)).to_dict()}
+        return {"route": RouteContract.from_dict(_document(args.route_file)).to_dict(), "goal": args.goal}
     if args.operation == "ADD_TASK":
         task = TaskContract.from_dict(_document(args.task_file))
         args.task_id = task.task_id
@@ -173,7 +173,7 @@ def _execute(args):
     if args.operation == "READ_REQUEST":
         request = state.requests.get(args.request_id)
         if request is None:
-            raise ValidationError("REQUEST_NOT_FOUND", "No reservation exists for this request ID")
+            raise ValidationError("REQUEST_NOT_FOUND", "No request exists for this request ID")
         return (7 if request.status == "in_doubt" else 0), {
             "status": "in_doubt" if request.status == "in_doubt" else "success", "request": _plain(request)}
     if args.operation == "RESOLVE_REQUEST":
@@ -187,7 +187,7 @@ def _execute(args):
     prior = state.requests.get(args.request_id)
     sequence = args.expected_sequence
     if sequence is None:
-        sequence = prior.reservation_sequence - 1 if prior else store.sequence
+        sequence = prior.expected_sequence if prior else store.sequence
     cmd = Command.from_dict(dict(schema_version=1, request_id=args.request_id, command_type=args.operation,
         work_id=work_id, task_id=getattr(args, "task_id", None), actor=actor,
         expected_sequence=sequence, payload=payload))

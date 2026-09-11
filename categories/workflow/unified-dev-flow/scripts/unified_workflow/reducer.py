@@ -5,8 +5,8 @@ from dataclasses import dataclass, replace
 from types import MappingProxyType
 from typing import Any, Mapping
 
-from .events import DomainEvent, EventBatch, IntegrityError, verify_batch
-from .model import TaskContract, ValidationError, canonical_sha256, validate_id
+from .events import DomainEvent, EventBatch, IntegrityError, ZERO_HASH, verify_batch
+from .model import RouteContract, TaskContract, ValidationError, canonical_sha256, validate_id
 
 
 def _freeze(value: Any) -> Any:
@@ -30,8 +30,9 @@ class RequestState:
     request_id: str
     request_sha256: str
     command_type: str
-    reservation_sequence: int
+    reservation_sequence: int | None
     status: str
+    expected_sequence: int
     outcome: str | None = None
     reason_code: str | None = None
     result_summary: Mapping[str, Any] | None = None
@@ -68,6 +69,15 @@ class RunState:
     deliveries: tuple[Mapping[str, Any], ...]
     events: tuple[DomainEvent, ...]
     acceptance_set_sha256: str
+    goal: str | None
+    route_contract: RouteContract | None
+    route_contract_sha256: str | None
+    review_rounds_by_task: Mapping[str, int]
+    blockers: tuple[Mapping[str, Any], ...]
+    latest_sequence: int
+    latest_hash: str
+    created_at: str | None
+    updated_at: str | None
 
 
 def initial_state() -> RunState:
@@ -75,6 +85,9 @@ def initial_state() -> RunState:
         schema_version=1, status="new", work_id=None, tasks=MappingProxyType({}),
         requests=MappingProxyType({}), deliveries=(), events=(),
         acceptance_set_sha256=canonical_sha256([]),
+        goal=None, route_contract=None, route_contract_sha256=None,
+        review_rounds_by_task=MappingProxyType({}), blockers=(), latest_sequence=0,
+        latest_hash=ZERO_HASH, created_at=None, updated_at=None,
     )
 
 
@@ -159,8 +172,23 @@ def _refresh_satisfaction(state: RunState) -> RunState:
         for task in sorted(refreshed.values(), key=lambda item: item.task_id)
         if task.contract.required and task.currently_satisfied
     ]
+    blockers = []
+    if state.status == "blocked":
+        blockers.append(_freeze({"task_id": None, "reason_codes": ("RUN_BLOCKED",)}))
+    for task in sorted(refreshed.values(), key=lambda item: item.task_id):
+        reasons = set()
+        for event in task.history:
+            if event.event_type == "TASK_UNBLOCKED":
+                reasons.clear()
+            elif event.event_type in ("SCOPE_VIOLATION", "TASK_BLOCKED", "ESCALATE_TO_HUMAN"):
+                reasons.add(event.event_type)
+        if reasons or task.status == "blocked":
+            blockers.append(_freeze({"task_id": task.task_id,
+                "reason_codes": tuple(sorted(reasons or {"TASK_BLOCKED"}))}))
     return replace(state, tasks=MappingProxyType(refreshed),
-                   acceptance_set_sha256=canonical_sha256(acceptance))
+                   acceptance_set_sha256=canonical_sha256(acceptance),
+                   review_rounds_by_task=MappingProxyType({identifier: task.review_round
+                       for identifier, task in sorted(refreshed.items())}), blockers=tuple(blockers))
 
 
 def _invalidate(state: RunState, task_id: str, revision: int, event: DomainEvent) -> RunState:
@@ -186,10 +214,11 @@ def _invalidate(state: RunState, task_id: str, revision: int, event: DomainEvent
                 unresolved_scope = True
             elif fact.event_type == "TASK_UNBLOCKED":
                 unresolved_scope = False
-        reset_origin = identifier == task_id and revision > task.task_revision and not unresolved_scope
+        next_revision = revision if identifier == task_id else task.task_revision + 1
+        reset_origin = (next_revision > task.task_revision and not unresolved_scope
+                        and (identifier == task_id or task.status == "accepted"))
         task = _clear_acceptance(task, status="stale", reset_origin=reset_origin)
-        if identifier == task_id:
-            task = replace(task, task_revision=revision)
+        task = replace(task, task_revision=next_revision)
         tasks[identifier] = _task_with_history(task, event)
     return replace(state, tasks=MappingProxyType(tasks))
 
@@ -216,7 +245,7 @@ def reduce_event(state: RunState, event: DomainEvent) -> RunState:
                 _error("REQUEST_CONFLICT", "request reservation conflicts with existing request")
             return replace(state, events=state.events + (event,))
         request = RequestState(request_id, request_sha256, command_type, reservation_sequence,
-                               "in_doubt")
+                               "in_doubt", reservation_sequence - 1)
         requests = dict(state.requests)
         requests[request_id] = request
         state = replace(state, requests=MappingProxyType(requests))
@@ -224,7 +253,11 @@ def reduce_event(state: RunState, event: DomainEvent) -> RunState:
         request_id = validate_id(payload.get("request_id"), "request_id")
         existing = state.requests.get(request_id)
         if existing is None:
-            _error("UNKNOWN_REQUEST", f"request {request_id!r} is not reserved")
+            existing = RequestState(request_id, payload["request_sha256"], payload["command_type"],
+                                    None, "resolved", payload["expected_sequence"])
+        elif (existing.request_sha256, existing.command_type, existing.expected_sequence) != (
+                payload["request_sha256"], payload["command_type"], payload["expected_sequence"]):
+            _error("REQUEST_CONFLICT", "request resolution conflicts with its original identity")
         outcome = payload.get("outcome")
         if outcome not in ("success", "denied", "provider_failure", "abandoned"):
             _error("EVENT_SCHEMA_MISMATCH", "request outcome is unsupported")
@@ -240,7 +273,7 @@ def reduce_event(state: RunState, event: DomainEvent) -> RunState:
         event_ids = tuple(validate_id(item, "event_ids[]") for item in event_ids)
         resolved = replace(existing, status="resolved", outcome=outcome, reason_code=reason_code,
                            result_summary=summary, event_ids=event_ids)
-        if existing.status == "resolved":
+        if request_id in state.requests and existing.status == "resolved":
             if existing != resolved:
                 _error("REQUEST_RESOLUTION_CONFLICT", "request already has a different resolution")
             return replace(state, events=state.events + (event,))
@@ -248,7 +281,12 @@ def reduce_event(state: RunState, event: DomainEvent) -> RunState:
         requests[request_id] = resolved
         state = replace(state, requests=MappingProxyType(requests))
     elif event_type == "RUN_CREATED":
-        state = replace(state, status="active", work_id=validate_id(payload.get("work_id"), "work_id"))
+        if state.work_id is not None:
+            _error("DUPLICATE_RUN", "RUN_CREATED cannot replace an existing run contract")
+        route = RouteContract.from_dict(_plain(payload["route"]))
+        state = replace(state, status="active", work_id=validate_id(payload.get("work_id"), "work_id"),
+                        goal=payload["goal"], route_contract=route,
+                        route_contract_sha256=canonical_sha256(route.to_dict()))
     elif event_type == "RUN_BLOCKED":
         state = replace(state, status="blocked")
     elif event_type == "RUN_RESUMED":
@@ -338,6 +376,14 @@ def replay(batches: list[EventBatch] | tuple[EventBatch, ...]) -> RunState:
             batch = EventBatch.from_dict(batch.to_dict())
         verify_batch(previous, batch)
         for event in batch.events:
+            if (event.event_type == "REQUEST_RESOLVED" and event.payload["request_id"] not in state.requests
+                    and event.payload["expected_sequence"] != batch.sequence - 1):
+                _error("REQUEST_CONFLICT", "unreserved resolution must bind the preceding batch head")
             state = reduce_event(state, event)
+        created_at = state.created_at
+        if created_at is None and any(event.event_type == "RUN_CREATED" for event in batch.events):
+            created_at = batch.occurred_at
+        state = replace(state, latest_sequence=batch.sequence, latest_hash=batch.batch_hash,
+                        created_at=created_at, updated_at=batch.occurred_at)
         previous = batch
     return state

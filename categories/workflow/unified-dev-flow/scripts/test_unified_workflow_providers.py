@@ -14,7 +14,7 @@ from tempfile import TemporaryDirectory
 import time
 import unittest
 
-from unified_workflow.model import TaskContract, WorkspaceRevision
+from unified_workflow.model import TaskContract, WorkspaceRevision, canonical_sha256
 from unified_workflow.providers import (MockProvider, ProviderError, TrustedLocalVerifier,
                                         VerificationResult)
 from unified_workflow.providers.base import ObserveRequest
@@ -231,14 +231,11 @@ class TrustedLocalVerifierTests(unittest.TestCase):
         (self.root / "a" / "x.txt").write_text("a\n")
         (self.root / "z.txt").write_text("z\n")
         observed = self.provider.observe_workspace(self.local_request(["**/*"]))
-        expected = sha256()
-        for relative in sorted(observed.file_manifest):
-            expected.update(relative.encode())
-            expected.update(b"\0")
-            expected.update((self.root / relative).read_bytes())
-            expected.update(b"\0")
+        expected = {relative: canonical_sha256({"content_sha256": "sha256:" + sha256((self.root / relative).read_bytes()).hexdigest(),
+                                               "mode": (self.root / relative).stat().st_mode & 0o7777})
+                    for relative in ("a/x.txt", "src/tracked.txt", "z.txt")}
         self.assertEqual(observed.verification_input_fingerprint,
-                         "sha256:" + expected.hexdigest())
+                         canonical_sha256(expected))
         self.assertEqual(tuple(observed.file_manifest), tuple(sorted(observed.file_manifest)))
 
     def test_git_regular_file_and_symlink_are_excluded_from_manifest(self):

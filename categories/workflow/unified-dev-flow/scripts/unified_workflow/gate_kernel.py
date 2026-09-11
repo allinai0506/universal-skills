@@ -83,7 +83,7 @@ def fresh_evidence(task: TaskState, workspace: WorkspaceRevision | None) -> tupl
         unsigned = evidence.to_dict()
         unsigned.pop("evidence_sha256")
         revisions = (evidence.pre_command_revision, evidence.post_command_revision,
-                     evidence.commit_revision, workspace)
+                     evidence.commit_revision)
         if (success and evidence.exit_code == 0 and not evidence.timed_out
                 and not evidence.output_truncated
                 and evidence.task_id == task.task_id
@@ -91,11 +91,13 @@ def fresh_evidence(task: TaskState, workspace: WorkspaceRevision | None) -> tupl
                 and evidence.task_contract_sha256 == canonical_sha256(task.contract.to_dict())
                 and evidence.command_sha256 == canonical_sha256(verification.to_dict())
                 and evidence.evidence_sha256 == canonical_sha256(unsigned)
-                and all(revision is not None and revision.provider == workspace.provider
-                        and revision.revision_id == workspace.revision_id
+                and workspace.verification_input_fingerprint == evidence.verification_input_fingerprint
+                and all(revision is not None and revision.provider == evidence.provider
+                        and revision.revision_id == evidence.pre_command_revision.revision_id
                         and revision.verification_input_fingerprint == evidence.verification_input_fingerprint
                         for revision in revisions)
-                and not scope_violations(task, evidence.scope_diff + workspace.changed_paths)):
+                and not scope_violations(task, evidence.scope_diff)
+                and (task.status == "accepted" or not scope_violations(task, workspace.changed_paths))):
             fresh.append(evidence)
     return tuple(fresh)
 
@@ -132,7 +134,8 @@ def _init_run(state, command, route, observations):
         return Decision((), Denied("RUNTIME_NOT_AUTHORIZED", ("Authorize working_tree or higher delivery.",)))
     if not delivery_at_or_below_ceiling(route.obligations.required_delivery, route.delivery_target):
         return Decision((), Denied("INVALID_CONTRACT", ("Align required delivery with authorization.",)))
-    return Decision((DomainEvent("RUN_CREATED", {"work_id": command.work_id, "route": route.to_dict()}),), Allowed({}))
+    return Decision((DomainEvent("RUN_CREATED", {"work_id": command.work_id,
+                     "goal": command.payload["goal"], "route": route.to_dict()}),), Allowed({}))
 
 
 def _add_task(state, command, route, observations):
@@ -205,7 +208,10 @@ def _record_verification(state, command, route, observations):
     event = DomainEvent("VERIFICATION_RECORDED", {"task_id": task.task_id,
                         "success": True, "evidence": evidence.to_dict()})
     candidate = reduce_event(state, event).tasks[task.task_id]
-    fresh = any(item.evidence_sha256 == evidence.evidence_sha256 for item in fresh_evidence(candidate, workspace))
+    fresh = (workspace is not None and evidence.commit_revision is not None
+             and _workspace_identity(workspace) == _workspace_identity(evidence.commit_revision)
+             and any(item.evidence_sha256 == evidence.evidence_sha256
+                     for item in fresh_evidence(candidate, workspace)))
     if fresh:
         return Decision((event,), Allowed({"evidence_sha256": evidence.evidence_sha256}))
     failed = DomainEvent("VERIFICATION_RECORDED", {"task_id": task.task_id,
@@ -322,11 +328,14 @@ def _record_delivery(state, command, route, observations):
     for identifier in tuple(required):
         required.update(dependency_closure(state, identifier))
     if (not observations or not required.issubset(observations)
-            or any((item.provider, item.revision_id, item.verification_input_fingerprint) !=
-                   (revision.provider, revision.revision_id, revision.verification_input_fingerprint)
+            or any(_workspace_identity(item) != _workspace_identity(revision)
                    for item in observations.values())):
         return Decision((), Denied("EVIDENCE_STALE", ("Bind delivery to the current workspace revision.",)))
     return Decision((DomainEvent("DELIVERY_RECORDED", dict(command.payload)),), Allowed({}))
+
+
+def _workspace_identity(revision):
+    return revision.provider, revision.revision_id
 
 
 def _complete_run(state, command, route, observations):
@@ -340,11 +349,16 @@ def _complete_run(state, command, route, observations):
     if not required.issubset(observations):
         return Decision((), Denied("EVIDENCE_MISSING", ("Observe every required task before completion.",)))
     current = acceptance_set_sha256(state)
-    if not any(item["acceptance_set_sha256"] == current
-               and delivery_at_or_below_ceiling(route.obligations.required_delivery, item["delivery_target"])
-               and delivery_at_or_below_ceiling(item["delivery_target"], route.delivery_target)
-               and item.get("workspace_revision") and item.get("provenance") for item in state.deliveries):
+    eligible = [item for item in state.deliveries if item["acceptance_set_sha256"] == current
+                and delivery_at_or_below_ceiling(route.obligations.required_delivery, item["delivery_target"])
+                and delivery_at_or_below_ceiling(item["delivery_target"], route.delivery_target)
+                and item.get("workspace_revision") and item.get("provenance")]
+    if not eligible:
         return Decision((), Denied("EVIDENCE_MISSING", ("Record delivery bound to the current acceptance set.",)))
+    if not observations or not any(all(_workspace_identity(observed) == (
+            item["workspace_revision"]["provider"], item["workspace_revision"]["revision_id"])
+            for observed in observations.values()) for item in eligible):
+        return Decision((), Denied("EVIDENCE_STALE", ("Record delivery bound to the current workspace revision.",)))
     return Decision((DomainEvent("RUN_COMPLETED", {}),), Allowed({}))
 
 
@@ -367,7 +381,7 @@ _HANDLERS = {"INIT_RUN": _init_run, "ADD_TASK": _add_task, "READY_TASK": _ready_
     "RESOLVE_BLOCKER": _resolve_blocker, "RECORD_DELIVERY": _record_delivery,
     "COMPLETE_RUN": _complete_run, "CANCEL_TASK": _cancel_task, "CANCEL_RUN": _cancel_run}
 
-_PAYLOAD_FIELDS = {"INIT_RUN": {"route"}, "ADD_TASK": {"task"},
+_PAYLOAD_FIELDS = {"INIT_RUN": {"route", "goal"}, "ADD_TASK": {"task"},
     "REPORT_TASK": {"report", "workspace_revision"}, "RECORD_VERIFICATION": {"evidence"},
     "RECORD_REVIEW": {"assertion"}, "RESOLVE_BLOCKER": {"provenance"},
     "RECORD_DELIVERY": {"delivery_target", "acceptance_set_sha256", "workspace_revision", "provenance"}}
@@ -400,10 +414,7 @@ def decide(state: RunState, command: Command, observed_facts=None) -> Decision:
             return _init_run(state, command, route, observations)
         if state.status in ("new", "completed", "cancelled") or command.work_id != state.work_id:
             return Decision((), Denied("INVALID_TRANSITION", ("Use an active matching run.",)))
-        for event in state.events:
-            if event.event_type == "RUN_CREATED" and "route" in event.payload:
-                route = RouteContract.from_dict(_json_plain(event.payload["route"]))
-                break
+        route = state.route_contract
         if route is None:
             return Decision((), Denied("INVALID_CONTRACT", ("Initialize the run with a RouteContract.",)))
         task_commands = set(_HANDLERS) - {"INIT_RUN", "ADD_TASK", "RECORD_DELIVERY", "COMPLETE_RUN", "CANCEL_RUN"}
@@ -416,8 +427,7 @@ def decide(state: RunState, command: Command, observed_facts=None) -> Decision:
             for identifier, workspace in sorted(observations.items()):
                 task = state.tasks.get(identifier)
                 if (task is not None and task.scope_origin is not None
-                        and (task.status in ("running", "waiting_review")
-                             or task.status == "accepted" and command.command_type in ("RECORD_DELIVERY", "COMPLETE_RUN"))
+                        and task.status in ("running", "waiting_review")
                         and scope_violations(task, workspace.changed_paths)):
                     return Decision((DomainEvent("SCOPE_VIOLATION", {"task_id": identifier}),),
                                     Denied("SCOPE_VIOLATION", ("Resolve changes outside the write scope.",)))

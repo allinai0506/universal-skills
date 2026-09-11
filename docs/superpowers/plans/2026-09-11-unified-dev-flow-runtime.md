@@ -6,7 +6,7 @@
 
 **Architecture:** Phase One supplies an immutable resolved `RouteContract`. The Kernel accepts strict commands, returns `Decision(events, outcome)`, appends request-aware `EventBatch` records, and derives all state through one pure Reducer. Providers observe workspaces or run registered verification commands; they never own workflow state.
 
-**Tech Stack:** Python 3.11+ standard library, `unittest`, JSON/JSONL, `fcntl` on supported Unix hosts, Git CLI only inside `TrustedLocalVerifier` observation.
+**Tech Stack:** Python 3.11+ standard library, `unittest`, JSON/JSONL, `fcntl` on supported Unix hosts. Git CLI is limited to optional Provider observation and fixed-argv read-only `git check-ignore` during authorized runtime initialization.
 
 ## Global Constraints
 
@@ -170,7 +170,7 @@ Expected: fail because event/reducer modules do not exist.
 
 Each JSONL record represents one batch and uses `sequence` per batch. `batch_hash` is SHA-256 over the canonical batch dictionary without `batch_hash`. `REQUEST_RESERVED` creates `in_doubt`; `REQUEST_RESOLVED` stores its stable outcome. Reducer returns new immutable state and never reads files, time, Git, or Provider data.
 
-`TASK_INVALIDATED` sets the named task and transitive dependents to `stale`, clears current acceptance bindings, increments only explicitly named `new_task_revision`, and preserves history. `TASK_NEEDS_FIXES` increments that task's review round without changing `scope_origin`.
+`TASK_INVALIDATED` sets the named task and transitive dependents to `stale`, clears current acceptance bindings, applies `new_task_revision` to the named task and increments each dependent once, and preserves history. A dependent's sealed accepted origin may reset at the new revision only without unresolved scope violations; an open execution window retains its origin. `TASK_NEEDS_FIXES` increments that task's review round without changing `scope_origin`.
 
 - [ ] **Step 4: Run GREEN**
 
@@ -363,7 +363,7 @@ Expected: fail because provider modules do not exist.
 
 - [ ] **Step 3: Implement providers**
 
-Use `subprocess.Popen(argv, shell=False, cwd=resolved_cwd, env=minimal_env)` with timeout handling and bounded captured bytes. Hash full stdout/stderr incrementally even when retained output is truncated. Workspace fingerprint walks relevant real files in sorted POSIX path order, rejects symlink escapes, excludes `.git` and `.unified-dev-flow`, and includes Git HEAD/diff metadata only as optional details.
+Use `subprocess.Popen(argv, shell=False, cwd=resolved_cwd, env=minimal_env)` with timeout handling and bounded captured bytes. Hash full stdout/stderr incrementally even when retained output is truncated. Observe the whole project manifest in sorted POSIX path order for scope and task-independent revision identity; derive the task fingerprint only from selected verification inputs. Bind contained symlink identities and resolved content, reject escapes/cycles/control aliases, and exclude `.git` and `.unified-dev-flow`. Git HEAD/diff metadata remains optional.
 
 Module/class docstrings must say TrustedLocalVerifier has caller-equivalent authority and is not a sandbox.
 
@@ -396,6 +396,7 @@ git commit -m "feat: add unified workflow verification providers"
 **Interfaces:**
 - Produces `main(argv: Sequence[str] | None = None) -> int` and executable wrapper.
 - CLI commands match design section 10 and accept JSON documents through named file arguments, never arbitrary verification strings.
+- `init` requires explicit `--goal`; replay derives goal, immutable route/hash, review rounds, blockers, timestamps and latest sequence/hash from events and batches.
 - Exit codes are exactly `0 success`, `2 invalid arguments/contract`, `3 gate denied`, `4 corrupt state`, `5 lock busy`, `6 provider failure`, `7 request in doubt`.
 
 - [ ] **Step 1: Write CLI and E2E tests first**

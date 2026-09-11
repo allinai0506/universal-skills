@@ -8,11 +8,12 @@ import os
 from pathlib import Path, PurePosixPath
 import selectors
 import signal
+import stat
 import subprocess
 import time
 from typing import Mapping
 
-from ..model import TaskContract, WorkspaceRevision
+from ..model import TaskContract, WorkspaceRevision, canonical_sha256
 from .base import ObserveRequest, ProviderError, VerificationResult
 
 
@@ -50,20 +51,18 @@ class TrustedLocalVerifier:
             raise ProviderError("INVALID_ENVIRONMENT", "environment must contain text key/value pairs")
 
     def observe_workspace(self, request: ObserveRequest) -> WorkspaceRevision:
-        """Hash requested real files only; control state never alters business revision."""
-        digest = sha256()
-        manifest: dict[str, str] = {}
-        for relative, path in self._relevant_files(request.task_contract.verification_inputs):
-            digest.update(relative.encode("utf-8", "surrogateescape"))
-            digest.update(b"\0")
-            file_digest = sha256()
-            with path.open("rb") as stream:
-                while block := stream.read(1024 * 1024):
-                    digest.update(block)
-                    file_digest.update(block)
-            digest.update(b"\0")
-            manifest[relative] = "sha256:" + file_digest.hexdigest()
-        fingerprint = "sha256:" + digest.hexdigest()
+        """Observe the whole project for scope, and selected inputs for freshness."""
+        manifest, links, directories = self._workspace_manifest()
+        selected = {path for path in manifest
+                    if self._matches(path, request.task_contract.verification_inputs)}
+        selected_directories = {path for path in directories
+                                if self._matches(path, request.task_contract.verification_inputs)}
+        selected.update(path for path in manifest
+                        if any(path.startswith(directory + "/") for directory in selected_directories))
+        # A selected child must also bind every containing link's identity.
+        selected.update(link for link in links
+                        if any(path.startswith(link + "/") for path in selected))
+        fingerprint = canonical_sha256({path: manifest[path] for path in sorted(selected)})
         origin_manifest = request.scope_origin.file_manifest
         if request.scope_origin.provider != self.name or origin_manifest is None:
             raise ProviderError("SCOPE_ORIGIN_MANIFEST_UNAVAILABLE",
@@ -73,7 +72,7 @@ class TrustedLocalVerifier:
         return WorkspaceRevision.from_dict({
             "schema_version": 1,
             "provider": self.name,
-            "revision_id": "workspace-" + digest.hexdigest(),
+            "revision_id": "workspace-" + canonical_sha256(manifest).removeprefix("sha256:"),
             "verification_input_fingerprint": fingerprint,
             "changed_paths": list(changed_paths),
             "observed_at": _timestamp(),
@@ -115,46 +114,62 @@ class TrustedLocalVerifier:
             raise ProviderError("CWD_INVALID", "registered command cwd is not a directory")
         return candidate
 
-    def _relevant_files(self, patterns: tuple[str, ...]):
-        files: list[tuple[str, Path]] = []
-        for current, directory_names, file_names in os.walk(self.project_root, followlinks=False):
-            current_path = Path(current)
-            directory_names[:] = sorted(name for name in directory_names
-                                        if name not in _EXCLUDED_ROOTS)
-            for name in directory_names:
-                path = current_path / name
-                if path.is_symlink():
-                    self._check_symlink(path)
-            for name in sorted(file_names):
-                path = current_path / name
-                relative = path.relative_to(self.project_root).as_posix()
-                if PurePosixPath(relative).parts[0] in _EXCLUDED_ROOTS:
-                    continue
-                if path.is_symlink():
-                    self._check_symlink(path)
-                    continue
-                if not path.is_file():
-                    continue
-                if self._matches(relative, patterns):
-                    files.append((relative, path))
-        return sorted(files)
+    def _workspace_manifest(self):
+        manifest: dict[str, str] = {}
+        links: set[str] = set()
+        directories: set[str] = set()
 
-    def _check_symlink(self, path: Path) -> None:
+        def visit(path: Path, relative: str, ancestors: frozenset[Path]):
+            linked = path.is_symlink()
+            resolved = self._check_symlink(path) if linked else path.resolve(strict=True)
+            if path.is_dir():
+                if resolved in ancestors:
+                    raise ProviderError("WORKSPACE_CYCLE", "workspace directory links form a cycle")
+                for child in sorted(path.iterdir()):
+                    visit(child, relative + "/" + child.name, ancestors | {resolved})
+                directories.add(relative)
+                content = None
+            elif path.is_file():
+                digest = sha256()
+                with path.open("rb") as stream:
+                    while block := stream.read(1024 * 1024):
+                        digest.update(block)
+                    mode = stat.S_IMODE(os.fstat(stream.fileno()).st_mode)
+                content = canonical_sha256({"content_sha256": "sha256:" + digest.hexdigest(), "mode": mode})
+                manifest[relative] = content
+            else:
+                raise ProviderError("UNSUPPORTED_WORKSPACE_ENTRY", "workspace entry is not a regular file or directory")
+            if linked:
+                links.add(relative)
+                manifest[relative] = canonical_sha256({"link_target": os.readlink(path),
+                    "resolved_path": resolved.relative_to(self.project_root).as_posix(),
+                    "content_sha256": content})
+
+        for child in sorted(self.project_root.iterdir()):
+            if child.name not in _EXCLUDED_ROOTS:
+                visit(child, child.name, frozenset({self.project_root}))
+        return dict(sorted(manifest.items())), links, directories
+
+    def _check_symlink(self, path: Path) -> Path:
         try:
-            path.resolve(strict=True).relative_to(self.project_root)
-        except (OSError, ValueError):
+            resolved = path.resolve(strict=True)
+            relative = resolved.relative_to(self.project_root)
+        except (OSError, ValueError, RuntimeError):
             raise ProviderError("WORKSPACE_ESCAPE", "workspace symlink resolves outside project_root")
+        if relative.parts and relative.parts[0] in _EXCLUDED_ROOTS:
+            raise ProviderError("WORKSPACE_CONTROL_PATH", "workspace symlink resolves into control state")
+        return resolved
 
     @staticmethod
     def _matches(relative: str, patterns: tuple[str, ...]) -> bool:
-        path = PurePosixPath(relative)
-        for pattern in patterns:
-            if pattern in {"**", "**/*"} or fnmatchcase(relative, pattern) or path.match(pattern):
-                return True
-            prefix = pattern[:-3].rstrip("/") + "/"
-            if pattern.endswith("/**") and relative.startswith(prefix):
-                return True
-        return False
+        def matches(parts, pattern):
+            if not pattern:
+                return not parts
+            if pattern[0] == "**":
+                return matches(parts, pattern[1:]) or bool(parts) and matches(parts[1:], pattern)
+            return bool(parts) and fnmatchcase(parts[0], pattern[0]) and matches(parts[1:], pattern[1:])
+
+        return any(matches(PurePosixPath(relative).parts, PurePosixPath(pattern).parts) for pattern in patterns)
 
     @staticmethod
     def _collect_output(process: subprocess.Popen, timeout_seconds: int, limit: int):

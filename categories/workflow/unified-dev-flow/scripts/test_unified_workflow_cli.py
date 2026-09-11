@@ -67,7 +67,7 @@ class CLIProject(unittest.TestCase):
         return self.call(*args, code=code, request=request or f"request-{self.counter}")
 
     def initialize(self):
-        return self.mutate("init", "--route-file", self.document(valid_route()))
+        return self.mutate("init", "--goal", "Implement the task execution kernel", "--route-file", self.document(valid_route()))
 
     def add(self, identifier="A", dependencies=()):
         raw = valid_task()
@@ -119,24 +119,24 @@ class CLIProject(unittest.TestCase):
 class CLITests(CLIProject):
     def test_init_duplicate_identical_even_after_later_mutation(self):
         route = self.document(valid_route())
-        first = self.mutate("init", "--route-file", route, request="init")
+        first = self.mutate("init", "--goal", "Kernel", "--route-file", route, request="init")
         self.add()
         before = self.store()[0].events_path.read_bytes()
-        second = self.mutate("init", "--route-file", route, request="init")
+        second = self.mutate("init", "--goal", "Kernel", "--route-file", route, request="init")
         self.assertEqual(first, second)
         self.assertEqual(before, self.store()[0].events_path.read_bytes())
 
     def test_patch_init_denied_without_runtime_artifacts(self):
         route = valid_route()
         route["delivery_target"] = "patch"
-        output = self.mutate("init", "--route-file", self.document(route), code=3)
+        output = self.mutate("init", "--goal", "Kernel", "--route-file", self.document(route), code=3)
         self.assertEqual(output["reason_code"], "RUNTIME_NOT_AUTHORIZED")
         self.assertFalse((self.root / ".unified-dev-flow").exists())
 
     def test_schema_and_arguments_fail_with_json_exit_two(self):
         route = valid_route()
         route["schema_version"] = 999
-        self.mutate("init", "--route-file", self.document(route), code=2)
+        self.mutate("init", "--goal", "Kernel", "--route-file", self.document(route), code=2)
         self.call("init", "--route-file", self.document(valid_route()), code=2)
         self.call("transition", code=2)
         self.call("verify", "--command", "echo bypass", code=2)
@@ -146,8 +146,8 @@ class CLITests(CLIProject):
         path = self.documents / "bad.json"
         for content in ('{"x":1,"x":2}', '{', 'NaN'):
             path.write_text(content)
-            self.mutate("init", "--route-file", str(path), code=2)
-        self.mutate("init", "--route-file", str(self.documents / "missing"), code=2)
+            self.mutate("init", "--goal", "Kernel", "--route-file", str(path), code=2)
+        self.mutate("init", "--goal", "Kernel", "--route-file", str(self.documents / "missing"), code=2)
 
     def test_corrupt_log_exit_four(self):
         self.initialize()
@@ -172,7 +172,7 @@ class CLITests(CLIProject):
         before = path.read_bytes()
         route = valid_route()
         route["delivery_target"] = "patch"
-        self.mutate("init", "--route-file", self.document(route), code=4)
+        self.mutate("init", "--goal", "Kernel", "--route-file", self.document(route), code=4)
         self.assertEqual(before, path.read_bytes())
 
     def test_busy_lock_exit_five(self):

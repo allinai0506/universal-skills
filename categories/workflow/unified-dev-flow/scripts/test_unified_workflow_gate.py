@@ -23,6 +23,8 @@ def workspace(fingerprint=OLD, paths=()):
 
 
 def command(kind, task_id=None, **payload):
+    if kind == "INIT_RUN":
+        payload.setdefault("goal", "Implement the task execution kernel")
     return Command.from_dict(dict(schema_version=1, request_id="request-1", command_type=kind,
         work_id="work-1", task_id=task_id, actor={"type": "test", "id": "local"},
         expected_sequence=0, payload=payload))
@@ -354,14 +356,14 @@ class GateTests(unittest.TestCase):
         self.denied(decide(state, command("WAIT_FOR_REVIEW", "task-001"), workspace(NEW)),
                     "EVIDENCE_STALE", ["TASK_INVALIDATED"])
 
-    def test_accepted_scope_violation_blocks_delivery_and_completion(self):
+    def test_accepted_scope_is_sealed_and_later_changes_are_not_retroactive(self):
         state = task(status="accepted")
         state = apply(state, decide(state, delivery(state), workspace()))
         for operation in (delivery(state), command("COMPLETE_RUN")):
             with self.subTest(command=operation.command_type):
                 result = decide(state, operation, workspace(paths=["secret.txt"]))
-                self.denied(result, "SCOPE_VIOLATION", ["SCOPE_VIOLATION"])
-                self.assertEqual(apply(state, result).tasks["task-001"].status, "blocked")
+                self.assertIsInstance(result.outcome, Allowed)
+                self.assertEqual(apply(state, result).tasks["task-001"].status, "accepted")
 
     def test_missing_observation_records_failure_without_invalidation(self):
         state = task(status="running")

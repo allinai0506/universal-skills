@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 import re
 import stat
+import subprocess
 from uuid import uuid4
 
 from .commands import Allowed, Command, Decision, Denied
@@ -324,18 +325,18 @@ The sequence property describes the last successfully read/committed head.
         return state
 
     def _finish(self, run_fd, blobs_fd, batches, command, fingerprint, decision,
-                *, reserve=False, status=None, note=None):
+                *, status=None, note=None):
         status = status or ("success" if isinstance(decision.outcome, Allowed) else "denied")
         batch_id = uuid4().hex
         events = list(decision.events)
-        if reserve:
-            events.insert(0, self._reservation(command, fingerprint, len(batches) + 1))
         summary = {"outcome": decision.to_dict()["outcome"]}
         if note is not None:
             summary["note"] = note
         events.append(DomainEvent("REQUEST_RESOLVED", dict(request_id=command.request_id,
+            request_sha256=fingerprint, command_type=command.command_type,
+            expected_sequence=command.expected_sequence,
             outcome=status, reason_code=getattr(decision.outcome, "reason_code", None),
-            result_summary=summary, event_ids=[f"{batch_id}.{i + int(reserve)}"
+            result_summary=summary, event_ids=[f"{batch_id}.{i}"
                                              for i, _ in enumerate(decision.events)])))
         state = self._append(run_fd, blobs_fd, batches, command, fingerprint, events, batch_id)
         return self._result(state, decision.outcome, status)
@@ -357,11 +358,101 @@ The sequence property describes the last successfully read/committed head.
     def execute(self, command, facts=None) -> CommandResult:
         return self._execute(command, facts)
 
+    def _ensure_runtime_ignored(self):
+        """Append a local ignore without rewriting existing Git configuration.
+
+        Git's gitdir/commondir files identify the shared info/exclude for linked
+        worktrees. A project without root Git metadata uses its .gitignore.
+        """
+        git_entry = self.project_root / ".git"
+        if git_entry.is_symlink():
+            raise ValidationError("UNSAFE_CONTROL_PATH", "Git metadata must not be a symlink")
+        if git_entry.is_dir():
+            git_dir = git_entry
+        elif git_entry.is_file():
+            pointer = git_entry.read_text(encoding="utf-8").strip()
+            if not pointer.startswith("gitdir: ") or "\n" in pointer:
+                raise ValidationError("INVALID_GIT_DIRECTORY", "Invalid Git directory pointer")
+            git_dir = (self.project_root / pointer[8:]).resolve(strict=True)
+        elif git_entry.exists():
+            raise ValidationError("INVALID_GIT_DIRECTORY", "Invalid Git metadata entry")
+        else:
+            git_dir = None
+        with ExitStack() as stack:
+            if git_dir is None:
+                directory = self.project_root
+                name = ".gitignore"
+            else:
+                common = git_dir / "commondir"
+                if common.is_symlink():
+                    raise ValidationError("UNSAFE_CONTROL_PATH", "Git common-directory pointer must not be a symlink")
+                directory = (git_dir / common.read_text(encoding="utf-8").strip()).resolve(strict=True) if common.exists() else git_dir
+                name = "exclude"
+            directory_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            stack.callback(os.close, directory_fd)
+            if git_dir is not None:
+                try:
+                    os.mkdir("info", mode=0o755, dir_fd=directory_fd)
+                except FileExistsError:
+                    pass
+                info_fd = os.open("info", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=directory_fd)
+                stack.callback(os.close, info_fd)
+                os.fsync(directory_fd)
+                directory_fd = info_fd
+            self._append_ignore_rule(directory_fd, name)
+        if git_dir is not None and not self._runtime_is_ignored():
+            root_fd = os.open(self.project_root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            try:
+                self._append_ignore_rule(root_fd, ".gitignore")
+            finally:
+                os.close(root_fd)
+            if not self._runtime_is_ignored():
+                raise ValidationError("RUNTIME_IGNORE_CONFLICT", "Runtime control state cannot be safely ignored")
+
+    def _runtime_is_ignored(self):
+        for path in (".unified-dev-flow/", self.events_path.relative_to(self.project_root).as_posix()):
+            try:
+                result = subprocess.run(["git", "check-ignore", "-q", "--", path], shell=False,
+                    cwd=self.project_root, env={"PATH": os.defpath, "LANG": "C", "LC_ALL": "C"},
+                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
+            except (OSError, subprocess.SubprocessError) as exc:
+                raise ValidationError("RUNTIME_IGNORE_FAILED", "Git could not validate the runtime ignore rule") from exc
+            if result.returncode not in (0, 1):
+                raise ValidationError("RUNTIME_IGNORE_FAILED", "Git could not validate the runtime ignore rule")
+            if result.returncode == 1:
+                return False
+        return True
+
+    @staticmethod
+    def _append_ignore_rule(directory_fd, name):
+        fd = os.open(name, os.O_RDWR | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK,
+                     0o644, dir_fd=directory_fd)
+        try:
+            info = os.fstat(fd)
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                raise ValidationError("UNSAFE_CONTROL_PATH", "Ignore configuration must be a regular unlinked file")
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as exc:
+                raise LockBusy() from exc
+            with os.fdopen(os.dup(fd), "rb") as stream:
+                existing = stream.read()
+            pattern = b"/.unified-dev-flow/"
+            if not existing.splitlines() or existing.splitlines()[-1] != pattern:
+                addition = (b"\n" if existing and not existing.endswith(b"\n") else b"") + pattern + b"\n"
+                with os.fdopen(os.dup(fd), "ab") as stream:
+                    stream.write(addition)
+                    stream.flush()
+            os.fsync(fd)
+            os.fsync(directory_fd)
+        finally:
+            os.close(fd)
+
     def execute_review(self, command, facts=None, *, use_current_sequence=False) -> CommandResult:
         """Atomically gate readiness and the supplied review under its caller ID.
 
         With an omitted CLI sequence, bind to the locked head for a new request,
-        or the original reservation sequence for an exact retry fingerprint.
+        or the original expected sequence for an exact retry fingerprint.
         No independently durable wait request is needed: there is no Provider
         side effect between these pure Gate decisions.
         """
@@ -399,7 +490,7 @@ The sequence property describes the last successfully read/committed head.
                 batches, state = self._read(run_fd, blobs_fd)
                 if use_current_sequence:
                     existing = state.requests.get(command.request_id)
-                    sequence = existing.reservation_sequence - 1 if existing else self.sequence
+                    sequence = existing.expected_sequence if existing else self.sequence
                     command = replace(command, expected_sequence=sequence)
                 fingerprint = canonical_sha256(command.to_dict())
                 if command.command_type == "RECORD_VERIFICATION":
@@ -410,11 +501,15 @@ The sequence property describes the last successfully read/committed head.
                     return prior
                 decision = (self._review_decision(state, command, facts) if prepare_review
                             else decide(state, command, facts))
-                return self._finish(run_fd, blobs_fd, batches, command, fingerprint, decision, reserve=True)
+                if command.command_type == "INIT_RUN" and isinstance(decision.outcome, Allowed):
+                    self._ensure_runtime_ignored()
+                return self._finish(run_fd, blobs_fd, batches, command, fingerprint, decision)
         except LockBusy:
             return CommandResult(_denied("LOCK_BUSY", "Retry when the writer releases the lock."), None, (), "denied")
 
     def execute_verification(self, command, provider) -> CommandResult:
+        from .providers.base import ProviderError
+
         command = Command.from_dict(command.to_dict())
         fingerprint = canonical_sha256(command.to_dict())
         try:
@@ -429,10 +524,10 @@ The sequence property describes the last successfully read/committed head.
                 if (command.command_type != "RECORD_VERIFICATION" or set(command.payload) != {"command_id"}
                         or registered is None):
                     rejection = Decision((), _denied("INVALID_CONTRACT", "Select a registered verification command ID."))
-                    return self._finish(run_fd, blobs_fd, batches, command, fingerprint, rejection, reserve=True)
+                    return self._finish(run_fd, blobs_fd, batches, command, fingerprint, rejection)
                 if state.status != "active" or task.status != "running" or task.scope_origin is None:
                     rejection = decide(state, replace(command, payload={}), None)
-                    return self._finish(run_fd, blobs_fd, batches, command, fingerprint, rejection, reserve=True)
+                    return self._finish(run_fd, blobs_fd, batches, command, fingerprint, rejection)
                 state = self._append(run_fd, blobs_fd, batches, command, fingerprint,
                     [self._reservation(command, fingerprint, len(batches) + 1)])
                 request = ObserveRequest(task.contract, WorkspaceRevision.from_dict(_json_plain(task.scope_origin)))
@@ -445,7 +540,7 @@ The sequence property describes the last successfully read/committed head.
                     if len(result.stdout) > registered.max_output_bytes or len(result.stderr) > registered.max_output_bytes:
                         raise ValidationError("INVALID_PROVIDER_RESULT", "Provider exceeded the retained output limit")
                     post = WorkspaceRevision.from_dict(provider.observe_workspace(request).to_dict())
-                except Exception:
+                except (ProviderError, ValidationError, OSError, subprocess.SubprocessError):
                     return self._finish(run_fd, blobs_fd, batches, command, fingerprint,
                         Decision((), _denied("PROVIDER_FAILURE", "Inspect provider failure and issue a new request.")),
                         status="provider_failure")
@@ -466,7 +561,7 @@ The sequence property describes the last successfully read/committed head.
                         scope_diff=sorted(set(pre.changed_paths + post.changed_paths + commit.changed_paths)),
                         verification_input_fingerprint=pre.verification_input_fingerprint)
                     evidence = EvidenceRecord.from_dict({**raw, "evidence_sha256": canonical_sha256(raw)})
-                except Exception:
+                except (ProviderError, ValidationError, OSError, subprocess.SubprocessError):
                     return self._finish(run_fd, blobs_fd, batches, command, fingerprint,
                         Decision((), _denied("PROVIDER_FAILURE", "Inspect provider failure and issue a new request.")),
                         status="provider_failure")
@@ -493,7 +588,7 @@ The sequence property describes the last successfully read/committed head.
                     return self._result(state, _denied("INVALID_TRANSITION", "Resolve an existing in-doubt request."))
                 cmd = Command.from_dict(dict(schema_version=1, request_id=request_id,
                     command_type=existing.command_type, work_id=self.work_id, task_id=None,
-                    actor=_json_plain(actor), expected_sequence=self.sequence, payload={}))
+                    actor=_json_plain(actor), expected_sequence=existing.expected_sequence, payload={}))
                 resolved = Allowed({"note": note}) if outcome == "success" else _denied(
                     "REQUEST_" + outcome.upper(), "Use a new request ID for any subsequent attempt.")
                 return self._finish(run_fd, blobs_fd, batches, cmd, existing.request_sha256,

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import unittest
 
+from test_unified_workflow_model import valid_route
+
 from unified_workflow.events import (
     ZERO_HASH,
     DomainEvent,
@@ -43,11 +45,17 @@ def event(event_type: str, payload: dict | None = None) -> DomainEvent:
     return DomainEvent.from_dict({"event_type": event_type, "payload": payload or {}})
 
 
+def run_created():
+    return event("RUN_CREATED", {"work_id": "work-1", "goal": "Complete the kernel", "route": valid_route()})
+
+
 def make_batch(sequence: int, previous_hash: str, events: list[DomainEvent]) -> EventBatch:
+    request_id = next((item.payload["request_id"] for item in events
+                       if item.event_type in ("REQUEST_RESERVED", "REQUEST_RESOLVED")), f"request-{sequence}")
     return EventBatch.create(
         sequence=sequence,
         batch_id=f"batch-{sequence}",
-        request_id=f"request-{sequence}",
+        request_id=request_id,
         request_sha256=DIGEST,
         work_id="work-1",
         occurred_at="2026-09-11T00:00:00Z",
@@ -69,7 +77,7 @@ def batches(*events: DomainEvent) -> list[EventBatch]:
 
 def accepted_history() -> list[EventBatch]:
     return batches(
-        event("RUN_CREATED", {"work_id": "work-1"}),
+        run_created(),
         event("TASK_ADDED", {"task": task_contract("a")}),
         event("TASK_READIED", {"task_id": "a"}),
         event("TASK_STARTED", {"task_id": "a", "scope_origin": revision()}),
@@ -87,7 +95,7 @@ class EventReplayTests(unittest.TestCase):
         with self.assertRaisesRegex(ValidationError, "MISSING_FIELD"):
             event("REQUEST_RESERVED", {
                 "request_id": "req-1", "request_sha256": DIGEST,
-                "command_type": "START_TASK",
+                "command_type": "RECORD_VERIFICATION",
             })
         with self.assertRaisesRegex(ValidationError, "MISSING_FIELD"):
             event("DELIVERY_RECORDED", {"delivery_target": "commit"})
@@ -100,7 +108,7 @@ class EventReplayTests(unittest.TestCase):
             })
         with self.assertRaisesRegex(ValidationError, "INVALID_VALUE"):
             event("REQUEST_RESERVED", {
-                "request_id": "req-1", "request_sha256": DIGEST, "command_type": "START_TASK",
+                "request_id": "req-1", "request_sha256": DIGEST, "command_type": "RECORD_VERIFICATION",
                 "reservation_sequence": 0,
             })
         with self.assertRaisesRegex(ValidationError, "INVALID_TYPE"):
@@ -112,7 +120,7 @@ class EventReplayTests(unittest.TestCase):
             })
 
     def test_event_batch_rejects_invalid_utc_timestamp_and_actor(self):
-        batch = make_batch(1, ZERO_HASH, [event("RUN_CREATED", {"work_id": "work-1"})])
+        batch = make_batch(1, ZERO_HASH, [run_created()])
         raw = batch.to_dict()
         raw["occurred_at"] = "not-a-timestamp"
         with self.assertRaisesRegex(ValidationError, "INVALID_VALUE"):
@@ -128,7 +136,7 @@ class EventReplayTests(unittest.TestCase):
         with self.assertRaisesRegex(ValidationError, "INVALID_VALUE"):
             EventBatch(1, 1, "batch-1", "request-1", DIGEST, "work-1", "not-a-timestamp",
                        {"type": "test", "id": "local"}, ZERO_HASH,
-                       (event("RUN_CREATED", {"work_id": "work-1"}),), DIGEST)
+                       (run_created(),), DIGEST)
         bad_event = {"event_type": "RUN_CREATED", "payload": {"work_id": "work-1", "typo": True}}
         bad_unsigned = {
             "schema_version": 1, "sequence": 1, "batch_id": "batch-1",
@@ -141,7 +149,7 @@ class EventReplayTests(unittest.TestCase):
                        "2026-09-11T00:00:00Z", {"type": "test", "id": "local"}, ZERO_HASH,
                        (bad_event,), canonical_sha256(bad_unsigned))
 
-        payload = {"work_id": "work-1"}
+        payload = {"work_id": "work-1", "goal": "Complete the kernel", "route": valid_route()}
         direct_event = DomainEvent("RUN_CREATED", payload)
         payload["work_id"] = "changed-after-construction"
         unsigned = {
@@ -157,7 +165,7 @@ class EventReplayTests(unittest.TestCase):
         self.assertEqual(reduce_event(initial_state(), direct_event).work_id, "work-1")
 
     def test_replay_rejects_broken_hash_chain(self):
-        first = make_batch(1, ZERO_HASH, [event("RUN_CREATED", {"work_id": "work-1"})])
+        first = make_batch(1, ZERO_HASH, [run_created()])
         second = make_batch(2, first.batch_hash, [event("TASK_ADDED", {"task": task_contract("a")})])
         raw = second.to_dict()
         raw["previous_hash"] = "sha256:" + "f" * 64
@@ -165,7 +173,7 @@ class EventReplayTests(unittest.TestCase):
             replay([first, EventBatch.from_dict(raw)])
 
     def test_replay_rejects_schema_sequence_and_batch_hash_tampering(self):
-        first = make_batch(1, ZERO_HASH, [event("RUN_CREATED", {"work_id": "work-1"})])
+        first = make_batch(1, ZERO_HASH, [run_created()])
         with self.assertRaisesRegex(IntegrityError, "EVENT_SEQUENCE_MISMATCH"):
             replay([make_batch(2, ZERO_HASH, first.events)])
         raw = first.to_dict()
@@ -175,24 +183,26 @@ class EventReplayTests(unittest.TestCase):
 
     def test_request_without_resolution_is_in_doubt(self):
         state = replay(batches(event("REQUEST_RESERVED", {
-            "request_id": "req-1", "request_sha256": DIGEST, "command_type": "START_TASK",
+            "request_id": "req-1", "request_sha256": DIGEST, "command_type": "RECORD_VERIFICATION",
             "reservation_sequence": 1,
         })))
         self.assertEqual(state.requests["req-1"].status, "in_doubt")
 
     def test_duplicate_resolution_is_idempotent_but_conflict_is_rejected(self):
         reserved = event("REQUEST_RESERVED", {
-            "request_id": "req-1", "request_sha256": DIGEST, "command_type": "START_TASK",
+            "request_id": "req-1", "request_sha256": DIGEST, "command_type": "RECORD_VERIFICATION",
             "reservation_sequence": 1,
         })
         resolved = event("REQUEST_RESOLVED", {
             "request_id": "req-1", "outcome": "success", "reason_code": None,
+            "request_sha256": DIGEST, "command_type": "RECORD_VERIFICATION", "expected_sequence": 0,
             "result_summary": {"ok": True}, "event_ids": ["batch-1"],
         })
         state = replay(batches(reserved, resolved, resolved))
         self.assertEqual(state.requests["req-1"].outcome, "success")
         conflicting = event("REQUEST_RESOLVED", {
             "request_id": "req-1", "outcome": "denied", "reason_code": "BLOCKED",
+            "request_sha256": DIGEST, "command_type": "RECORD_VERIFICATION", "expected_sequence": 0,
             "result_summary": {"ok": False}, "event_ids": ["batch-2"],
         })
         with self.assertRaisesRegex(IntegrityError, "REQUEST_RESOLUTION_CONFLICT"):
@@ -200,7 +210,7 @@ class EventReplayTests(unittest.TestCase):
 
     def test_task_transitions_and_review_rounds_preserve_scope_origin(self):
         state = replay(batches(
-            event("RUN_CREATED", {"work_id": "work-1"}),
+            run_created(),
             event("TASK_ADDED", {"task": task_contract("a")}),
             event("TASK_READIED", {"task_id": "a"}),
             event("TASK_STARTED", {"task_id": "a", "scope_origin": revision()}),
@@ -218,7 +228,7 @@ class EventReplayTests(unittest.TestCase):
         self.assertEqual(task.scope_origin["revision_id"], "origin-1")
 
         state = replay(batches(
-            event("RUN_CREATED", {"work_id": "work-1"}),
+            run_created(),
             event("TASK_ADDED", {"task": task_contract("a")}),
             event("TASK_BLOCKED", {"task_id": "a"}),
             event("TASK_UNBLOCKED", {"task_id": "a", "provenance": {"actor": "human", "resolution": "fixed"}}),
@@ -229,7 +239,7 @@ class EventReplayTests(unittest.TestCase):
 
     def test_third_needs_fixes_blocks_only_that_task_and_run(self):
         state = replay(batches(
-            event("RUN_CREATED", {"work_id": "work-1"}),
+            run_created(),
             event("TASK_ADDED", {"task": task_contract("a")}),
             event("TASK_NEEDS_FIXES", {"task_id": "a"}),
             event("TASK_NEEDS_FIXES", {"task_id": "a"}),
@@ -253,7 +263,7 @@ class EventReplayTests(unittest.TestCase):
         self.assertEqual(state.tasks["a"].task_revision, 2)
         self.assertFalse(state.tasks["a"].currently_satisfied)
         self.assertEqual(state.tasks["b"].status, "stale")
-        self.assertEqual(state.tasks["b"].task_revision, 1)
+        self.assertEqual(state.tasks["b"].task_revision, 2)
 
     def test_dependency_satisfaction_current_fingerprints_and_delivery_assertions(self):
         state = replay(accepted_history())
@@ -273,7 +283,7 @@ class EventReplayTests(unittest.TestCase):
 
     def test_dependent_task_is_satisfied_only_while_its_dependency_is_current(self):
         state = replay(batches(
-            event("RUN_CREATED", {"work_id": "work-1"}),
+            run_created(),
             event("TASK_ADDED", {"task": task_contract("a")}),
             event("TASK_READIED", {"task_id": "a"}),
             event("TASK_STARTED", {"task_id": "a", "scope_origin": revision("origin-a")}),
@@ -355,7 +365,7 @@ class EventReplayTests(unittest.TestCase):
     def test_legacy_workspace_event_replays_without_changing_its_hashed_payload(self):
         legacy = revision()
         start = {"event_type": "TASK_STARTED", "payload": {"task_id": "a", "scope_origin": legacy}}
-        history = batches(event("RUN_CREATED", {"work_id": "work-1"}),
+        history = batches(run_created(),
                           event("TASK_ADDED", {"task": task_contract("a")}),
                           event("TASK_READIED", {"task_id": "a"}))
         provisional = {"schema_version": 1, "sequence": 4, "batch_id": "batch-4",

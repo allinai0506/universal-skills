@@ -109,8 +109,9 @@ categories/workflow/unified-dev-flow/scripts/
 - 原始输出 blob 必须先完整写入、`fsync` 并原子发布，随后事件才可引用其 digest。崩溃可以留下未引用 blob；引用缺失或 digest 不符只产生诊断完整性警告，因为 Gate 所需数据已经内嵌事件。
 - `run.lock` 只串行化 Kernel writer，不锁定项目编辑器，也不声称提供 workspace snapshot。
 - `work-id`、`task-id`、`command-id`、`request-id` 仅允许 `[A-Za-z0-9][A-Za-z0-9._-]{0,127}`。
-- 所有路径必须 `resolve` 后仍位于项目根或对应 run 目录内；控制目录及其父路径不得是符号链接。
+- 所有业务和 runtime 路径必须 `resolve` 后仍位于项目根或对应 run 目录内；控制目录及其父路径不得是符号链接。仅初始化忽略规则允许访问项目 Git 元数据声明的 `gitdir` / `commondir`，以支持 linked worktree 的共享 `info/exclude`；不能通过符号链接改写忽略文件。
 - `.unified-dev-flow/**` 必须加入项目忽略规则，并从业务 workspace revision、scope diff 和 verification inputs 中排除。
+- 非 patch 的已授权 `init` 优先保留原字节并向 Git `info/exclude` 追加 `/.unified-dev-flow/`；用固定 argv、`shell=False` 的只读 `git check-ignore` 校验。若根 `.gitignore` 的更高优先级规则抵消了它，再向根 `.gitignore` 末尾追加同一规则并复验。无 Git 元数据的项目使用根 `.gitignore`。重复初始化不重复追加，patch 拒绝分支保持零写入。
 - 控制目录和事件文件分别使用仅当前用户可访问的目录/文件权限；CLI 默认不输出完整命令环境或未截断的敏感输出。
 - `delivery_target: patch` 是只读路线，不得创建 runtime；`init` 对该 RouteContract 返回 `RUNTIME_NOT_AUTHORIZED`。
 
@@ -168,6 +169,8 @@ created_at / updated_at
 ```
 
 `RUN_COMPLETED` 只表示 Kernel 管理的必需任务与已声明交付要求完成，不代表外部系统已经真实部署。
+
+`goal` 是 `init --goal` 的必填非空文本，与完整 `route_contract` 一起固化在 `RUN_CREATED`。`created_at` 来自该事件所在 batch 的 `occurred_at`，`updated_at` 与 `latest_sequence/latest_hash` 来自最新 batch；Reducer 不读取时钟。`review_rounds_by_task` 和 `blockers` 由任务事件派生，后者明确记录尚未解决的任务原因及 Run 阻塞。当前第二期尚未发布，不为中间开发版本的缺字段事件隐式补值或迁移。
 
 ### 5.3 TaskContract
 
@@ -233,6 +236,8 @@ AND every dependency currently_satisfied
 
 依赖变化时，Reducer 依据显式 `TASK_INVALIDATED` 事件把受影响任务置为 `stale`。只有依赖重新 currently satisfied 后才能再次 `TASK_READIED`；`TASK_STARTED` 也必须重新检查依赖，不能依赖历史上的 ready 判定。Gate 在任何推进或完成命令前必须先比较当前 observation，并把所需失效事件放入同一事件批次。
 
+同一失效事件的确定性级联为每个受影响依赖任务递增一次 `task_revision`，主任务使用事件声明的 `new_task_revision`。已验收的依赖任务在没有未解决 scope violation 时清除已封存的 origin，从新 revision 重新建立范围基线；仍在执行窗口内或有未解决范围违规的 origin 保留，不能借级联吸收越界变更。普通 `stale → ready` 不再追加第二次失效事件。
+
 ### 5.5 WorkspaceRevision
 
 核心协议使用 Provider 中立的 `WorkspaceRevision`：
@@ -247,9 +252,13 @@ observed_at
 
 `TrustedLocalVerifier` 可额外记录 Git HEAD、tracked diff digest、untracked manifest 和相关文件内容 digest，但 Kernel 不把 Git 字段作为跨 Provider 必需字段。
 
+`revision_id` 必须表示整个受管项目的身份，独立于任务选择的 `verification_inputs`；`verification_input_fingerprint` 只表示该任务选中的输入。Local Provider 在排除控制目录后观察全项目文件内容及权限 manifest，以检测包括输入集合之外的新增、修改、删除及 executable bit 等权限变化。项目内文件/目录符号链接同时绑定链接身份及逻辑路径下的已解析内容；重定向、逃逸、控制目录别名和循环不能被静默忽略。目录输入包含其树，按 glob 选择的子文件额外绑定祖先链接身份，但不纳入未选中的兄弟文件。
+
 `TASK_STARTED` 必须为当前 `task_revision` 持久化不可变的 `scope_origin`。后续 report 的 scope diff 是“当前 observation 相对 scope origin”的变化；验证命令的副作用则额外比较 pre-command 与 post-command revision。`NEEDS_FIXES` 和同一 revision 内的重试不得重采 origin，否则上一轮越界修改会被吸收为既有脏状态。只有显式 `TASK_INVALIDATED` 开启新 task revision 后才可建立新 origin；未解决的 `SCOPE_VIOLATION` 仍然阻止新 origin，必须先通过 blocker resolution 记录修复或人工处置 provenance。
 
 MVP 在共享工作区一次只允许一个可写 Task 处于 `running`，避免把其他任务的合法变化错误归属给当前任务。首次启动该 revision 前已经存在的变化包含在 origin 中，之后的外部变化仍按当前任务期间变化处理并可能触发 scope violation。
+
+范围归属的执行窗口持续到 `TASK_ACCEPTED`：在 running、waiting_review 及验收转换时检查不可变 origin；验收后封存这次范围检查。后续其他任务的合法变更不追溯归属给已验收任务，但每次推进仍按其 verification inputs 检查验收是否失效。
 
 ### 5.6 Evidence Record
 
@@ -264,6 +273,8 @@ MVP 在共享工作区一次只允许一个可写 Task 处于 `running`，避免
 - canonical evidence SHA-256。
 
 仅 Agent 报告、时间戳、文件存在或 exit code 都不是充分 Evidence。
+
+同一验证记录的 pre/post/commit 必须有连贯的 Provider、全项目 revision 和输入指纹。记录完成后，后续全项目 revision 在验证输入之外变化，不会单独使 Evidence、Review Assertion 或 acceptance 失效；它会使旧 delivery workspace binding 失效。
 
 ### 5.7 Review Assertion
 
@@ -361,6 +372,8 @@ SCOPE_VIOLATION      ESCALATE_TO_HUMAN  DELIVERY_RECORDED
 
 `REQUEST_RESERVED` 持久化 request fingerprint、命令类型和 reservation sequence。`REQUEST_RESOLVED` 持久化稳定 outcome：`success | denied | provider_failure | abandoned`、reason code、返回摘要和关联事件。只有存在 reservation 且没有 resolution 的请求才是 `IN_DOUBT`。
 
+Resolution 还保存原始 `request_sha256`、`command_type`、`expected_sequence`，使没有 reservation 的纯状态请求也能完整重放并稳定重试；它们必须与 batch 和已有请求身份一致。只有即将执行 Provider 的验证请求可以 reserved。`review record` 的 readiness 检查和复核事件属于一个纯状态原子 batch，不产生 reservation。
+
 本期不包含泛化 stage、waiver、cleanup 或资源分配事件。
 
 ## 7. Gate Kernel 规则
@@ -378,6 +391,8 @@ Gate Kernel 是纯函数，不读取文件、不运行命令、不追加日志�
 - scope diff 落在 `write_scope` 之外：记录 `SCOPE_VIOLATION` 并拒绝推进。
 - `DELIVERY_RECORDED`：操作必须不高于 `patch < working_tree < commit < pr < merge < deploy` 的授权上限，并携带可验证 provenance、workspace revision 和 `acceptance_set_sha256`。该 hash 覆盖所有 required Task 当前有效的 acceptance/input/verdict 指纹。该事件记录声明，不执行交付操作。
 - `RUN_COMPLETED`：所有 required Task currently satisfied、无 blocker，并且存在满足 `obligations.required_delivery`、绑定当前 `acceptance_set_sha256` 的交付声明。任务重新验收后，旧声明保留为历史但不再满足完成条件。
+
+交付声明与当前 observation 比较 `provider + revision_id` 的全项目身份，不要求不同任务的 verification-input fingerprint 相等。完成时重新检查相同绑定；即使 acceptance set 未变化，全项目 revision 或 Provider 已漂移时旧声明也不能完成 Run，必须重新记录交付。
 
 稳定 reason code 至少包括：
 

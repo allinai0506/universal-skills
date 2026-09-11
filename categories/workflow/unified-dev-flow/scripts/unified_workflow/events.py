@@ -158,12 +158,12 @@ def _decode_event_payload(event_type: str, raw: Any) -> Mapping[str, Any]:
         return {
             "request_id": validate_id(raw["request_id"], "request_id"),
             "request_sha256": _digest_payload(raw["request_sha256"], "request_sha256"),
-            "command_type": _enum(raw["command_type"], "command_type", _COMMAND_TYPES),
+            "command_type": _enum(raw["command_type"], "command_type", ("RECORD_VERIFICATION",)),
             "reservation_sequence": _integer(raw["reservation_sequence"], "reservation_sequence", 1),
         }
     if event_type == "REQUEST_RESOLVED":
         raw = _strict_fields(raw, ("request_id", "outcome", "reason_code", "result_summary",
-                                   "event_ids"), event_type)
+                                   "event_ids", "request_sha256", "command_type", "expected_sequence"), event_type)
         reason_code = raw["reason_code"]
         if reason_code is not None:
             reason_code = validate_id(reason_code, "reason_code")
@@ -174,14 +174,18 @@ def _decode_event_payload(event_type: str, raw: Any) -> Mapping[str, Any]:
         if len(set(event_ids)) != len(event_ids):
             raise ValidationError("DUPLICATE_VALUE", "event_ids contains a duplicate value")
         return {"request_id": validate_id(raw["request_id"], "request_id"),
+                "request_sha256": _hash(raw["request_sha256"], "request_sha256"),
+                "command_type": _enum(raw["command_type"], "command_type", _COMMAND_TYPES),
+                "expected_sequence": _integer(raw["expected_sequence"], "expected_sequence"),
                 "outcome": _enum(raw["outcome"], "outcome", _OUTCOMES),
                 "reason_code": reason_code, "result_summary": summary, "event_ids": event_ids}
     if event_type == "RUN_CREATED":
-        raw = _strict_fields_optional(raw, ("work_id",), ("route",), event_type)
-        result = {"work_id": validate_id(raw["work_id"], "work_id")}
-        if "route" in raw:
-            result["route"] = RouteContract.from_dict(_plain(raw["route"])).to_dict()
-        return result
+        raw = _strict_fields(raw, ("work_id", "goal", "route"), event_type)
+        goal = _string(raw["goal"], "goal")
+        if not goal.strip():
+            raise ValidationError("INVALID_VALUE", "goal must contain non-whitespace text")
+        return {"work_id": validate_id(raw["work_id"], "work_id"), "goal": goal,
+                "route": RouteContract.from_dict(_plain(raw["route"])).to_dict()}
     if event_type in ("RUN_BLOCKED", "RUN_RESUMED", "RUN_COMPLETED", "RUN_CANCELLED"):
         _strict_fields(raw, (), event_type)
         return {}
@@ -379,3 +383,9 @@ def verify_batch(previous: EventBatch | None, batch: EventBatch) -> None:
         raise IntegrityError("EVENT_HASH_MISMATCH", "previous hash does not match")
     if batch.batch_hash != canonical_sha256(batch.unsigned_dict()):
         raise IntegrityError("EVENT_HASH_MISMATCH", "batch hash does not match its contents")
+    for event in batch.events:
+        if event.event_type in ("REQUEST_RESERVED", "REQUEST_RESOLVED"):
+            if (event.payload["request_id"], event.payload["request_sha256"]) != (batch.request_id, batch.request_sha256):
+                raise IntegrityError("REQUEST_CONFLICT", "request identity does not match its batch")
+            if event.event_type == "REQUEST_RESERVED" and event.payload["reservation_sequence"] != batch.sequence:
+                raise IntegrityError("REQUEST_CONFLICT", "reservation sequence does not match its batch")
