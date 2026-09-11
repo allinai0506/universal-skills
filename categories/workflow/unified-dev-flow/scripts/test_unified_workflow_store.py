@@ -215,6 +215,62 @@ class StoreTests(unittest.TestCase):
             self.assertEqual(result.state.status, "new")
             self.assertFalse((Path(root) / ".unified-dev-flow").exists())
 
+    def test_patch_init_reusing_original_request_id_reports_idempotency_conflict(self):
+        route = valid_route()
+        route["delivery_target"] = "patch"
+        cmd = replace(command("INIT_RUN", route=route), request_id="req-1")
+        before = self.store.events_path.read_bytes()
+        result = self.store.execute(cmd)
+        self.assertEqual(result.outcome.reason_code, "IDEMPOTENCY_CONFLICT")
+        self.assertEqual(result.state.status, "active")
+        self.assertIn("task-001", result.state.tasks)
+        self.assertEqual(self.store.events_path.read_bytes(), before)
+
+    def test_patch_init_on_existing_run_returns_persisted_state(self):
+        route = valid_route()
+        route["delivery_target"] = "patch"
+        result = self.store.execute(self.cmd("INIT_RUN", route=route))
+        self.assertEqual(result.outcome.reason_code, "INVALID_TRANSITION")
+        self.assertEqual(result.state.status, "active")
+        self.assertEqual(result.state.tasks["task-001"].status, "running")
+
+    def test_patch_init_cannot_bypass_corrupt_existing_log(self):
+        route = valid_route()
+        route["delivery_target"] = "patch"
+        self.store.events_path.write_bytes(b"unterminated")
+        with self.assertRaisesRegex(IntegrityError, "EVENT_JSON_CORRUPT"):
+            self.store.execute(self.cmd("INIT_RUN", route=route))
+        self.assertEqual(self.store.events_path.read_bytes(), b"unterminated")
+
+    def test_patch_init_rejects_symlinked_control_instead_of_treating_it_as_absent(self):
+        with TemporaryDirectory() as root:
+            root = Path(root)
+            target = root / "missing-target"
+            (root / ".unified-dev-flow").symlink_to(target, target_is_directory=True)
+            route = valid_route()
+            route["delivery_target"] = "patch"
+            with self.assertRaisesRegex(ValidationError, "UNSAFE_CONTROL_PATH"):
+                RunStore(root, "work-1").execute(command("INIT_RUN", route=route))
+            self.assertFalse(target.exists())
+
+    def test_patch_init_observes_runtime_created_during_gate_preflight(self):
+        with TemporaryDirectory() as root:
+            root = Path(root)
+            store = RunStore(root, "work-1")
+            route = valid_route()
+            route["delivery_target"] = "patch"
+            from unified_workflow.gate_kernel import decide as real_decide
+            def preflight(state, cmd, facts):
+                result = real_decide(state, cmd, facts)
+                if cmd.request_id != "creator":
+                    other = RunStore(root, "work-1")
+                    other.execute(replace(command("INIT_RUN", route=valid_route()), request_id="creator"))
+                return result
+            with patch("unified_workflow.store.decide", side_effect=preflight):
+                result = store.execute(command("INIT_RUN", route=route))
+            self.assertEqual(result.outcome.reason_code, "EXPECTED_SEQUENCE_MISMATCH")
+            self.assertEqual(result.state.status, "active")
+
     def test_process_crashes_leave_in_doubt_without_rerunning_provider(self):
         for phase in ("reserved", "provider", "blobs"):
             with self.subTest(phase=phase):

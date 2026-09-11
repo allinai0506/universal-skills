@@ -336,11 +336,24 @@ The sequence property describes the last successfully read/committed head.
         state = self._append(run_fd, blobs_fd, batches, command, fingerprint, events, batch_id)
         return self._result(state, decision.outcome, status)
 
+    def _control_is_absent(self):
+        root_fd = os.open(self.project_root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            try:
+                os.stat(".unified-dev-flow", dir_fd=root_fd, follow_symlinks=False)
+            except FileNotFoundError:
+                return True
+            return False
+        finally:
+            os.close(root_fd)
+
     def execute(self, command, facts=None) -> CommandResult:
         command = Command.from_dict(command.to_dict())
-        if command.command_type == "INIT_RUN":
+        if command.command_type == "INIT_RUN" and self._control_is_absent():
             preflight = decide(initial_state(), command, facts)
-            if isinstance(preflight.outcome, Denied):
+            # Recheck after preflight: a concurrent creator must enter the normal
+            # locked replay path. This final absent lookup linearizes a no-write denial.
+            if isinstance(preflight.outcome, Denied) and self._control_is_absent():
                 return self._result(initial_state(), preflight.outcome)
         fingerprint = canonical_sha256(command.to_dict())
         try:
