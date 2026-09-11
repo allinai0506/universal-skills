@@ -4,8 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, ClassVar, Mapping
 
-from .model import (_expect_fields, _integer, _json_plain, _json_safe, _schema_version,
-                    _unique_strings, validate_id, ValidationError)
+from .model import (canonical_json, _expect_fields, _integer, _json_plain, _json_safe,
+                    _schema_version, _unique_strings, validate_id, ValidationError)
 
 
 _COMMAND_TYPES = (
@@ -112,7 +112,10 @@ class Decision:
             parsed = Denied.from_dict(denied)
         else:
             raise ValidationError("UNKNOWN_ENUM", "outcome.kind must be allowed or denied")
-        return cls(events=tuple(_json_safe(event, "events[]") for event in raw["events"]), outcome=parsed)
+        events = tuple(_json_safe(event, "events[]") for event in raw["events"])
+        if len({canonical_json(event) for event in events}) != len(events):
+            raise ValidationError("DUPLICATE_VALUE", "events contains a duplicate value")
+        return cls(events=events, outcome=parsed)
 
     def to_dict(self) -> dict[str, Any]:
         if isinstance(self.outcome, Allowed):

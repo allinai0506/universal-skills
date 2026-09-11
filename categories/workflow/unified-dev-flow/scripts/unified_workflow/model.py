@@ -16,6 +16,7 @@ OUTCOMES = ("success", "denied", "provider_failure", "abandoned")
 VERDICTS = ("MERGE_READY", "NEEDS_FIXES", "ESCALATE")
 ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 CONTROL_PREFIXES = (".git", ".unified-dev-flow")
+REVIEW_PROVENANCE = ("cross_model", "human", "mock")
 
 _RESUMES = ("fresh", "match", "compatible_drift", "conflicting_drift")
 _INTENTS = ("bug", "feature", "refactor", "migration", "research", "config")
@@ -136,6 +137,13 @@ def resolve_project_path(root: Path, value: Any, field: str) -> Path:
         resolved.relative_to(project_root)
     except (OSError, ValueError):
         _error("PATH_ESCAPE", f"{field} resolves outside the project root")
+    for prefix in CONTROL_PREFIXES:
+        control_root = (project_root / prefix).resolve(strict=False)
+        try:
+            resolved.relative_to(control_root)
+        except ValueError:
+            continue
+        _error("CONTROL_PATH", f"{field} resolves into a control directory")
     return resolved
 
 
@@ -222,7 +230,8 @@ class RouteObligations:
             verification_claims=_unique_strings(raw["verification_claims"], "verification_claims",
                                                 values=_ASSURANCE_LEVELS),
             accepted_review_provenance=_unique_strings(
-                raw["accepted_review_provenance"], "accepted_review_provenance"),
+                raw["accepted_review_provenance"], "accepted_review_provenance",
+                values=REVIEW_PROVENANCE),
             required_delivery=_enum(raw["required_delivery"], "required_delivery", DELIVERY_ORDER),
         )
 
@@ -565,7 +574,7 @@ class ReviewAssertion:
             task_revision=_integer(raw["task_revision"], "task_revision", minimum=1),
             reviewer=validate_id(raw["reviewer"], "reviewer"),
             provider=validate_id(raw["provider"], "provider"),
-            provenance=_string(raw["provenance"], "provenance"),
+            provenance=_enum(raw["provenance"], "provenance", REVIEW_PROVENANCE),
             task_contract_sha256=_sha256(raw["task_contract_sha256"], "task_contract_sha256"),
             source_fingerprint=_sha256(raw["source_fingerprint"], "source_fingerprint"),
             test_fingerprint=_sha256(raw["test_fingerprint"], "test_fingerprint"),
