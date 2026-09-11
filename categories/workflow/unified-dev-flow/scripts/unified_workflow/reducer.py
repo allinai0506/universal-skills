@@ -189,6 +189,10 @@ def _invalidate(state: RunState, task_id: str, revision: int, event: DomainEvent
 
 def reduce_event(state: RunState, event: DomainEvent) -> RunState:
     """Apply one already-validated event without reading external state."""
+    if not isinstance(event, DomainEvent):
+        event = DomainEvent.from_dict(event)
+    else:
+        event = DomainEvent(event.event_type, event.payload)
     payload = _payload(event)
     event_type = event.event_type
     if event_type == "REQUEST_RESERVED":
@@ -319,6 +323,10 @@ def replay(batches: list[EventBatch] | tuple[EventBatch, ...]) -> RunState:
     state = initial_state()
     previous: EventBatch | None = None
     for batch in batches:
+        if not isinstance(batch, EventBatch):
+            batch = EventBatch.from_dict(batch)
+        else:
+            batch = EventBatch.from_dict(batch.to_dict())
         verify_batch(previous, batch)
         for event in batch.events:
             state = reduce_event(state, event)

@@ -10,7 +10,8 @@ from unified_workflow.events import (
     EventBatch,
     IntegrityError,
 )
-from unified_workflow.reducer import replay
+from unified_workflow.model import ValidationError, canonical_sha256
+from unified_workflow.reducer import initial_state, reduce_event, replay
 
 
 DIGEST = "sha256:" + "a" * 64
@@ -74,6 +75,81 @@ def accepted_history() -> list[EventBatch]:
 
 
 class EventReplayTests(unittest.TestCase):
+    def test_event_payloads_reject_unknown_and_missing_fields(self):
+        with self.assertRaisesRegex(ValidationError, "UNKNOWN_FIELD"):
+            event("RUN_CREATED", {"work_id": "work-1", "work": "typo"})
+        with self.assertRaisesRegex(ValidationError, "MISSING_FIELD"):
+            event("REQUEST_RESERVED", {
+                "request_id": "req-1", "request_sha256": DIGEST,
+                "command_type": "START_TASK",
+            })
+        with self.assertRaisesRegex(ValidationError, "MISSING_FIELD"):
+            event("DELIVERY_RECORDED", {"delivery_target": "commit"})
+
+    def test_event_payloads_reject_wrong_types_enums_and_bounds(self):
+        with self.assertRaisesRegex(ValidationError, "UNKNOWN_ENUM"):
+            event("REQUEST_RESERVED", {
+                "request_id": "req-1", "request_sha256": DIGEST, "command_type": "INVENT",
+                "reservation_sequence": 1,
+            })
+        with self.assertRaisesRegex(ValidationError, "INVALID_VALUE"):
+            event("REQUEST_RESERVED", {
+                "request_id": "req-1", "request_sha256": DIGEST, "command_type": "START_TASK",
+                "reservation_sequence": 0,
+            })
+        with self.assertRaisesRegex(ValidationError, "INVALID_TYPE"):
+            event("VERIFICATION_RECORDED", {"task_id": "a", "success": "yes"})
+        with self.assertRaisesRegex(ValidationError, "UNKNOWN_ENUM"):
+            event("DELIVERY_RECORDED", {
+                "delivery_target": "email", "acceptance_set_sha256": DIGEST,
+                "provenance": {"commit": "abc123"},
+            })
+
+    def test_event_batch_rejects_invalid_utc_timestamp_and_actor(self):
+        batch = make_batch(1, ZERO_HASH, [event("RUN_CREATED", {"work_id": "work-1"})])
+        raw = batch.to_dict()
+        raw["occurred_at"] = "not-a-timestamp"
+        with self.assertRaisesRegex(ValidationError, "INVALID_VALUE"):
+            EventBatch.from_dict(raw)
+        raw = batch.to_dict()
+        raw["actor"] = {"type": "test"}
+        with self.assertRaisesRegex(ValidationError, "MISSING_FIELD"):
+            EventBatch.from_dict(raw)
+
+    def test_direct_constructors_validate_and_detach_mutable_inputs(self):
+        with self.assertRaisesRegex(ValidationError, "UNKNOWN_FIELD"):
+            DomainEvent("RUN_CREATED", {"work_id": "work-1", "unexpected": True})
+        with self.assertRaisesRegex(ValidationError, "INVALID_VALUE"):
+            EventBatch(1, 1, "batch-1", "request-1", DIGEST, "work-1", "not-a-timestamp",
+                       {"type": "test", "id": "local"}, ZERO_HASH,
+                       (event("RUN_CREATED", {"work_id": "work-1"}),), DIGEST)
+        bad_event = {"event_type": "RUN_CREATED", "payload": {"work_id": "work-1", "typo": True}}
+        bad_unsigned = {
+            "schema_version": 1, "sequence": 1, "batch_id": "batch-1",
+            "request_id": "request-1", "request_sha256": DIGEST, "work_id": "work-1",
+            "occurred_at": "2026-09-11T00:00:00Z", "actor": {"type": "test", "id": "local"},
+            "previous_hash": ZERO_HASH, "events": [bad_event],
+        }
+        with self.assertRaisesRegex(ValidationError, "UNKNOWN_FIELD"):
+            EventBatch(1, 1, "batch-1", "request-1", DIGEST, "work-1",
+                       "2026-09-11T00:00:00Z", {"type": "test", "id": "local"}, ZERO_HASH,
+                       (bad_event,), canonical_sha256(bad_unsigned))
+
+        payload = {"work_id": "work-1"}
+        direct_event = DomainEvent("RUN_CREATED", payload)
+        payload["work_id"] = "changed-after-construction"
+        unsigned = {
+            "schema_version": 1, "sequence": 1, "batch_id": "batch-1",
+            "request_id": "request-1", "request_sha256": DIGEST, "work_id": "work-1",
+            "occurred_at": "2026-09-11T00:00:00Z", "actor": {"type": "test", "id": "local"},
+            "previous_hash": ZERO_HASH, "events": [direct_event.to_dict()],
+        }
+        direct_batch = EventBatch(1, 1, "batch-1", "request-1", DIGEST, "work-1",
+                                  "2026-09-11T00:00:00Z", {"type": "test", "id": "local"},
+                                  ZERO_HASH, (direct_event,), canonical_sha256(unsigned))
+        self.assertEqual(replay([direct_batch]).work_id, "work-1")
+        self.assertEqual(reduce_event(initial_state(), direct_event).work_id, "work-1")
+
     def test_replay_rejects_broken_hash_chain(self):
         first = make_batch(1, ZERO_HASH, [event("RUN_CREATED", {"work_id": "work-1"})])
         second = make_batch(2, first.batch_hash, [event("TASK_ADDED", {"task": task_contract("a")})])
