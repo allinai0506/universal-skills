@@ -1,8 +1,9 @@
 # Unified Dev Flow Policy Model
 
 This reference is the authoritative source for detailed routing policy. The router selects existing stage
-skills and adapters; it does not reproduce their implementation procedures or
-create a phase-two runtime, ledger, or execution backend.
+skills and adapters; it does not reproduce their implementation procedures.
+The optional phase-two Kernel enforces a pinned contract from this policy;
+the Router retains policy selection and Adapter execution remains external.
 
 ## Resolution Order
 
@@ -41,6 +42,58 @@ controller.
 Phase one can read existing `.superpowers/sdd/progress.md`, `.specify/`,
 `openspec/changes/`, and controller-native state. It does not create a unified
 ledger.
+
+## Runtime RouteContract Handoff
+
+After resolving a Route, the Router may emit schema-version-1 `RouteContract`
+for authorized `working_tree` or higher delivery. `patch` cannot initialize a
+runtime. Pin `resume`, `intent`, `complexity`, `risks`, `domains`,
+`delivery_target`, `spec_backend`, `controller`, `proof_mode`, `assurance_level`,
+`review_limit`, and `source.policy_version` / `source.policy_sha256` along with
+these finite obligations:
+
+| Obligation | Router emission and Kernel check |
+|---|---|
+| `verification_claims` | Required claim set drawn from `deterministic`, `adversarial`, `mutation`, according to the resolved assurance. Fresh successful registered commands must collectively cover it; selected required commands must also pass. |
+| `accepted_review_provenance` | Explicit allowed subset of `cross_model`, `human`, `mock`; select suitable provenance for the resolved review policy. A fresh `MERGE_READY` assertion must bind current task, inputs, command contracts, and evidence. |
+| `required_delivery` | Required endpoint at or below the authorized `delivery_target`; delivery must bind the current acceptance set and workspace with provenance. |
+
+The `review_limit` retains the Router's three-round escalation ceiling; a
+smaller selected limit is respected. Claims and review provenance are declared
+contracts, not automatic certification that an external reviewer is independent
+or that arbitrary tests establish a claim. Planning, specialist selection,
+production review, and external delivery actions remain Router/Adapter duties.
+The Kernel records supplied delivery evidence; it does not commit, publish,
+merge, or deploy. Legacy resume continues from native records and does not
+require a Kernel run or migration.
+
+The CLI reads UTF-8 JSON from `--route-file`, `--task-file`,
+`--assertion-file`, and `--provenance-file`. `--report-file` contains
+`{report: {summary: ...}, workspace_revision: ...}`; `--delivery-file` contains
+`{delivery_target, acceptance_set_sha256, workspace_revision, provenance}`.
+These are JSON object shapes; use quoted JSON keys in files. Verification
+accepts only `--command-id`, never an arbitrary command string. External
+callers can use the Provider API for workspace observations; recorded successful
+verification evidence in `status --json` supplies review bindings.
+
+`review record` composes `WAIT_FOR_REVIEW` and `RECORD_REVIEW` through Store,
+with a deterministic internal request ID for the wait. Its optional expected
+sequence addresses the state before that wait; retry the same request ID and
+arguments after interruption. Other mutations map to their corresponding Gate
+command. `request status --request-id <id>` inspects a reservation;
+`request resolve --request-id <id> --resolution-file resolution.json` resolves
+that existing in-doubt attempt using `{outcome, actor: {type, id}, note}`.
+Outcomes are `abandoned` or the manually verified `success`, `denied`, or
+`provider_failure`; resolution never reruns execution or supplies acceptance.
+Its expected-sequence check occurs under the Store writer lock.
+
+All mutations require `--request-id`; optional `--actor-file` supplies
+`{type, id}` for ordinary commands (default `{type: cli, id: local}`). Request
+resolution uses its mandatory document actor instead. `--json` emits one
+canonical object. Exit codes are `0` success, `2` invalid arguments/contract,
+`3` Gate denial, `4` corrupt state, `5` lock busy, `6` Provider/verification
+failure, and `7` request in doubt. Status/replay reconstruct state from events,
+without maintaining a snapshot or writing legacy control directories.
 
 ## Policy Dimensions
 

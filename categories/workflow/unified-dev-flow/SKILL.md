@@ -41,7 +41,27 @@ HEAD, relevant task diff, and controller state:
 - **COMPATIBLE_DRIFT**: reconcile changed scope and evidence, then resume.
 - **CONFLICTING_DRIFT**: invalidate the stale plan/state and return to Entry Gate.
 
-Use existing native records; do not create a phase-two unified runtime or ledger.
+Use existing native records; legacy resume does not require a unified runtime
+or conversion of its ledger.
+
+## Phase Two Runtime
+
+After policy resolution, an eligible non-`patch` Route may be pinned as a
+`RouteContract` through `scripts/unified-workflow init --route-file route.json
+--project-root <project> --work-id <id> --request-id <id> --json`.
+The Router remains policy authority; the Kernel enforces the pinned finite
+obligations described in [policy-model.md](references/policy-model.md).
+Adapter execution and controller ownership stay external. The runtime does not
+start agents, create worktrees, or initialize `.codegraph/`.
+
+Use `--help` on each CLI command for its named JSON file inputs. Mutations
+require a request ID and optionally an expected sequence. Verification selects
+a registered `command_id` from the TaskContract; trusted local execution has
+caller authority and provides no OS sandbox. `review record` passes the Gate's
+separate durable wait-for-review check before recording the external assertion.
+`status --json` and `replay --json` expose the same canonical replayed state;
+runtime records live only under the target project's `.unified-dev-flow/`.
+Existing `.omc/` and `.superpowers/sdd/` records retain their native roles.
 
 ## Entry Gate (first commitment after recon)
 

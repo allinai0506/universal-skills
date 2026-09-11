@@ -434,15 +434,19 @@ The sequence property describes the last successfully read/committed head.
         except LockBusy:
             return CommandResult(_denied("LOCK_BUSY", "Retry when the writer releases the lock."), None, (), "denied")
 
-    def resolve_request(self, request_id, outcome, actor, note) -> CommandResult:
+    def resolve_request(self, request_id, outcome, actor, note, expected_sequence: int | None = None) -> CommandResult:
         validate_id(request_id, "request_id")
         if outcome not in ("success", "denied", "provider_failure", "abandoned"):
             raise ValidationError("INVALID_VALUE", "Unsupported resolution outcome")
         if not isinstance(note, str) or not note.strip():
             raise ValidationError("INVALID_VALUE", "Audited resolution requires a note")
+        if expected_sequence is not None and (type(expected_sequence) is not int or expected_sequence < 0):
+            raise ValidationError("INVALID_VALUE", "expected_sequence must be a nonnegative integer")
         try:
             with self._locked() as (run_fd, blobs_fd):
                 batches, state = self._read(run_fd, blobs_fd)
+                if expected_sequence is not None and expected_sequence != self.sequence:
+                    return self._result(state, _denied("EXPECTED_SEQUENCE_MISMATCH", "Reload the run and use its current sequence."))
                 existing = state.requests.get(request_id)
                 if existing is None or existing.status != "in_doubt":
                     return self._result(state, _denied("INVALID_TRANSITION", "Resolve an existing in-doubt request."))

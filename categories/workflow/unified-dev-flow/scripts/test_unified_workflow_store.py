@@ -356,6 +356,26 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(last["actor"]["id"], "operator")
         self.assertIn("Inspected child", last["events"][-1]["payload"]["result_summary"]["note"])
 
+    def test_resolution_expected_sequence_is_checked_under_writer_lock(self):
+        cmd = self.verify_command()
+        with patch.object(CountingProvider, "run_verification", side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                self.store.execute_verification(cmd, CountingProvider())
+        before = self.store.events_path.read_bytes()
+        stale_sequence = self.store.sequence
+        self.send("REPORT_TASK", "task-001", report={"summary": "progress"},
+                  workspace_revision=workspace().to_dict(), facts=workspace())
+        current = self.store.events_path.read_bytes()
+        self.assertNotEqual(before, current)
+        result = self.store.resolve_request(cmd.request_id, "abandoned", {"type": "human", "id": "operator"},
+                                           "Inspected attempt", expected_sequence=stale_sequence)
+        self.assertEqual(result.outcome.reason_code, "EXPECTED_SEQUENCE_MISMATCH")
+        self.assertEqual(self.store.events_path.read_bytes(), current)
+        self.assertEqual(self.store.load().requests[cmd.request_id].status, "in_doubt")
+        result = self.store.resolve_request(cmd.request_id, "abandoned", {"type": "human", "id": "operator"},
+                                           "Inspected attempt", expected_sequence=self.store.sequence)
+        self.assertEqual(result.status, "abandoned")
+
     def test_death_after_final_fsync_replays_success_without_provider(self):
         cmd = self.verify_command()
         child = multiprocessing.get_context("fork").Process(
