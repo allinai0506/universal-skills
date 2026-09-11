@@ -65,13 +65,11 @@ class TrustedLocalVerifier:
             manifest[relative] = "sha256:" + file_digest.hexdigest()
         fingerprint = "sha256:" + digest.hexdigest()
         origin_manifest = request.scope_origin.file_manifest
-        if request.scope_origin.provider == self.name and origin_manifest:
-            changed_paths = tuple(sorted(path for path in set(manifest) | set(origin_manifest)
-                                         if manifest.get(path) != origin_manifest.get(path)))
-        else:
-            # A foreign or legacy local origin cannot support task attribution.
-            # Report every relevant path rather than treating Git's HEAD as its origin.
-            changed_paths = tuple(manifest)
+        if request.scope_origin.provider != self.name or origin_manifest is None:
+            raise ProviderError("SCOPE_ORIGIN_MANIFEST_UNAVAILABLE",
+                                "scope origin cannot support exact local attribution")
+        changed_paths = tuple(sorted(path for path in set(manifest) | set(origin_manifest)
+                                     if manifest.get(path) != origin_manifest.get(path)))
         return WorkspaceRevision.from_dict({
             "schema_version": 1,
             "provider": self.name,

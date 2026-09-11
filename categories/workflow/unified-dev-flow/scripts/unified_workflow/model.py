@@ -1,7 +1,7 @@
 """Strict, immutable protocol values for the Unified Workflow kernel."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from hashlib import sha256
 import json
 from math import isfinite
@@ -123,8 +123,10 @@ def _relative_path(value: Any, field: str, *, allow_dot: bool = False,
     return value
 
 
-def _file_manifest(value: Any) -> Mapping[str, str]:
+def _file_manifest(value: Any) -> Mapping[str, str] | None:
     """Validate and freeze a canonical project-relative path-to-digest mapping."""
+    if value is None:
+        return None
     if not isinstance(value, Mapping):
         _error("INVALID_TYPE", "file_manifest must be an object")
     parsed: dict[str, str] = {}
@@ -432,18 +434,21 @@ class WorkspaceRevision:
     verification_input_fingerprint: str
     changed_paths: tuple[str, ...]
     observed_at: str
-    file_manifest: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
+    file_manifest: Mapping[str, str] | None = None
 
     _FIELDS: ClassVar[tuple[str, ...]] = (
         "schema_version", "provider", "revision_id", "verification_input_fingerprint",
         "changed_paths", "observed_at")
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "file_manifest", _file_manifest(self.file_manifest))
 
     @classmethod
     def from_dict(cls, raw: Any) -> "WorkspaceRevision":
         if not isinstance(raw, dict):
             _error("INVALID_TYPE", "WorkspaceRevision must be an object")
         raw = dict(raw)
-        manifest = raw.pop("file_manifest", {})
+        manifest = raw.pop("file_manifest", None)
         raw = _expect_fields(raw, cls._FIELDS, "WorkspaceRevision")
         return cls(
             schema_version=_schema_version(raw["schema_version"]),
@@ -457,11 +462,13 @@ class WorkspaceRevision:
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return {"schema_version": self.schema_version, "provider": self.provider,
+        raw = {"schema_version": self.schema_version, "provider": self.provider,
                 "revision_id": self.revision_id,
                 "verification_input_fingerprint": self.verification_input_fingerprint,
-                "changed_paths": list(self.changed_paths), "observed_at": self.observed_at,
-                "file_manifest": dict(self.file_manifest)}
+                "changed_paths": list(self.changed_paths), "observed_at": self.observed_at}
+        if self.file_manifest is not None:
+            raw["file_manifest"] = dict(self.file_manifest)
+        return raw
 
 
 @dataclass(frozen=True)

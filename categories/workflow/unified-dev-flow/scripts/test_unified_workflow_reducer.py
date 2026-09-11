@@ -352,6 +352,20 @@ class EventReplayTests(unittest.TestCase):
         with self.assertRaisesRegex(ValidationError, "CONTROL_PATH"):
             event("TASK_STARTED", {"task_id": "a", "scope_origin": invalid})
 
+    def test_legacy_workspace_event_replays_without_changing_its_hashed_payload(self):
+        legacy = revision()
+        start = {"event_type": "TASK_STARTED", "payload": {"task_id": "a", "scope_origin": legacy}}
+        history = batches(event("RUN_CREATED", {"work_id": "work-1"}),
+                          event("TASK_ADDED", {"task": task_contract("a")}),
+                          event("TASK_READIED", {"task_id": "a"}))
+        provisional = {"schema_version": 1, "sequence": 4, "batch_id": "batch-4",
+                       "request_id": "request-4", "request_sha256": DIGEST, "work_id": "work-1",
+                       "occurred_at": "2026-09-11T00:00:00Z", "actor": {"type": "test", "id": "local"},
+                       "previous_hash": history[-1].batch_hash, "events": [start]}
+        batch = EventBatch.from_dict({**provisional, "batch_hash": canonical_sha256(provisional)})
+        self.assertEqual(batch.unsigned_dict(), provisional)
+        self.assertEqual(replay(history + [batch]).tasks["a"].scope_origin["revision_id"], "origin-1")
+
 
 if __name__ == "__main__":
     unittest.main()

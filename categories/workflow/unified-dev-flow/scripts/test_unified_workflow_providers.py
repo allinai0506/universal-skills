@@ -112,6 +112,17 @@ class TrustedLocalVerifierTests(unittest.TestCase):
         self.contract = TaskContract.from_dict(task_dict(self.commands))
         self.provider = TrustedLocalVerifier(self.root, self.contract, {"MARK": "present"})
 
+    @staticmethod
+    def local_origin():
+        return WorkspaceRevision.from_dict({
+            "schema_version": 1, "provider": "trusted-local", "revision_id": "origin-1",
+            "verification_input_fingerprint": "sha256:" + "0" * 64, "changed_paths": [],
+            "observed_at": "2026-09-11T00:00:00Z", "file_manifest": {},
+        })
+
+    def local_request(self, patterns=("**/*",)):
+        return replace(request_for(patterns), scope_origin=self.local_origin())
+
     def test_local_verifier_rejects_unregistered_command(self):
         with self.assertRaisesRegex(ProviderError, "COMMAND_NOT_REGISTERED"):
             self.provider.run_verification("not-registered")
@@ -181,7 +192,7 @@ class TrustedLocalVerifierTests(unittest.TestCase):
         self.assertEqual(result.stdout, b"present|none")
 
     def test_workspace_tracks_content_changes_and_excludes_git(self):
-        request = request_for(["src/**"])
+        request = self.local_request(["src/**"])
         before = self.provider.observe_workspace(request)
         (self.root / "src" / "tracked.txt").write_text("after\n")
         (self.root / "src" / "untracked.txt").write_text("new\n")
@@ -195,7 +206,7 @@ class TrustedLocalVerifierTests(unittest.TestCase):
                          git_only.verification_input_fingerprint)
 
     def test_local_manifest_attributes_changes_since_its_origin(self):
-        request = request_for(["src/**"])
+        request = self.local_request(["src/**"])
         (self.root / "src" / "already-untracked.txt").write_text("old\n")
         before = self.provider.observe_workspace(request)
         self.assertIn("src/already-untracked.txt", before.file_manifest)
@@ -207,17 +218,19 @@ class TrustedLocalVerifierTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             after.file_manifest["src/forbidden.txt"] = "sha256:" + "0" * 64
 
-    def test_local_origin_without_manifest_reports_current_scope_conservatively(self):
-        request = request_for(["src/**"])
-        incomplete_origin = replace(origin(), provider="trusted-local")
-        after = self.provider.observe_workspace(replace(request, scope_origin=incomplete_origin))
-        self.assertEqual(after.changed_paths, ("src/tracked.txt",))
+    def test_manifestless_local_origin_fails_closed_before_deleted_path_is_hidden(self):
+        request = self.local_request(["src/**"])
+        (self.root / "src" / "tracked.txt").unlink()
+        for incomplete_origin in (replace(origin(), provider="trusted-local"), origin()):
+            with self.subTest(origin=incomplete_origin.provider):
+                with self.assertRaisesRegex(ProviderError, "SCOPE_ORIGIN_MANIFEST_UNAVAILABLE"):
+                    self.provider.observe_workspace(replace(request, scope_origin=incomplete_origin))
 
     def test_fingerprint_is_sorted_globally_by_posix_path(self):
         (self.root / "a").mkdir()
         (self.root / "a" / "x.txt").write_text("a\n")
         (self.root / "z.txt").write_text("z\n")
-        observed = self.provider.observe_workspace(request_for(["**/*"]))
+        observed = self.provider.observe_workspace(self.local_request(["**/*"]))
         expected = sha256()
         for relative in sorted(observed.file_manifest):
             expected.update(relative.encode())
@@ -229,28 +242,30 @@ class TrustedLocalVerifierTests(unittest.TestCase):
         self.assertEqual(tuple(observed.file_manifest), tuple(sorted(observed.file_manifest)))
 
     def test_git_regular_file_and_symlink_are_excluded_from_manifest(self):
-        before = self.provider.observe_workspace(request_for(["**/*"]))
+        before = self.provider.observe_workspace(self.local_request(["**/*"]))
         shutil.rmtree(self.root / ".git")
         (self.root / ".git").write_text("gitdir: elsewhere\n")
-        regular = self.provider.observe_workspace(request_for(["**/*"]))
+        regular = self.provider.observe_workspace(self.local_request(["**/*"]))
         self.assertEqual(before.verification_input_fingerprint,
                          regular.verification_input_fingerprint)
         self.assertNotIn(".git", regular.file_manifest)
         (self.root / ".git").unlink()
-        outside = self.root.parent / ("linked-git-" + self.root.name)
+        outside_temp = TemporaryDirectory()
+        self.addCleanup(outside_temp.cleanup)
+        outside = Path(outside_temp.name) / "linked-git"
         outside.mkdir()
         (self.root / ".git").symlink_to(outside, target_is_directory=True)
-        linked = self.provider.observe_workspace(request_for(["**/*"]))
+        linked = self.provider.observe_workspace(self.local_request(["**/*"]))
         self.assertEqual(before.verification_input_fingerprint,
                          linked.verification_input_fingerprint)
         self.assertNotIn(".git", linked.file_manifest)
 
     def test_runtime_directory_does_not_change_business_revision(self):
-        before = self.provider.observe_workspace(request_for(["**/*"]))
+        before = self.provider.observe_workspace(self.local_request(["**/*"]))
         runtime = self.root / ".unified-dev-flow"
         runtime.mkdir()
         (runtime / "events.jsonl").write_text("runtime\n")
-        after = self.provider.observe_workspace(request_for(["**/*"]))
+        after = self.provider.observe_workspace(self.local_request(["**/*"]))
         self.assertEqual(before.verification_input_fingerprint,
                          after.verification_input_fingerprint)
 
@@ -259,7 +274,7 @@ class TrustedLocalVerifierTests(unittest.TestCase):
         outside.write_text("outside\n")
         (self.root / "src" / "escape").symlink_to(outside)
         with self.assertRaisesRegex(ProviderError, "WORKSPACE_ESCAPE"):
-            self.provider.observe_workspace(request_for())
+            self.provider.observe_workspace(self.local_request())
 
 
 if __name__ == "__main__":

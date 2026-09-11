@@ -217,6 +217,29 @@ class StrictModelTests(unittest.TestCase):
                 with self.assertRaises(ValidationError):
                     WorkspaceRevision.from_dict(invalid)
 
+    def test_workspace_manifest_distinguishes_legacy_absence_from_known_empty(self):
+        legacy = {"schema_version": 1, "provider": "mock", "revision_id": "rev-1",
+                  "verification_input_fingerprint": "sha256:" + "a" * 64,
+                  "changed_paths": [], "observed_at": "2026-09-11T00:00:00Z"}
+        self.assertIsNone(WorkspaceRevision.from_dict(legacy).file_manifest)
+        self.assertEqual(WorkspaceRevision.from_dict(legacy).to_dict(), legacy)
+        known_empty = {**legacy, "file_manifest": {}}
+        self.assertEqual(WorkspaceRevision.from_dict(known_empty).to_dict(), known_empty)
+
+    def test_direct_workspace_manifest_construction_validates_and_freezes_input(self):
+        raw_manifest = {"src/a.py": "sha256:" + "b" * 64}
+        revision = WorkspaceRevision(1, "trusted-local", "rev-1", "sha256:" + "a" * 64,
+                                     (), "2026-09-11T00:00:00Z", raw_manifest)
+        raw_manifest["src/a.py"] = "sha256:" + "c" * 64
+        self.assertEqual(revision.file_manifest["src/a.py"], "sha256:" + "b" * 64)
+        for invalid in ({".git/config": "sha256:" + "b" * 64},
+                        {"src/./a.py": "sha256:" + "b" * 64},
+                        {"src/a.py": "bad"}):
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(ValidationError):
+                    WorkspaceRevision(1, "trusted-local", "rev-1", "sha256:" + "a" * 64,
+                                      (), "2026-09-11T00:00:00Z", invalid)
+
 
 if __name__ == "__main__":
     unittest.main()
