@@ -128,6 +128,60 @@ Same pattern maps 1:1 to Codex/Cursor/Trae/Qoder `Stop` (stdin
 NOT auto-installed — Stop-hook wiring stays a deliberate manual step like
 the write gate.
 
+## Review check (Stop-hook mode, S6 teeth)
+
+`--check-review` reuses the checker for S6 arrival enforcement — S6 无工件≈无门，
+so every S6 must declare itself on disk:
+
+```bash
+python3 entry-gate-check.py --check-review --project-dir <dir> \
+  --transcript <transcript.jsonl>   # or stdin hook JSON with transcript_path
+```
+
+Contracts (both live under `<project>/.omc/`, per-session filenames):
+
+- `.omc/verify-<session>.md` (S5): one `##` heading containing `验证证据`,
+  ≥1 list item (`-`/`*`/`1.`) naming a command and its exit code, ≥80 chars total.
+- `.omc/review-<session>.md` (S6): one `##` heading containing `评审结论`,
+  a verdict token (`MERGE_READY` / `NEEDS_FIXES` / `ESCALATE`), a `reviewer:` line
+  (name the model/human; no-baseline edits may write `self`), a `round: N` line
+  (N ≥ 1, this round's review count), ≥80 chars total.
+
+Firing rule: count transcript toolUse blocks for real source edits
+(`.omc/` artifact writes excluded; unreadable transcripts fall back to the
+raw `Edit|Write` count, conservative). Zero source edits, or an entry gate
+pinning `delivery_target` to `patch` (read-only route, no S6), passes without
+artifacts. Otherwise a missing/malformed artifact exits 2 and blocks the stop.
+Anti-spin mirrors the trail check: at most `--max-blocks` blocks per episode
+(default 3), then loud give-up (`review-giveup` log row) and let the stop through.
+
+Micro form (passes the checker, ~15 seconds):
+
+```md
+## S6 评审结论
+verdict: MERGE_READY
+reviewer: claude (self, no-baseline edit)
+round: 1
+google-code-review 无阻断项；health 豁免（无基线可比，见入口 §3）。
+```
+
+Claude example (`Stop` event, alongside the trail hook):
+
+```json
+{
+  "hooks": {
+    "Stop": [{
+      "hooks": [{ "type": "command",
+                  "command": "python3 ~/.claude/scripts/entry-gate-check.py --check-review",
+                  "timeout": 15000 }]
+    }]
+  }
+}
+```
+
+Same pattern maps 1:1 to Codex/Cursor/Trae/Qoder `Stop`. NOT auto-installed —
+same manual-step rule as the write gate and the trail check.
+
 ## 1. Claude Code (one-time)
 
 `~/.claude/settings.json` — add `PreToolUse` alongside existing hooks

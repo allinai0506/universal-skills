@@ -63,11 +63,15 @@ work or evidence to that owner; they do not take ownership implicitly.
   to S4); `receiving-code-review` (when being reviewed: verify feedback,
   don't blindly obey); **cross-model gate** — reviewer from different lab
   than implementer (env `PSTACK_REVIEW_MODELS` or `~/.config/opencode/skills/pstack-models.mdc`,
-  missing → same-model `interrogate` fallback). Select `interrogate` for
-  adversarial assurance/risk or that fallback, never complexity alone.
-  `ai-slop-cleaner --review` requires actual cleanup/slop/refactor evidence and
-  reviewer-only posture; ordinary S6 uses `health` + `google-code-review`,
-  adding `code-review` for spec-bearing routes.
+   missing → same-model `interrogate` fallback on routes with a baseline;
+   no-baseline routes may use labeled same-model review instead). Select
+   `interrogate` for
+   adversarial assurance/risk or that fallback, never complexity alone.
+   `ai-slop-cleaner --review` requires actual cleanup/slop/refactor evidence and
+   reviewer-only posture; S6 uses `health` + `google-code-review`
+   (no-baseline edits: review only, waiver in Entry §3),
+   adding `code-review` for spec-bearing routes. Every S6 declares itself via
+   `.omc/verify-` + `.omc/review-` artifacts (see enforcement.md Review check).
 - S7: `release` (repo-rule-driven release); `deployment-patterns` /
   `docker-patterns` / `database-migrations` / project deploys
   (e.g. `xiyu-server-deploy`).

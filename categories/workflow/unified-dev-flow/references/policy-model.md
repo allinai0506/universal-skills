@@ -137,8 +137,8 @@ Domain and risk signals are overlays, not mutually exclusive intents.
 
 | Complexity | Planning depth |
 |---|---|
-| micro | The Entry Gate file list is the compressed plan. |
-| small | Use brief implementation steps; no separate heavy specification. |
+| micro | The Entry Gate file list is the compressed plan. No-baseline edits stay review-only per Review Selection. |
+| small | Use brief implementation steps; no separate heavy specification. `health` baseline only on risk. |
 | medium | Require written spec, plan, and tasks through one Spec Adapter. |
 | large | Require complete specification, plan review, task slices, and checkpoints. |
 | intractable | Require a playbook, audit trail, and human escalation points. |
@@ -351,9 +351,16 @@ single proof form is forced onto every intent.
 | ordinary | `health` against the S4 baseline and `google-code-review`. |
 | spec-bearing | Add `code-review` for spec consistency. |
 | adversarial assurance/risk | Add `interrogate` and applicable risk specialists. |
-| independent reviewer unavailable | If a different-model/lab reviewer is unavailable, require `interrogate` as the fallback. |
+| independent reviewer unavailable | If a different-model/lab reviewer is unavailable, require `interrogate` as the fallback on routes with a baseline; no-baseline routes may use labeled same-model review instead. |
 | cleanup evidence | Select `ai-slop-cleaner --review` only with actual cleanup/slop/refactor evidence such as duplication, dead code or needless wrappers; use reviewer-only posture after a cleanup draft. |
 
+Measurement applicability: `health` compares against an S4 baseline. A route
+that cannot produce one — a single-edit typo-class change with nothing
+structural to compare — is exempt from `health` (baseline and compare), never
+from `google-code-review`. Record the exemption in Entry Gate §3 (范围纪律).
+This is not complexity selecting reviewers: the reviewer set is identical for
+every route; only an inapplicable measurement is skipped, and the skip stays
+auditable via the waiver.
 Complexity alone never selects `interrogate`. Generic refactoring without
 simplification/slop evidence does not select `ai-slop-cleaner`. Any S6 reviewer
 reports repairs to S4 without editing reviewed source. Health regression blocks;

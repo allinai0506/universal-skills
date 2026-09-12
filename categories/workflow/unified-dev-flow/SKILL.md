@@ -79,7 +79,8 @@ existing gate with current evidence before further edits.
 2. **最小方案 + 文件范围** → S3: describe the minimum change and list files
    located through R0 evidence; prefix new files `NEW:`. No implementation yet.
 3. **范围纪律** → S6: map files to requested behavior, root-cause dependencies,
-   required tests, or migration/build artifacts; record unrelated findings.
+   required tests, or migration/build artifacts; record unrelated findings and
+   any measurement exemptions (e.g. no-baseline `health` waiver) so waivers stay auditable.
 4. **验证计划** → S5: name the `proof_mode`, its baseline/reproduction or unmet
    acceptance evidence, and the exact commands that will prove the change.
 
@@ -176,13 +177,13 @@ procedures. Alternatives live in [alternatives.md](references/alternatives.md)
 
 | Stage | Delegate to | Exit when |
 |---|---|---|
-| S0 Prepare | `using-git-worktrees` as needed; `health` baseline before S4 | Workspace ready; resume resolved; applicable baseline captured |
+| S0 Prepare | `using-git-worktrees` as needed; `health` baseline before S4 where a comparison baseline can exist (single-edit typo-class changes exempt with §3 waiver) | Workspace ready; resume resolved; applicable baseline captured |
 | S1 Intent | `brainstorming`; PRD: `parse-prd`; terms: `domain-modeling` | Scope confirmed; blocking assumptions resolved |
 | S2 Spec | Selected Spec Adapter and its eligible local/publishing path | Spec and governing principles named; ambiguity resolved |
 | S3 Plan | `writing-plans`; architecture: `architect`; large: `plan-eng-review`; design: `prototype` | Plan at required depth with verification, rejected alternatives, and principles check |
 | S4 Implement | Chosen controller and its delegated workers; bugs/features: `test-driven-development`; DB: `create-migration` | Planned change and intent-appropriate tests implemented |
 | S5 Verify | `verification-before-completion`, `principle-prove-it-works`; E2E: `e2e-testing`; cross-layer: `self-verifying-tests` | Fresh command evidence meets selected proof and assurance requirements |
-| S6 Review | `health` + `google-code-review`; spec-bearing: `code-review`; conditional reviewers per policy Review Selection | MERGE_READY or explicit waiver within authorization |
+| S6 Review | `health` + `google-code-review`; spec-bearing: `code-review`; per policy Review Selection (no-baseline edits exempt from `health`, waiver in §3); every S6 declares via `.omc/review-<session>.md` | MERGE_READY or explicit waiver within authorization |
 | S7 Deliver | `finishing-a-development-branch` / `ship` within target; unattended: `ai-release-engineer`; deployment: `deployment-patterns`, `canary` | Fulfill delivery target |
 | S8 Capture | `knowledge-capture`; `show-me-your-work` where selected by policy Capture Selection | Findings and required decision trail filed |
 
@@ -190,15 +191,24 @@ procedures. Alternatives live in [alternatives.md](references/alternatives.md)
 
 - No S4 without the required planning depth and first proof; micro/small
   compress planning, never verification. Large plan review must pass first.
-- Every route reaching S6 requires `health` and `google-code-review`;
-  spec-bearing routes add `code-review`. Select `interrogate` for adversarial
+- Every route reaching S6 requires `health` and `google-code-review`, except
+  no-baseline edits (single-edit typo-class changes with nothing structural to
+  compare) which require `google-code-review` with the `health` waiver recorded
+  in Entry Gate §3.
+  Spec-bearing routes add `code-review`. Select `interrogate` for adversarial
   assurance/risk or the independent-review fallback, never complexity alone.
   Select `ai-slop-cleaner --review` only for actual cleanup/slop/refactor evidence;
   keep reviewer-only posture. Compare `health` with baseline;
   regression blocks; unavailable → `codehealth-mcp` or explicit waiver.
 - Independent reviewer receives spec/acceptance criteria, current diff, tests,
   and fresh evidence, not merely implementer claims. Use a different model/lab
-  when available; otherwise require `interrogate`. Reviewer judges; S4 edits.
+  when available; otherwise require `interrogate` on routes with a baseline,
+  while no-baseline edits may use same-model review with the provenance labeled
+  explicitly (e.g. `reviewer: claude (self, no-baseline)`). Reviewer judges; S4 edits.
+- S6 arrival is declared on disk, not in prose: `.omc/verify-<session>.md`
+  (S5 evidence) and `.omc/review-<session>.md` (verdict + reviewer + round).
+  No artifact = S6 not reached = completion claim invalid. The Stop hook
+  `--check-review` enforces this; see [enforcement.md](references/enforcement.md).
 - Any source or test change invalidates intersecting verification evidence
   and review verdicts, including changes made during cleanup or review.
   Reverify and re-review affected work before claiming completion.
