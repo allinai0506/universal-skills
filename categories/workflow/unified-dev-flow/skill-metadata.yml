@@ -1,6 +1,6 @@
 name: unified-dev-flow
-version: "2026.09.07-2"
-last_updated: "2026-09-07"
+version: "2026.09.12-1"
+last_updated: "2026-09-12"
 
 platforms:
   - claude-code

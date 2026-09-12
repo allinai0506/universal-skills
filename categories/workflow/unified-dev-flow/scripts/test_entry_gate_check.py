@@ -149,6 +149,7 @@ def main() -> None:
     phase_shim()
     phase3_logging()
     phase_blocklog_flag()
+    phase4_review()
 
     print(f"\n{len(FAILURES)} failure(s)." if FAILURES else "\nAll tests passed.")
     sys.exit(1 if FAILURES else 0)
@@ -487,6 +488,149 @@ def phase3_logging() -> None:
             out = r.stdout
             check("report-counts", r.returncode == 0 and "total: 3" in out
                   and "missing: 2" in out and "scope: 1" in out, f"exit={r.returncode} out={out[:300]}")
+
+
+def phase4_review() -> None:
+    """--check-review: any source edit owes verify + review artifacts."""
+    valid_verify = ("## S5 验证证据\n"
+                    "- pytest tests/x_test.py → exit 0（3 passed）\n"
+                    "- rg -n -F 'Y' path/to/file.md → exit 0，命中 2 行\n")
+    valid_review = ("## S6 评审结论\n"
+                    "verdict: MERGE_READY\n"
+                    "reviewer: claude (self, micro tier)\n"
+                    "round: 1\n"
+                    "google-code-review 无阻断项；health 不适用（micro 豁免，见入口 §3）。\n")
+
+    def write_review_files(proj: str, session: str,
+                           verify: str | None = None,
+                           review: str | None = None) -> None:
+        d = os.path.join(proj, ".omc")
+        os.makedirs(d, exist_ok=True)
+        if verify is not None:
+            with open(os.path.join(d, f"verify-{session}.md"), "w",
+                      encoding="utf-8") as f:
+                f.write(verify)
+        if review is not None:
+            with open(os.path.join(d, f"review-{session}.md"), "w",
+                      encoding="utf-8") as f:
+                f.write(review)
+
+    def tooluse_line(name: str, path: str) -> str:
+        return json.dumps({"message": {"content": [{
+            "type": "toolUse", "name": name,
+            "input": {"file_path": path}}]}}) + "\n"
+
+    with tempfile.TemporaryDirectory() as proj:
+        os.makedirs(os.path.join(proj, "src"))
+        open(os.path.join(proj, "src", "real.py"), "w").write("x = 1\n")
+        logf = os.path.join(proj, "blocks.jsonl")
+        env = {"ENTRY_GATE_BLOCKLOG": logf}
+        src_tp = os.path.join(proj, "t-src.jsonl")
+        with open(src_tp, "w") as f:
+            f.write(tooluse_line("Edit", "src/real.py"))
+
+        # 28. zero source edits -> pass, no artifacts needed
+        empty_tp = os.path.join(proj, "t-empty.jsonl")
+        open(empty_tp, "w").write("")
+        r = run(["--check-review", "--project-dir", proj,
+                 "--session-id", "r-none", "--transcript", empty_tp],
+                extra_env=env)
+        check("review-zero-edits-pass", r.returncode == 0,
+              f"exit={r.returncode} stderr={r.stderr[:200]}")
+
+        # 29. only .omc artifact writes -> pass (not S4 edits)
+        omc_tp = os.path.join(proj, "t-omc.jsonl")
+        with open(omc_tp, "w") as f:
+            f.write(tooluse_line("Write", ".omc/entry-gate-r-omc.md"))
+        r = run(["--check-review", "--project-dir", proj,
+                 "--session-id", "r-omc", "--transcript", omc_tp],
+                extra_env=env)
+        check("review-omc-writes-excluded", r.returncode == 0,
+              f"exit={r.returncode} stderr={r.stderr[:200]}")
+
+        # 30. source edit + missing artifacts -> BLOCK (verify first)
+        r = run(["--check-review", "--project-dir", proj,
+                 "--session-id", "r-missing", "--transcript", src_tp],
+                extra_env=env)
+        rows = [json.loads(x) for x in open(logf) if x.strip()]
+        check("review-missing-blocks",
+              r.returncode == 2 and rows and rows[-1].get("kind") == "verify",
+              f"exit={r.returncode} rows={rows[-1:]}")
+
+        # 31. verify ok + review missing -> BLOCK kind=review
+        write_review_files(proj, "r-half", verify=valid_verify)
+        r = run(["--check-review", "--project-dir", proj,
+                 "--session-id", "r-half", "--transcript", src_tp],
+                extra_env=env)
+        rows = [json.loads(x) for x in open(logf) if x.strip()]
+        check("review-half-blocks",
+              r.returncode == 2 and rows and rows[-1].get("kind") == "review",
+              f"exit={r.returncode} rows={rows[-1:]}")
+
+        # 32. both valid -> PASS
+        write_review_files(proj, "r-good", verify=valid_verify,
+                           review=valid_review)
+        r = run(["--check-review", "--project-dir", proj,
+                 "--session-id", "r-good", "--transcript", src_tp],
+                extra_env=env)
+        check("review-valid-passes", r.returncode == 0,
+              f"exit={r.returncode} stderr={r.stderr[:200]}")
+
+        # 33. review without verdict -> BLOCK
+        write_review_files(proj, "r-noverdict", verify=valid_verify,
+                           review=valid_review.replace("verdict: MERGE_READY\n",
+                                                      "结论：挺好的\n"))
+        r = run(["--check-review", "--project-dir", proj,
+                 "--session-id", "r-noverdict", "--transcript", src_tp],
+                extra_env=env)
+        check("review-no-verdict-blocks", r.returncode == 2,
+              f"exit={r.returncode}")
+
+        # 34. review without round -> BLOCK
+        write_review_files(proj, "r-noround", verify=valid_verify,
+                           review=valid_review.replace("round: 1\n", ""))
+        r = run(["--check-review", "--project-dir", proj,
+                 "--session-id", "r-noround", "--transcript", src_tp],
+                extra_env=env)
+        check("review-no-round-blocks", r.returncode == 2,
+              f"exit={r.returncode}")
+
+        # 35. patch-declared route passes without artifacts
+        patch_gate = ("## 1. 理解和假设\n只看不改；delivery_target：patch。\n\n"
+                      "## 2. 最小方案\n- 不写文件。\n\n"
+                      "## 3. 范围纪律\n只读。\n\n"
+                      "## 4. 验证计划\n无。\n")
+        write_artifact(proj, "r-patch", patch_gate)
+        r = run(["--check-review", "--project-dir", proj,
+                 "--session-id", "r-patch", "--transcript", src_tp],
+                extra_env=env)
+        check("review-patch-exempt", r.returncode == 0,
+              f"exit={r.returncode} stderr={r.stderr[:200]}")
+
+        # 36. unreadable transcript falls back to blocking (conservative)
+        blob_tp = os.path.join(proj, "t-blob.jsonl")
+        with open(blob_tp, "w") as f:
+            f.write('{"name": "Edit"}\n')
+        r = run(["--check-review", "--project-dir", proj,
+                 "--session-id", "r-blob", "--transcript", blob_tp],
+                extra_env=env)
+        check("review-opaque-transcript-blocks", r.returncode == 2,
+              f"exit={r.returncode}")
+
+        # 37. anti-spin: --max-blocks 1 blocks once, then gives up loudly
+        spin_tp = os.path.join(proj, "t-spin.jsonl")
+        with open(spin_tp, "w") as f:
+            f.write(tooluse_line("Write", "src/real.py"))
+        args = ["--check-review", "--project-dir", proj,
+                "--session-id", "r-spin", "--transcript", spin_tp,
+                "--max-blocks", "1"]
+        r1 = run(args, extra_env=env)
+        r2 = run(args, extra_env=env)
+        rows = [json.loads(x) for x in open(logf) if x.strip()]
+        check("review-antispin-giveup",
+              r1.returncode == 2 and r2.returncode == 0
+              and any(x.get("kind") == "review-giveup" for x in rows),
+              f"exits={r1.returncode},{r2.returncode}")
 
 
 if __name__ == "__main__":

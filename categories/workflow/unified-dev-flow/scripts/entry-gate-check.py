@@ -12,6 +12,8 @@ at least one list item under §2 (the file-scope list), and >= MIN_CHARS total.
 
 Usage as a Claude Code PreToolUse hook (matcher Edit|Write):
     python3 entry-gate-check.py   # reads hook JSON from stdin
+Usage as a Stop hook (S6 teeth: every S6 must declare itself):
+    python3 entry-gate-check.py --check-review   # needs .omc/verify-*.md + review-*.md
 Manual / test usage:
     python3 entry-gate-check.py --project-dir <dir> --session-id <id>
 
@@ -37,6 +39,10 @@ SECTIONS = ("理解和假设", "最小方案", "范围纪律", "验证计划")
 MIN_CHARS = 150
 TRAIL_MIN_EDITS = 8  # fewer edits than this needs no decision trail
 TRAIL_MAX_BLOCKS = 3  # then give up loudly instead of spinning forever
+REVIEW_MIN_EDITS = 1  # any source edit means S4 ran, so S5/S6 artifacts are owed
+REVIEW_MIN_CHARS = 80  # review artifacts are declarations, not essays
+REVIEW_MAX_BLOCKS = 3  # same anti-spin ceiling as the trail check
+REVIEW_VERDICTS = ("MERGE_READY", "NEEDS_FIXES", "ESCALATE")
 CODEGRAPH_TIMEOUT = 5  # per-query ceiling; SCOPE_DEADLINE_S caps the total
 SCOPE_DEADLINE_S = 6.0  # scope validation must never stall the hook itself
 DEFAULT_BLOCKLOG = os.path.join(os.path.expanduser("~"), ".claude",
@@ -201,6 +207,19 @@ def scope_marker_path(project_dir: str, session_id: str) -> str:
     return os.path.join(project_dir, ".omc", f".scope-ok-{session_id}")
 
 
+def verify_artifact_path(project_dir: str, session_id: str) -> str:
+    return os.path.join(project_dir, ".omc", f"verify-{session_id}.md")
+
+
+def review_artifact_path(project_dir: str, session_id: str) -> str:
+    return os.path.join(project_dir, ".omc", f"review-{session_id}.md")
+
+
+def review_counter_path(project_dir: str, session_id: str) -> str:
+    safe = re.sub(r"[^A-Za-z0-9_-]", "_", session_id or "default")
+    return os.path.join(project_dir, ".omc", f".review-blocks-{safe}")
+
+
 def extract_scope_paths(content: str) -> list[tuple[bool, str]]:
     """Pull (is_new, path) pairs from §2's file-scope list.
 
@@ -335,9 +354,124 @@ def validate(content: str) -> str | None:
     return None
 
 
+EDIT_TOOL_NAMES = {"Edit", "Write", "write_file", "replace",
+                   "write_to_file", "replace_file_content",
+                   "multi_replace_file_content"}
+
+
+def _tool_use_blocks(obj: object):
+    """Yield (name, input_dict) for every toolUse/tool_use block in obj."""
+    if isinstance(obj, dict):
+        t = obj.get("type") or obj.get("kind")
+        if t in ("toolUse", "tool_use", "function_call"):
+            name = obj.get("name") or ""
+            inp = obj.get("input") or obj.get("arguments") or {}
+            yield name, inp if isinstance(inp, dict) else {}
+        for value in obj.values():
+            yield from _tool_use_blocks(value)
+    elif isinstance(obj, list):
+        for item in obj:
+            yield from _tool_use_blocks(item)
+
+
+def _is_omc_write(name: str, inp: dict) -> bool:
+    """True for writes targeting the session's own .omc/ control files.
+
+    Artifact writes (entry-gate/verify/review) are compliance actions, not
+    S4 implementation edits; counting them would force a review on sessions
+    that never touched source.
+    """
+    if name not in EDIT_TOOL_NAMES:
+        return False
+    for key in TARGET_KEYS:
+        val = inp.get(key)
+        if isinstance(val, str) and ".omc" in val.replace("\\", "/").split("/"):
+            return True
+    cmd = inp.get("command")
+    if isinstance(cmd, str) and ".omc/" in cmd:
+        return True
+    return False
+
+
+def count_source_edits(transcript: str) -> int:
+    """Edits to real source, excluding .omc/ artifact writes.
+
+    Parses transcript JSONL for toolUse blocks; falls back to the raw
+    regex count when no parseable tool call is found (conservative:
+    an unreadable transcript must not silently waive the gate).
+    """
+    parsed_any = False
+    source = 0
+    for line in transcript.splitlines():
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            obj = json.loads(line)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        blocks = list(_tool_use_blocks(obj))
+        if not blocks:
+            continue
+        parsed_any = True
+        for name, inp in blocks:
+            if name in EDIT_TOOL_NAMES and not _is_omc_write(name, inp):
+                source += 1
+    if parsed_any:
+        return source
+    return len(re.findall(EDIT_TOOL_PATTERN, transcript))
+
+
+def entry_gate_declares_patch(project_dir: str, session_id: str) -> bool:
+    """True when the entry gate pins delivery_target to patch.
+
+    A patch route is read-only by policy (no S4, hence no S6); the review
+    check must not fire on it.
+    """
+    try:
+        with open(artifact_path(project_dir, session_id), "r",
+                  encoding="utf-8") as f:
+            content = f.read()
+    except OSError:
+        return False
+    m1 = re.search(r"^##\s*.*理解和假设", content, re.MULTILINE)
+    m2 = re.search(r"^##\s*.*最小方案", content, re.MULTILINE)
+    section1 = content[m1.start(): m2.start() if m2 else len(content)] if m1 else content
+    return re.search(r"delivery_target\s*[：:＝=]\s*patch",
+                     section1, re.IGNORECASE) is not None
+
+
+def validate_verify(content: str) -> str | None:
+    """S5 evidence declaration: heading + command list + minimum substance."""
+    if not re.search(r"^##\s*.*验证证据", content, re.MULTILINE):
+        return "缺少章节：验证证据（## 验证证据）。"
+    if not re.search(r"^\s*(?:[-*]|\d+[.)])\s+\S", content, re.MULTILINE):
+        return "验证证据缺少条目（用 - 或 1. 列出跑过的命令与 exit code）。"
+    if len(content) < REVIEW_MIN_CHARS:
+        return f"验证证据过短（{len(content)} < {REVIEW_MIN_CHARS} 字）。"
+    return None
+
+
+def validate_review(content: str) -> str | None:
+    """S6 arrival declaration: heading + verdict + reviewer + round."""
+    if not re.search(r"^##\s*.*评审结论", content, re.MULTILINE):
+        return "缺少章节：评审结论（## 评审结论）。"
+    if not re.search(r"\b(MERGE_READY|NEEDS_FIXES|ESCALATE)\b", content):
+        return "评审结论缺少 verdict（MERGE_READY / NEEDS_FIXES / ESCALATE）。"
+    if not re.search(r"reviewer\s*[：:]", content, re.IGNORECASE):
+        return "评审结论缺少 reviewer: 行（注明模型/人，micro 可写 self）。"
+    m = re.search(r"round\s*[：:]\s*(\d+)", content, re.IGNORECASE)
+    if not m or int(m.group(1)) < 1:
+        return "评审结论缺少 round: N 行（N ≥ 1，本轮评审计数）。"
+    if len(content) < REVIEW_MIN_CHARS:
+        return f"评审结论过短（{len(content)} < {REVIEW_MIN_CHARS} 字）。"
+    return None
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--check-trail", action="store_true")
+    ap.add_argument("--check-review", action="store_true")
     ap.add_argument("--transcript", default="")
     ap.add_argument("--trail", default="")
     ap.add_argument("--min-edits", type=int, default=TRAIL_MIN_EDITS)
@@ -351,6 +485,9 @@ def main(argv: list[str] | None = None) -> None:
         _block_log_override = early.block_log
     if early.check_trail:
         cmd_check_trail(early)
+        return
+    if early.check_review:
+        cmd_check_review(early)
         return
     project_dir, session_id, target = resolve_context(argv)
     if target and is_artifact_target(project_dir, target):
@@ -510,6 +647,93 @@ def cmd_check_trail(ns: argparse.Namespace) -> None:
              "按 show-me-your-work 写 decisions.tsv 后再结束。",
              kind="trail", project=project_dir)
     sys.exit(0)
+
+
+def read_counter(path: str) -> int:
+    try:
+        with open(path, encoding="utf-8") as f:
+            return max(int(f.read().strip() or 0), 0)
+    except (OSError, ValueError):
+        return 0
+
+
+def bump_counter(path: str) -> int:
+    strikes = read_counter(path) + 1
+    try:
+        parent = os.path.dirname(path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(str(strikes))
+    except OSError:
+        pass
+    return strikes
+
+
+def cmd_check_review(ns: argparse.Namespace) -> None:
+    """Stop-hook mode: any source edit owes S5/S6 declaration artifacts.
+
+    Requires <project>/.omc/verify-<session>.md (S5 evidence) and
+    <project>/.omc/review-<session>.md (S6 verdict) when the transcript
+    shows at least one non-.omc Edit/Write. Zero source edits, or an
+    entry gate pinning delivery_target to patch, passes without artifacts.
+    Same anti-spin ceiling as the trail check: at most --max-blocks
+    blocks per episode, then give up loudly.
+    """
+    project_dir = ns.project_dir or ""
+    raw = ""
+    if not project_dir or not ns.transcript or not ns.session_id:
+        raw = read_stdin_text()
+    session_id = ns.session_id or ""
+    payload = parse_stdin_json(raw)
+    if not session_id:
+        session_id = str(payload.get("session_id") or payload.get("sessionID") or "")
+    if not project_dir:
+        project_dir = str(payload.get("cwd") or payload.get("project_dir") or "")
+        if not project_dir:
+            project_dir = os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd())
+    counter = review_counter_path(project_dir, session_id)
+    transcript = read_transcript_text(ns.transcript, raw)
+    if count_source_edits(transcript) < REVIEW_MIN_EDITS:
+        reset_trail_counter(counter)
+        sys.exit(0)
+    if entry_gate_declares_patch(project_dir, session_id):
+        reset_trail_counter(counter)
+        sys.exit(0)
+    problems: list[tuple[str, str, str]] = []
+    for path, validator, kind in (
+            (verify_artifact_path(project_dir, session_id), validate_verify, "verify"),
+            (review_artifact_path(project_dir, session_id), validate_review, "review")):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                reason = validator(f.read())
+        except OSError:
+            reason = f"缺失：{path}。"
+        if reason is not None:
+            problems.append((kind, path, reason))
+    if not problems:
+        reset_trail_counter(counter)
+        sys.exit(0)
+    strikes = read_counter(counter) + 1
+    if strikes > max(ns.max_blocks, 1):
+        reset_trail_counter(counter)
+        kinds = "、".join(kind for kind, _, _ in problems)
+        msg = (f"S5/S6 宣告仍缺失（{kinds}，已拦 {strikes - 1} 次达上限），"
+               "本次放行不再阻停：请尽快补 .omc/verify-<session>.md 与 "
+               ".omc/review-<session>.md。")
+        sys.stderr.write(msg + "\n")
+        log_block("review-giveup", session_id, project_dir, msg)
+        sys.exit(0)
+    bump_counter(counter)
+    kind, path, reason = problems[0]
+    hint = ("S6 无工件≈无门：有源码写操作就必须宣告 S5/S6。补两个小文件后再结束：\n"
+            f"  {verify_artifact_path(project_dir, session_id)}"
+            "（## 验证证据 + 命令/exit 条目）\n"
+            f"  {review_artifact_path(project_dir, session_id)}"
+            "（## 评审结论 + verdict + reviewer: + round: N）\n"
+            "micro 只需 3–5 行（约 15 秒），不许重述规则，只写实例。")
+    fail(f"{reason}\n当前缺失或不合格：{path}\n{hint}",
+         kind=kind, session=session_id, project=project_dir)
 
 
 if __name__ == "__main__":
