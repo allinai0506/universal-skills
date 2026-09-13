@@ -110,7 +110,7 @@ gemini "使用 universal-skills 中的 security-review"
 | 工具 | Skills 位置 |
 |------|-------------|
 | Claude Code | `~/.claude/skills/` |
-| Codex | `~/.codex/skills/` |
+| Codex / ZCode | 共享入口 `~/.agents/skills/`；`~/.codex/skills/` 仅补充缺失项 |
 | Gemini | 项目 `skills/universal-skills/` symlink |
 
 ---

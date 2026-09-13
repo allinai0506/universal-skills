@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Universal Skills is a unified AI coding skills repository that synchronizes across multiple AI development tools:
 - **Claude Code** (`~/.claude/skills/`)
-- **Codex** (`~/.codex/skills/`)
+- **Codex / ZCode shared user skills** (`~/.agents/skills/`; Codex's `~/.codex/skills/` is fallback-only)
 - **Trae CN Agent** (`~/.trae-cn/skills/`)
 - **Gemini CLI** (via MCP extension and project symlinks)
 
@@ -153,7 +153,7 @@ Meta-tool for creating new skills with:
 
 The `sync.sh` script handles:
 - **Claude Code 项目级:** Symlink 所有技能到每个项目的 `.claude/skills/`（零磁盘开销）
-- **Codex:** Symlink 到 `~/.codex/skills/`
+- **Codex / ZCode:** 以 `~/.agents/skills/` 作为共享技能入口；`~/.codex/skills/` 只补充共享入口缺失项并保留 `.system`，避免同名技能双重注册
 - **Trae CN Agent:** 增量 symlink 到 `~/.trae-cn/skills/`，保护 marketplace/builtin 技能
 - **ZCode/Agent:** 增量 symlink 到 `~/.agents/skills/`，清理旧 `~/.zcode/skills/` universal symlink 避免重复加载
 - **Cursor:** 不再生成 `.cursor/rules/*.mdc` 技能规则
