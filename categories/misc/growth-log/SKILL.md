@@ -1,5 +1,7 @@
 ---
 name: growth-log
+version: "2026.09.14-1"
+synced-at: "2026-09-14T07:43:17"
 description: "Use after a complex task, failure, or when reviewing what was learned. Teaches how to write growth logs that extract reusable patterns — not diary entries."
 metadata:
   version: 1.1.0

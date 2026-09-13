@@ -1,5 +1,7 @@
 ---
 name: "speckit-git-remote"
+version: "2026.09.14-1"
+synced-at: "2026-09-14T07:43:18"
 description: "Detect Git remote URL for GitHub integration"
 compatibility: "Requires spec-kit project structure with .specify/ directory"
 metadata:

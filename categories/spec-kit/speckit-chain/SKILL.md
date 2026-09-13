@@ -1,5 +1,7 @@
 ---
 name: "speckit-chain"
+version: "2026.09.14-1"
+synced-at: "2026-09-14T07:43:17"
 description: >-
   一键串行执行 spec-kit 完整开发工作流：constitution → specify → [clarify] → plan → [validate] → tasks → [analyze] → implement。
   严格按照官方 spec-kit 方法论串联 5 个核心命令 + 3 个官方推荐的质量门禁。

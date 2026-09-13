@@ -1,5 +1,7 @@
 ---
 name: writing-skills
+version: "2026.09.14-1"
+synced-at: "2026-09-14T07:43:18"
 description: Use when creating new skills, editing existing skills, or verifying skills work before deployment
 ---
 
@@ -105,6 +107,8 @@ skills/
 ```markdown
 ---
 name: Skill-Name-With-Hyphens
+version: "2026.09.14-1"
+synced-at: "2026-09-14T07:43:18"
 description: Use when [specific triggering conditions and symptoms]
 ---
 

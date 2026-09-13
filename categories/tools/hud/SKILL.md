@@ -1,5 +1,7 @@
 ---
 name: hud
+version: "2026.09.14-1"
+synced-at: "2026-09-14T07:43:18"
 description: Configure HUD display options (layout, presets, display elements)
 argument-hint: "[setup|minimal|focused|full|status]"
 role: config-writer  # DOCUMENTATION ONLY - This skill writes to ~/.claude/ paths

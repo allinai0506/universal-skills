@@ -1,5 +1,7 @@
 ---
 name: knowledge-capture
+version: "2026.09.14-1"
+synced-at: "2026-09-14T07:43:18"
 description: >
   将 session 中的开发/改 bug/架构/需求确认结果按类型沉淀到 docs/。
   写 docs/ 不写 .wiki/，严格遵循现有格式，每条知识有明确归属。

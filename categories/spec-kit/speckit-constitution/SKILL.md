@@ -1,5 +1,7 @@
 ---
 name: "speckit-constitution"
+version: "2026.09.14-1"
+synced-at: "2026-09-14T07:43:17"
 description: "Create or update the project constitution from interactive or provided principle inputs."
 argument-hint: "Principles or values for the project constitution"
 compatibility: "Requires spec-kit project structure with .specify/ directory"

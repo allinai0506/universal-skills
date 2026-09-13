@@ -1,5 +1,7 @@
 ---
 name: "speckit-taskstoissues"
+version: "2026.09.14-1"
+synced-at: "2026-09-14T07:43:18"
 description: "Convert existing tasks into actionable, dependency-ordered GitHub issues for the feature based on available design artifacts."
 argument-hint: "Optional filter or label for GitHub issues"
 compatibility: "Requires spec-kit project structure with .specify/ directory"

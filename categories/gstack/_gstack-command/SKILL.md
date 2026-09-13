@@ -1,5 +1,7 @@
 ---
 name: _gstack-command
+version: "2026.09.14-1"
+synced-at: "2026-09-14T07:43:17"
 preamble-tier: 1
 version: 1.2.0
 description: Router for the gstack skill suite. (gstack)

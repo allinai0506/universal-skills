@@ -1,5 +1,7 @@
 ---
 name: wiki
+version: "2026.09.14-1"
+synced-at: "2026-09-14T07:43:18"
 description: LLM Wiki — persistent markdown knowledge base that compounds across sessions (Karpathy model)
 triggers: ["wiki", "wiki this", "wiki add", "wiki lint", "wiki query"]
 ---

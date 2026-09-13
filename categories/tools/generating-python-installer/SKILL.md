@@ -1,5 +1,7 @@
 ---
 name: generating-python-installer
+version: "2026.09.14-1"
+synced-at: "2026-09-14T07:43:18"
 description: "Commercial-grade Python installer expert for Windows: Nuitka extreme compilation, dist slimming, DLL footprint analysis, and Inno Setup packaging to ship the smallest, fastest installers. Use when a Python app must ship as a minimal, fast-starting Windows installer; not for basic script-to-exe conversion. 中文触发：Nuitka 极限优化、Python 商业打包、极限编译 Python、dist 瘦身、DLL 分析、最小安装包、最快启动、商业级打包风格"
 ---
 
@@ -542,38 +544,54 @@ def analyze_dlls(dist_path: str):
         size_mb = size / 1024 / 1024
         relative_path = dll.relative_to(dist_dir)
         location = str(relative_path.parent) if relative_path.parent != Path('.') else "根目录"
-        print(f"{size_mb:10.2f}  {dll.name:<30}  {location}")
+        print(f"{size_mb:10.2f}  {dll.name:<30}
+version: "2026.09.14-1"
+synced-at: "2026-09-14T07:43:18"  {location}")
 
     if len(dll_data) > 20:
         remaining_size = sum(size for _, size in dll_data[20:]) / 1024 / 1024
         print(f"... 还有 {len(dll_data) - 20} 个 DLL，共 {remaining_size:.2f} MB")
 
 
-def get_optimization_suggestion(dll_name: str) -> list:
+def get_optimization_suggestion(dll_name: str)
+version: "2026.09.14-1"
+synced-at: "2026-09-14T07:43:18" -> list:
     """根据 DLL 名称给出优化建议"""
     suggestions = []
 
     if "openblas" in dll_name or "mkl" in dll_name:
-        suggestions.append("数学运算库，参考项目的 libopenblas 有 26.85 MB")
+        suggestions.append("数学运算库，参考项目的
+version: "2026.09.14-1"
+synced-at: "2026-09-14T07:43:18" libopenblas 有 26.85 MB")
         suggestions.append("如不需要高性能计算可考虑轻量版")
 
     elif "opencv" in dll_name or "ffmpeg" in dll_name:
-        suggestions.append("OpenCV 相关，参考项目的 opencv_videoio_ffmpeg 有 18.48 MB")
+        suggestions.append("OpenCV
+version: "2026.09.14-1"
+synced-at: "2026-09-14T07:43:18" 相关，参考项目的 opencv_videoio_ffmpeg 有 18.48 MB")
         suggestions.append("考虑用 opencv-python-headless")
 
     elif "qt5" in dll_name or "qt6" in dll_name or "pyside" in dll_name:
-        suggestions.append("Qt 库，参考项目的 Qt5Core 有 5.13 MB")
+        suggestions.append("Qt
+version: "2026.09.14-1"
+synced-at: "2026-09-14T07:43:18" 库，参考项目的 Qt5Core 有 5.13 MB")
         suggestions.append("可排除不需要的模块（WebEngine, 3D, Charts）")
 
     elif "opengl" in dll_name and "sw" in dll_name:
-        suggestions.append("OpenGL 软件渲染器，参考项目保留了 15.25 MB")
+        suggestions.append("OpenGL
+version: "2026.09.14-1"
+synced-at: "2026-09-14T07:43:18" 软件渲染器，参考项目保留了 15.25 MB")
         suggestions.append("通常可以删除（使用硬件渲染）")
 
     elif "d3dcompiler" in dll_name:
-        suggestions.append("DirectX 编译器，参考项目有 3.53 MB")
+        suggestions.append("DirectX
+version: "2026.09.14-1"
+synced-at: "2026-09-14T07:43:18" 编译器，参考项目有 3.53 MB")
 
     elif "mfc140" in dll_name:
-        suggestions.append("MFC 库，参考项目有 4.89 MB")
+        suggestions.append("MFC
+version: "2026.09.14-1"
+synced-at: "2026-09-14T07:43:18" 库，参考项目有 4.89 MB")
 
     return suggestions
 
@@ -659,7 +677,9 @@ nuitka --static-libpython=yes ...
 Source: "{#MySourceDir}\..\vc_redist.x86.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 
 [Run]
-Filename: "{tmp}\vc_redist.x86.exe"; Parameters: "/quiet /norestart"; StatusMsg: "正在安装运行库..."; Flags: waituntilterminated
+Filename: "{tmp}\vc_redist.x86.exe";
+version: "2026.09.14-1"
+synced-at: "2026-09-14T07:43:18" Parameters: "/quiet /norestart"; StatusMsg: "正在安装运行库..."; Flags: waituntilterminated
 ```
 
 > 下载地址：[Microsoft Visual C++ Redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist)
@@ -734,15 +754,23 @@ Source: "{#MySourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdir
 Type: filesandordirs; Name: "{app}\*"
 
 [Icons]
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}";
+version: "2026.09.14-1"
+synced-at: "2026-09-14T07:43:18" Tasks: desktopicon
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+version: "2026.09.14-1"
+synced-at: "2026-09-14T07:43:18"
 Name: "{group}\卸载 {#MyAppName}"; Filename: "{uninstallexe}"
+version: "2026.09.14-1"
+synced-at: "2026-09-14T07:43:18"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}";
+version: "2026.09.14-1"
+synced-at: "2026-09-14T07:43:18" Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
 ```
 
 ---

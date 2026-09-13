@@ -1,5 +1,7 @@
 ---
 name: ultrawork
+version: "2026.09.14-1"
+synced-at: "2026-09-14T07:43:18"
 description: Parallel execution engine for high-throughput task completion
 argument-hint: "<task description with parallel work items>"
 level: 4

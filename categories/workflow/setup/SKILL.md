@@ -1,5 +1,7 @@
 ---
 name: setup
+version: "2026.09.14-1"
+synced-at: "2026-09-14T07:43:18"
 description: Use first for install/update routing — sends setup, doctor, or MCP requests to the correct OMC setup flow
 level: 2
 ---

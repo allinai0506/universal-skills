@@ -1,7 +1,7 @@
 ---
 name: six-step-finish
-version: "2026.09.13-2"
-synced-at: "2026-09-13T09:17:40"
+version: "2026.09.14-1"
+synced-at: "2026-09-14T07:43:18"
 description: Use when implementation is complete and a development branch needs to be finished — knowledge capture, wiki checkpoint, merge confirmation, anchor sync, branch validation, hygiene cleanup. Merge confirmation is forge-optional (Gitee / GitHub / GitLab / local-only) and the anchor branch is parameterized, so it works in any project. A project-specific finish script (e.g. xiyu scripts/agent-finish-task.sh) takes precedence when present.
 ---
 

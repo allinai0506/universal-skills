@@ -1,5 +1,7 @@
 ---
 name: "speckit-analyze"
+version: "2026.09.14-1"
+synced-at: "2026-09-14T07:43:17"
 description: "Perform a non-destructive cross-artifact consistency and quality analysis across spec.md, plan.md, and tasks.md after task generation."
 compatibility: "Requires spec-kit project structure with .specify/ directory"
 metadata:

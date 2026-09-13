@@ -1,5 +1,7 @@
 ---
 name: "speckit-git-commit"
+version: "2026.09.14-1"
+synced-at: "2026-09-14T07:43:17"
 description: "Auto-commit changes after a Spec Kit command completes"
 compatibility: "Requires spec-kit project structure with .specify/ directory"
 metadata:

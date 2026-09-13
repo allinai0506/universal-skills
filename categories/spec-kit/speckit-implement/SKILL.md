@@ -1,5 +1,7 @@
 ---
 name: "speckit-implement"
+version: "2026.09.14-1"
+synced-at: "2026-09-14T07:43:18"
 description: "Execute the implementation plan by processing and executing all tasks defined in tasks.md"
 argument-hint: "Optional implementation guidance or task filter"
 compatibility: "Requires spec-kit project structure with .specify/ directory"

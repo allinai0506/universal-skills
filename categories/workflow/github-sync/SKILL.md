@@ -1,5 +1,7 @@
 ---
 name: github-sync
+version: "2026.09.14-1"
+synced-at: "2026-09-14T07:43:18"
 description: GitHub 与 Gitee 双向代码同步技能（西域数智化投标管理平台）。用于 AI Coding 工具（Cursor/Codex/Claude 等）在 GitHub 远端改代码后同步回本地 Gitee 主仓库，或反向推送本地代码到 GitHub 供 AI 工具使用。触发场景：用户提到"同步 GitHub"、"拉取 AI 改动"、"GitHub 代码合回 Gitee"、"推 GitHub 镜像"、"AI Cursor 改的代码怎么拉回来"、"github-sync"、"同步远端 AI 改动"。
 ---
 

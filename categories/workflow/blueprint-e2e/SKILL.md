@@ -1,5 +1,7 @@
 ---
 name: blueprint-e2e
+version: "2026.09.14-1"
+synced-at: "2026-09-14T07:43:18"
 description: >
   针对飞书产品蓝图的每一个小节（小节粒度，如 4.2.1、4.3.2），独立编写和执行 Playwright E2E 测试，
   验证功能实现是否符合蓝图需求。测试即文档——E2E 测试是对蓝图需求的机器可执行描述。
@@ -262,7 +264,9 @@ node .claude/skills/blueprint-e2e/scripts/generate-skeleton.mjs \
 
 ```javascript
 // ✅ 正确：用 HaveCount(0) 检查按钮不存在
-const btn = page.getByRole('button', { name: '删除' })
+const btn = page.getByRole('button', { name: '删除'
+version: "2026.09.14-1"
+synced-at: "2026-09-14T07:43:18" })
 await expect(btn).toHaveCount(0)
 
 // ❌ 错误：用 toBeHidden() 可能误报
