@@ -223,7 +223,6 @@ workflow,speckit-chain,串联执行多个 Spec Kit 命令
 workflow,standard-workflow,四阶段标准作业流程规划开发质检维护
 workflow,subagent-driven-development,用子代理执行相互独立的实现计划
 workflow,using-git-worktrees,用 git worktree 创建隔离的开发工作区
-workflow,using-superpowers,开启会话时先调用技能再回应的流程
 workflow,verification-before-completion,声明完成前先运行验证命令并确认结果
 workflow,writing-plans,动代码前为多步任务编写实现计划
 workflow,writing-skills,创建、编辑并在部署前验证技能

@@ -22,7 +22,6 @@ SKILLS=(
   "systematic-debugging"
   "test-driven-development"
   "using-git-worktrees"
-  "using-superpowers"
   "verification-before-completion"
   "writing-plans"
 )

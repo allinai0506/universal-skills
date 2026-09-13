@@ -23,7 +23,7 @@ for arg in "$@"; do
 done
 
 REPO_DIR="/tmp/spec-kit"
-SKILLS_DIR="$(cd "$(dirname "$0")/.." && pwd)/categories/imported"
+SKILLS_DIR="$(cd "$(dirname "$0")/.." && pwd)/categories/spec-kit"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # ----- 1. 获取官方最新代码 -----

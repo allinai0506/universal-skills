@@ -51,6 +51,7 @@ CATEGORY_DESC = {
     "pstack": "poteto 工程方法论",
     "refactoring": "重构实践",
     "security-review": "安全审查",
+    "spec-kit": "Spec Kit 需求规范与工单套件",
     "testing": "测试",
     "tools": "工具集成",
     "ui-ux": "前端设计",
@@ -67,6 +68,7 @@ PUBLIC_PACKAGES = {
     "engineering": "mattpocock / skills",
     "pstack": "poteto 工程方法论",
     "gstack": "gstack 发行版",
+    "spec-kit": "Spec Kit",
     "ui-ux": "前端设计",
 }
 # 来源分组的小节标题（用于公开技能包；自建技能直接按分类列）
@@ -75,6 +77,7 @@ PACKAGE_NOTE = {
     "mattpocock / skills": "需求→规格→工单→实现→验证的完整工程闭环",
     "poteto 工程方法论": "poteto-mode 工作流 + 21 条工程原则",
     "gstack 发行版": "Everything Claude Code 全家桶定制技能",
+    "Spec Kit": "需求→架构规范→任务清单的标准化开发套件",
     "前端设计": "前端界面设计技能",
 }
 

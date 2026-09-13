@@ -1,7 +1,7 @@
 ---
 name: executing-plans
-version: "2026.09.13-2"
-synced-at: "2026-09-13T09:08:30"
+version: "2026.09.13-3"
+synced-at: "2026-09-13T09:17:39"
 description: Use when you have a written implementation plan to execute in a separate session with review checkpoints
 ---
 
@@ -13,7 +13,7 @@ Load plan, review critically, execute all tasks, report when complete.
 
 **Announce at start:** "I'm using the executing-plans skill to implement this plan."
 
-**Note:** Tell your human partner that Superpowers works much better with access to subagents (Claude Code, Codex CLI, Codex App, Copilot CLI, and Gemini CLI all qualify; see the per-platform tool refs in `../using-superpowers/references/`). If subagents are available, use superpowers:subagent-driven-development instead of this skill.
+**Note:** Tell your human partner that Superpowers works much better with access to subagents (Claude Code, Codex CLI, Codex App, Copilot CLI, and Gemini CLI all qualify). If subagents are available, use superpowers:subagent-driven-development instead of this skill.
 
 ## The Process
 

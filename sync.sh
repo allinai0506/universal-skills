@@ -35,6 +35,7 @@ STALE_ORPHAN_DENYLIST=(
     "gstack-connect-chrome"
     "gstack-gstack-upgrade"
     "connect-chrome"
+    "using-superpowers"
 )
 
 is_stale_orphan() {
@@ -194,6 +195,7 @@ prune_codex_shared_duplicates() {
 
     [ "$removed" -gt 0 ] && log "Codex 共享入口重复 symlink 已清理 ($removed 个)"
     [ "$moved" -gt 0 ] && log "Codex 共享入口重复实体副本已移入备份 ($moved 个): ${backup_root}"
+    return 0
 }
 
 # 增量复制单个技能（增量校验重试核心）
@@ -674,8 +676,10 @@ PYEOF
 sync_claude_global() {
     local target="$HOME/.claude/skills"
 
-    # 先扫描孤立技能，import 到 categories/ 再继续
-    import_orphans "$target" "Claude Code"
+    # 仅在 --discover 时扫描孤立技能
+    if [ "$DO_DISCOVER" = true ]; then
+        import_orphans "$target" "Claude Code"
+    fi
 
     if [ -d "$target" ] && [ ! -L "$target" ]; then
         backup "$target"
@@ -786,34 +790,31 @@ sync_claude_projects() {
                 log "$log_head"
             fi
 
-            # 仅 .claude: 发现并 import 项目独有的技能（不在 categories/ 中的）
-            if [ "$dir_name" = ".claude" ]; then
+            # 仅在 --discover 时发现并 import 项目独有的技能（不在 categories/ 中的）
+            if [ "$DO_DISCOVER" = true ] && [ "$dir_name" = ".claude" ]; then
                 import_orphans "$skills_dir" "$project_name" "--scan-subdirs"
             fi
 
-            # 第1步：清理旧 symlink 和旧拷贝（symlink -> 实体文件迁移）
-            # 同时清理「以前是全局、现在变为 project-only」技能的遗留 symlink/copy
-            for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
-                if is_syncable_skill_dir "$skill_dir"; then
-                    local skill_name="$(basename "$skill_dir")"
-                    local target="$skills_dir/$skill_name"
-                    # 如果技能是 project-only 且当前项目不匹配，清理掉遗留 symlink/copy
-                    if is_project_only_skill "$skill_name"; then
-                        if ! is_skill_allowed_for_project "$skill_name" "$project_dir"; then
-                            if [ -L "$target" ]; then
-                                rm -f "$target"
-                            elif [ -d "$target" ]; then
-                                rm -rf "$target"
-                            fi
-                            continue
-                        fi
+            # 第1步：清理目标目录下已不在 categories/ 中的孤立技能与旧副本
+            for target_skill in "$skills_dir"/*; do
+                [ -e "$target_skill" ] || [ -L "$target_skill" ] || continue
+                local sname="$(basename "$target_skill")"
+                [ "$sname" = ".system" ] && continue
+                local in_repo=false
+                for cat_dir in "$UNIVERSAL_SKILLS/categories"/*; do
+                    if [ -d "$cat_dir/$sname" ]; then
+                        in_repo=true
+                        break
                     fi
-                    # 清除旧 symlink 和旧拷贝
-                    if [ -L "$target" ]; then
-                        rm -f "$target"
-                    elif [ -d "$target" ] && [ ! -L "$target" ]; then
-                        rm -rf "$target"
-                    fi
+                done
+                if [ "$in_repo" = false ]; then
+                    rm -rf "$target_skill"
+                elif is_project_only_skill "$sname" && ! is_skill_allowed_for_project "$sname" "$project_dir"; then
+                    rm -rf "$target_skill"
+                elif [ -L "$target_skill" ]; then
+                    rm -f "$target_skill"
+                elif [ -d "$target_skill" ]; then
+                    rm -rf "$target_skill"
                 fi
             done
 
@@ -939,6 +940,23 @@ sync_cursor() {
     local global_target="$HOME/.cursor/skills"
     mkdir -p "$global_target"
     local g_count=0
+    # 清理全局 ~/.cursor/skills 中的死链接与已删除技能
+    for entry in "$global_target"/*; do
+        [ -e "$entry" ] || [ -L "$entry" ] || continue
+        local sname="$(basename "$entry")"
+        [ "$sname" = ".system" ] && continue
+        local in_repo=false
+        for cat_dir in "$UNIVERSAL_SKILLS/categories"/*; do
+            if [ -d "$cat_dir/$sname" ]; then
+                in_repo=true
+                break
+            fi
+        done
+        if [ "$in_repo" = false ] || [ ! -e "$entry" ]; then
+            rm -rf "$entry"
+        fi
+    done
+
     for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
         if is_syncable_skill_dir "$skill_dir"; then
             local skill_name="$(basename "$skill_dir")"
@@ -977,25 +995,24 @@ sync_cursor() {
         # 清理旧 .mdc 遗留（以前 sync_cursor_projects 写的）
         rm -f "$project_dir/.cursor/rules/"*.mdc 2>/dev/null || true
 
-        # 清理 project-only 不匹配遗留
-        for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
-            if is_syncable_skill_dir "$skill_dir"; then
-                local skill_name="$(basename "$skill_dir")"
-                local target="$skills_dir/$skill_name"
-                if is_project_only_skill "$skill_name"; then
-                    if ! is_skill_allowed_for_project "$skill_name" "$project_dir"; then
-                        if [ -L "$target" ]; then
-                            rm -f "$target"
-                        elif [ -d "$target" ]; then
-                            rm -rf "$target"
-                        fi
-                        continue
-                    fi
+        # 清理已不在 categories/ 中的孤立技能与旧拷贝
+        for target_skill in "$skills_dir"/*; do
+            [ -e "$target_skill" ] || [ -L "$target_skill" ] || continue
+            local sname="$(basename "$target_skill")"
+            [ "$sname" = ".system" ] && continue
+            local in_repo=false
+            for cat_dir in "$UNIVERSAL_SKILLS/categories"/*; do
+                if [ -d "$cat_dir/$sname" ]; then
+                    in_repo=true
+                    break
                 fi
-                # 只删除非 symlink 的旧拷贝
-                if [ -d "$target" ] && [ ! -L "$target" ]; then
-                    rm -rf "$target"
-                fi
+            done
+            if [ "$in_repo" = false ]; then
+                rm -rf "$target_skill"
+            elif is_project_only_skill "$sname" && ! is_skill_allowed_for_project "$sname" "$project_dir"; then
+                rm -rf "$target_skill"
+            elif [ -d "$target_skill" ] && [ ! -L "$target_skill" ]; then
+                rm -rf "$target_skill"
             fi
         done
 
@@ -1039,8 +1056,10 @@ sync_codex() {
         return
     fi
 
-    # 先扫描孤立技能，import 到 categories/ 再继续
-    import_orphans "$target" "Codex"
+    # 仅在 --discover 时扫描孤立技能
+    if [ "$DO_DISCOVER" = true ]; then
+        import_orphans "$target" "Codex"
+    fi
 
     if [ -d "$target" ] && [ ! -L "$target" ]; then
         backup "$target"
@@ -1123,7 +1142,19 @@ sync_zcode() {
     mkdir -p "$target"
     local duplicate_removed
     duplicate_removed=$(cleanup_duplicate_skill_links "$target")
-    [ "$duplicate_removed" -gt 0 ] && log "  清理 ZCode 重复技能 symlink: $duplicate_removed 个"
+    # 清理指向 universal-skills 但源已不存在的死链接
+    local dead_removed=0
+    for entry in "$target"/*; do
+        [ -e "$entry" ] || [ -L "$entry" ] || continue
+        if [ -L "$entry" ]; then
+            local dest="$(readlink "$entry" 2>/dev/null || true)"
+            if [[ "$dest" == "$UNIVERSAL_SKILLS/categories/"* ]] && [ ! -e "$dest" ]; then
+                rm -f "$entry"
+                dead_removed=$((dead_removed + 1))
+            fi
+        fi
+    done
+    [ "$dead_removed" -gt 0 ] && log "  清理 ZCode $dead_removed 个死 symlink（源已不存在）"
 
     # 注意：不要对 ~/.agents/skills/ 调用 import_orphans。
     # 该目录由 ZCode 管理，含大量内置/well-known 技能（lark-*, gstack, autoplan 等），
@@ -1806,7 +1837,7 @@ sync_antigravity_skills() {
 
     # 清理旧的 universal-skills symlink（指向本仓库 categories/ 的）
     for entry in "$target_root"/*; do
-        [ -e "$entry" ] || continue
+        [ -e "$entry" ] || [ -L "$entry" ] || continue
         if [ -L "$entry" ]; then
             local dest
             dest=$(readlink "$entry")
