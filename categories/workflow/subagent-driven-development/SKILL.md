@@ -1,5 +1,7 @@
 ---
 name: subagent-driven-development
+version: "2026.09.13-1"
+synced-at: "2026-09-13T08:33:02"
 description: Use when executing implementation plans with independent tasks in the current session
 ---
 

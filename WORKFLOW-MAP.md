@@ -142,7 +142,7 @@ Spec Kit 的可裁剪序列由 policy-model 定义：ensure/read-only constituti
 
 | 角色 | 技能 | 说明 |
 |---|---|---|
-| **canonical** | 项目收尾脚本（如 xiyu `agent-finish-task.sh`）/ `ship` | 按目标选择所需交付步骤：patch / working_tree / commit / pr / merge / deploy |
+| **canonical** | 项目收尾脚本（如 xiyu `agent-finish-task.sh`）/ `six-step-finish` / `ship` | 按目标选择所需交付步骤：patch / working_tree / commit / pr / merge / deploy |
 | 发布工程 | `ai-release-engineer` / `release` | AI 代码合并前的验证门禁 / 仓库规则驱动发布 |
 | 部署专项 | `deployment/*`（docker/migrations/deployment-patterns）、项目专属如 `xiyu-server-deploy` | 按项目选用 |
 | 上线后 | `canary` | 金丝雀监控与回滚决策 |

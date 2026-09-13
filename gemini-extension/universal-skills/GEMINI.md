@@ -178,6 +178,7 @@ _自动发现的第三方技能_
 | `compose-multiplatform-patterns` | Compose Multiplatform and Jetpack Compose patterns for KMP projects — state management, navigation, theming, performance, and platform-specific UI. Use when building Compose or Jetpack Compose UI, state, navigation, or theming in a KMP project. |
 | `config-gc` | Garbage collection for your Claude Code configuration. Periodically scans ~/.claude (skills, memory, hooks, permissions, MCP servers, caches) for redundant, stale, orphaned, or low-value items, then walks the user through a confirm-each-deletion cleanup. Use when the user says "clean up my config", "config GC", "too many skills", "audit my setup", "my .claude is bloated", or asks for a periodic config review. |
 | `configure-notifications` | 用自然语言配置 Telegram、Discord 与 Slack 通知 |
+| `connect-chrome` | Launch GStack Browser — AI-controlled Chromium with the sidebar extension baked in. |
 | `context-budget` | Audits Claude Code context window consumption across agents, skills, MCP servers, and rules. Identifies bloat, redundant components, and produces prioritized token-savings recommendations. Use when the context window is filling up too fast and the agents, skills, MCP servers, or rules consuming it need to be identified. |
 | `continuous-learning` | [DEPRECATED - use continuous-learning-v2] Legacy v1 stop-hook skill extractor. v2 is a strict superset with instinct-based, project-scoped, hook-reliable learning. Do not invoke v1: when continuous learning, session learning, or pattern extraction is requested, route to continuous-learning-v2 instead. |
 | `contract-first` | Use when multiple consumers and providers must evolve an API or event schema without field drift, integration surprises, or one side silently redefining the interface. |
@@ -216,6 +217,61 @@ _自动发现的第三方技能_
 | `golang-patterns` | Idiomatic Go patterns, best practices, and conventions for building robust, efficient, and maintainable Go applications. Use when writing or reviewing Go code and idiomatic structure or conventions are in question. |
 | `golang-testing` | Go testing patterns including table-driven tests, subtests, benchmarks, fuzzing, and test coverage. Follows TDD methodology with idiomatic Go practices. Use when writing Go tests — table-driven cases, subtests, benchmarks, fuzzing, or coverage. |
 | `growth-log` | Use after a complex task, failure, or when reviewing what was learned. Teaches how to write growth logs that extract reusable patterns — not diary entries. |
+| `gstack` | Router for the gstack skill suite. (gstack) |
+| `gstack-autoplan` | Auto-review pipeline — reads the full CEO, design, eng, and DX review skills from disk and runs them sequentially with auto-decisions using 6 decision principles. (gstack) |
+| `gstack-benchmark` | Performance regression detection using the browse daemon. (gstack) |
+| `gstack-benchmark-models` | Cross-model benchmark for gstack skills. (gstack) |
+| `gstack-browse` | Fast headless browser for QA testing and site dogfooding. (gstack) |
+| `gstack-canary` | Post-deploy canary monitoring. (gstack) |
+| `gstack-careful` | Safety guardrails for destructive commands. (gstack) |
+| `gstack-codex` | OpenAI Codex CLI wrapper — three modes. (gstack) |
+| `gstack-connect-chrome` | Launch GStack Browser — AI-controlled Chromium with the sidebar extension baked in. |
+| `gstack-context-restore` | Restore working context saved earlier by /context-save. (gstack) |
+| `gstack-context-save` | Save working context. (gstack) |
+| `gstack-cso` | Chief Security Officer mode. (gstack) |
+| `gstack-design-consultation` | Design consultation: understands your product, researches the landscape, proposes a complete design system (aesthetic, typography, color, layout, spacing, motion), and generates font+color preview... (gstack) |
+| `gstack-design-html` | Design finalization: generates production-quality Pretext-native HTML/CSS. (gstack) |
+| `gstack-design-review` | Designer's eye QA: finds visual inconsistency, spacing issues, hierarchy problems, AI slop patterns, and slow interactions — then fixes them. (gstack) |
+| `gstack-design-shotgun` | Design shotgun: generate multiple AI design variants, open a comparison board, collect structured feedback, and iterate. (gstack) |
+| `gstack-devex-review` | Live developer experience audit. (gstack) |
+| `gstack-diagram` | Turn an English description (or mermaid source) into a diagram triplet: the source, an editable .excalidraw file you can open (gstack) |
+| `gstack-document-generate` | Generate missing documentation from scratch for a feature, module, or entire project. (gstack) |
+| `gstack-document-release` | Post-ship documentation update. (gstack) |
+| `gstack-freeze` | Restrict file edits to a specific directory for the session. (gstack) |
+| `gstack-gstack-upgrade` | Upgrade gstack to the latest version. |
+| `gstack-guard` | Full safety mode: destructive command warnings + directory-scoped edits. (gstack) |
+| `gstack-health` | Code quality dashboard. (gstack) |
+| `gstack-investigate` | Systematic debugging with root cause investigation. (gstack) |
+| `gstack-ios-clean` | Remove the DebugBridge SPM package and all #if DEBUG wiring from an iOS app. (gstack) |
+| `gstack-ios-design-review` | Visual design audit for iOS apps on real hardware. (gstack) |
+| `gstack-ios-fix` | Autonomous iOS bug fixer. (gstack) |
+| `gstack-ios-qa` | Live-device iOS QA for SwiftUI apps. (gstack) |
+| `gstack-ios-sync` | Regenerate the iOS debug bridge against the latest upstream gstack templates. (gstack) |
+| `gstack-land-and-deploy` | Land and deploy workflow. (gstack) |
+| `gstack-landing-report` | Read-only queue dashboard for workspace-aware ship. (gstack) |
+| `gstack-learn` | Manage project learnings. |
+| `gstack-make-pdf` | Turn any markdown file into a publication-quality PDF. (gstack) |
+| `gstack-office-hours` | YC Office Hours — two modes. (gstack) |
+| `gstack-open-gstack-browser` | Launch GStack Browser — AI-controlled Chromium with the sidebar extension baked in. |
+| `gstack-pair-agent` | Pair a remote AI agent with your browser. (gstack) |
+| `gstack-plan-ceo-review` | CEO/founder-mode plan review. (gstack) |
+| `gstack-plan-design-review` | Designer's eye plan review — interactive, like CEO and Eng review. (gstack) |
+| `gstack-plan-devex-review` | Interactive developer experience plan review. (gstack) |
+| `gstack-plan-eng-review` | Eng manager-mode plan review. (gstack) |
+| `gstack-plan-tune` | Self-tuning question sensitivity + developer psychographic for gstack (v1: observational). (gstack) |
+| `gstack-qa` | Systematically QA test a web application and fix bugs found. (gstack) |
+| `gstack-qa-only` | Report-only QA testing. (gstack) |
+| `gstack-retro` | Weekly engineering retrospective. (gstack) |
+| `gstack-review` | Pre-landing PR review. (gstack) |
+| `gstack-scrape` | Pull data from a web page. (gstack) |
+| `gstack-setup-browser-cookies` | Import cookies from your real Chromium browser into the headless browse session. (gstack) |
+| `gstack-setup-deploy` | Configure deployment settings for /land-and-deploy. |
+| `gstack-setup-gbrain` | Set up gbrain for this coding agent: install the CLI, initialize a local PGLite or Supabase brain, register MCP, capture per-remote trust policy. (gstack) |
+| `gstack-ship` | Ship workflow: detect + merge base branch, run tests, review diff, bump VERSION, update CHANGELOG, commit, push, create PR. (gstack) |
+| `gstack-skillify` | Codify the most recent successful /scrape flow into a permanent browser-skill on disk. (gstack) |
+| `gstack-spec` | Turn vague intent into a precise, executable spec in five phases. (gstack) |
+| `gstack-sync-gbrain` | Keep gbrain current with this repo's code and refresh agent search guidance in CLAUDE.md. Wraps the gstack-gbrain-sync orchestrator with state (gstack) |
+| `gstack-unfreeze` | Clear the freeze boundary set by /freeze, allowing edits to all directories again. (gstack) |
 | `hexagonal-architecture` | Design, implement, and refactor Ports & Adapters systems with clear domain boundaries, dependency inversion, and testable use-case orchestration across TypeScript, Java, Kotlin, and Go services. Use when introducing or refactoring toward Ports and Adapters, or when domain logic has become entangled with I/O. |
 | `hookify-rules` | This skill should be used when the user asks to create a hookify rule, write a hook rule, configure hookify, add a hookify rule, or needs guidance on hookify rule syntax and patterns. |
 | `hud` | 配置 HUD 显示布局、预设与元素 |
@@ -451,6 +507,7 @@ _开发流程_
 | `pseo` | 执行产品搜索优化相关的流程 |
 | `receiving-code-review` | 收到审查反馈时严谨验证而非盲从 |
 | `requesting-code-review` | 完成任务或合并前请求代码审查 |
+| `six-step-finish` | 通用六步任务收尾：知识沉淀、Wiki 检查、合并确认（可选 forge）、锚点同步、分支核对与卫生清理 |
 | `speckit-chain` | 串联执行多个 Spec Kit 命令 |
 | `standard-workflow` | 四阶段标准作业流程规划开发质检维护 |
 | `subagent-driven-development` | 用子代理执行相互独立的实现计划 |

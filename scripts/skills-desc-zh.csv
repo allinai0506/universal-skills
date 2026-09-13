@@ -210,7 +210,6 @@ workflow,blueprint-driven-development,按飞书产品蓝图逐小节实现标讯
 workflow,brainstorming,创造性工作前探索用户意图、需求与设计
 workflow,dispatching-parallel-agents,并行派发相互独立的任务给多个代理
 workflow,executing-plans,在独立会话按检查点执行书面实现计划
-workflow,finishing-a-development-branch,开发完成且测试通过后决定如何集成分支
 workflow,google-code-review,执行 Google 风格的代码审查流程
 workflow,html-first-workflow,以 HTML 优先的工作流开发前端
 workflow,linear-task-creator,创建或更新 Linear 任务并套用项目模板
@@ -231,3 +230,4 @@ workflow,writing-skills,创建、编辑并在部署前验证技能
 workflow,xiyu-code-review,按西域投标平台规范审查 PR 的架构与安全
 security-review,security-review,安全审查清单与策略
 workflow,xiyu-mode,西域投标管理平台专属模式（质疑复用优先+SpecKit流程+FP-Java+多Agent收尾）
+workflow,six-step-finish,通用六步任务收尾：知识沉淀、Wiki 检查、合并确认（可选 forge）、锚点同步、分支核对与卫生清理

@@ -1,5 +1,7 @@
 ---
 name: executing-plans
+version: "2026.09.13-1"
+synced-at: "2026-09-13T08:33:02"
 description: Use when you have a written implementation plan to execute in a separate session with review checkpoints
 ---
 
