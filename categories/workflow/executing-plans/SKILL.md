@@ -33,9 +33,8 @@ For each task:
 ### Step 3: Complete Development
 
 After all tasks complete and verified:
-- Announce: "I'm using the finishing-a-development-branch skill to complete this work."
-- **REQUIRED SUB-SKILL:** Use superpowers:finishing-a-development-branch
-- Follow that skill to verify tests, present options, execute choice
+- Run the project's finish process when one exists (e.g. xiyu `scripts/agent-finish-task.sh`)
+- Otherwise verify tests are green, then ask your human partner how to integrate (merge locally, push a PR, or keep the branch)
 
 ## When to Stop and Ask for Help
 

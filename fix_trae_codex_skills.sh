@@ -12,7 +12,6 @@ SKILLS=(
   "deep-interview"
   "dispatching-parallel-agents"
   "executing-plans"
-  "finishing-a-development-branch"
   "receiving-code-review"
   "requesting-code-review"
   "root-cause-hunter"

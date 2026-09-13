@@ -184,7 +184,7 @@ procedures. Alternatives live in [alternatives.md](references/alternatives.md)
 | S4 Implement | Chosen controller and its delegated workers; bugs/features: `test-driven-development`; DB: `create-migration` | Planned change and intent-appropriate tests implemented |
 | S5 Verify | `verification-before-completion`, `principle-prove-it-works`; E2E: `e2e-testing`; cross-layer: `self-verifying-tests` | Fresh command evidence meets selected proof and assurance requirements |
 | S6 Review | `health` + `google-code-review`; spec-bearing: `code-review`; per policy Review Selection (no-baseline edits exempt from `health`, waiver in §3); every S6 declares via `.omc/review-<session>.md` | MERGE_READY or explicit waiver within authorization |
-| S7 Deliver | `finishing-a-development-branch` / `ship` within target; unattended: `ai-release-engineer`; deployment: `deployment-patterns`, `canary` | Fulfill delivery target |
+| S7 Deliver | Project finish script when one exists (xiyu: `agent-finish-task.sh` six-step finish: 知识沉淀 → wiki checkpoint → merge confirmation → anchor sync → branch check → hygiene check); otherwise `ship` within target; unattended: `ai-release-engineer`; deployment: `deployment-patterns`, `canary` | Fulfill delivery target |
 | S8 Capture | `knowledge-capture`; `show-me-your-work` where selected by policy Capture Selection | Findings and required decision trail filed |
 
 ## Evidence and Review Gates

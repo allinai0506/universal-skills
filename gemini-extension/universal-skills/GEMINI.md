@@ -442,7 +442,6 @@ _开发流程_
 | `brainstorming` | 创造性工作前探索用户意图、需求与设计 |
 | `dispatching-parallel-agents` | 并行派发相互独立的任务给多个代理 |
 | `executing-plans` | 在独立会话按检查点执行书面实现计划 |
-| `finishing-a-development-branch` | 开发完成且测试通过后决定如何集成分支 |
 | `google-code-review` | 执行 Google 风格的代码审查流程 |
 | `html-first-workflow` | 以 HTML 优先的工作流开发前端 |
 | `linear-task-creator` | 创建或更新 Linear 任务并套用项目模板 |

@@ -1,6 +1,6 @@
 # SKILLS-INDEX
 
-> 技能来源速查表 · 自动生成于 2026-09-10 22:37 · 共 348 个一级技能。
+> 技能来源速查表 · 自动生成于 2026-09-10 22:37 · 共 347 个一级技能。
 > 按「来源」检索：公开技能包（外部大神编写的成套技能） / 自建・单个技能。
 > 技能由 AI 按 description 自动触发，无需记住名字。
 
@@ -457,7 +457,6 @@ _开发流程_
 | `brainstorming` | 创造性工作前探索用户意图、需求与设计 |
 | `dispatching-parallel-agents` | 并行派发相互独立的任务给多个代理 |
 | `executing-plans` | 在独立会话按检查点执行书面实现计划 |
-| `finishing-a-development-branch` | 开发完成且测试通过后决定如何集成分支 |
 | `google-code-review` | 执行 Google 风格的代码审查流程 |
 | `html-first-workflow` | 以 HTML 优先的工作流开发前端 |
 | `linear-task-creator` | 创建或更新 Linear 任务并套用项目模板 |
