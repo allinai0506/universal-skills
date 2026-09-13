@@ -144,6 +144,58 @@ is_syncable_skill_dir() {
     ! is_duplicate_skill_name "$skill_name"
 }
 
+# Codex desktop/Copilot 与 ZCode 共用 ~/.agents/skills/ 作为跨运行时技能入口。
+# 当共享入口已经提供同名技能时，~/.codex/skills/ 不应再注册一份，
+# 否则宿主会把同一套 SKILL.md 描述计算两次并触发 context budget fallback。
+is_shared_agent_skill() {
+    local skill_name="$1"
+    [ -f "$HOME/.agents/skills/$skill_name/SKILL.md" ]
+}
+
+# 清理 Codex 入口中由 universal-skills 管理、且已被 ~/.agents/skills/ 覆盖的重复项。
+# - universal symlink：直接删除链接（可由下一次切换配置恢复）
+# - 完全相同的实体副本：移动到 .backup，而不是不可恢复删除
+# - 内容不同的实体副本：保留并报警，避免覆盖工具管理的技能
+prune_codex_shared_duplicates() {
+    local target="$1"
+    local shared_root="$HOME/.agents/skills"
+    local entry skill_name shared_skill dest backup_root removed moved
+    removed=0
+    moved=0
+
+    [ -d "$shared_root" ] || return 0
+
+    for entry in "$target"/*; do
+        [ -e "$entry" ] || [ -L "$entry" ] || continue
+        skill_name="$(basename "$entry")"
+        [ "$skill_name" = ".system" ] && continue
+        shared_skill="$shared_root/$skill_name"
+        [ -f "$shared_skill/SKILL.md" ] || continue
+
+        if [ -L "$entry" ]; then
+            dest="$(readlink "$entry" 2>/dev/null || true)"
+            if [[ "$dest" == "$UNIVERSAL_SKILLS/categories/"* ]]; then
+                rm -f "$entry"
+                removed=$((removed + 1))
+            fi
+        elif [ -d "$entry" ] && [ -f "$entry/SKILL.md" ]; then
+            if diff -rq "$entry" "$shared_skill" >/dev/null 2>&1; then
+                if [ -z "${backup_root:-}" ]; then
+                    backup_root="$BACKUP_DIR/codex-shared-$(date +%Y%m%d-%H%M%S)"
+                    mkdir -p "$backup_root"
+                fi
+                mv "$entry" "$backup_root/$skill_name"
+                moved=$((moved + 1))
+            else
+                warn "Codex 重复技能 [$skill_name] 与 ~/.agents/skills/ 内容不同，保留 Codex 实体副本"
+            fi
+        fi
+    done
+
+    [ "$removed" -gt 0 ] && log "Codex 共享入口重复 symlink 已清理 ($removed 个)"
+    [ "$moved" -gt 0 ] && log "Codex 共享入口重复实体副本已移入备份 ($moved 个): ${backup_root}"
+}
+
 # 增量复制单个技能（增量校验重试核心）
 # 幂等：目标已是最新（diff 一致）或 symlink 直指源 → 跳过；漂移/缺失 → 重拷
 # 返回值：0=已复制  1=无需变动（已一致）
@@ -999,8 +1051,10 @@ sync_codex() {
     # rm 过程中 .system 被并发重建会导致 rm 报错 + set -e 中断，目标被清空（2026-09-10 实测）。
     # 只管理我们创建的 symlink：补缺失、更新指向、删孤立；点文件与实体原样保留。
     mkdir -p "$target"
+    prune_codex_shared_duplicates "$target"
 
     local skill_count=0
+    local shared_skipped=0
     local wanted_list
     wanted_list="$(mktemp)"
 
@@ -1009,6 +1063,10 @@ sync_codex() {
             local skill_name="$(basename "$skill_dir")"
             # 全局同步：跳过项目专用技能
             if is_project_only_skill "$skill_name"; then
+                continue
+            fi
+            if is_shared_agent_skill "$skill_name"; then
+                shared_skipped=$((shared_skipped + 1))
                 continue
             fi
             # -h：目标若是已存在的目录 symlink，必须替换链接本身；
@@ -1022,6 +1080,10 @@ sync_codex() {
     for skill_dir in "$UNIVERSAL_SKILLS/categories"/*; do
         if is_syncable_skill_dir "$skill_dir"; then
             local skill_name="$(basename "$skill_dir")"
+            if is_shared_agent_skill "$skill_name"; then
+                shared_skipped=$((shared_skipped + 1))
+                continue
+            fi
             if [ ! -d "$target/$skill_name" ] && [ ! -L "$target/$skill_name" ]; then
                 ln -sfh "$skill_dir" "$target/$skill_name"
                 echo "$skill_name" >> "$wanted_list"
@@ -1036,13 +1098,16 @@ sync_codex() {
         [ -L "$entry" ] || continue
         local entry_name
         entry_name="$(basename "$entry")"
-        if ! grep -qx "$entry_name" "$wanted_list" 2>/dev/null; then
+        local entry_dest
+        entry_dest="$(readlink "$entry" 2>/dev/null || true)"
+        if [[ "$entry_dest" == "$UNIVERSAL_SKILLS/categories/"* ]] && \
+           ! grep -qx "$entry_name" "$wanted_list" 2>/dev/null; then
             rm -f "$entry"
         fi
     done
     rm -f "$wanted_list"
 
-    success "Codex skills 已同步 ($skill_count 个技能，均为 symlink)"
+    success "Codex skills 已同步 ($skill_count 个独占 symlink，跳过 $shared_skipped 个 ~/.agents/skills/ 已提供技能)"
 }
 
 # 同步到 ZCode (~/.agents/skills/)

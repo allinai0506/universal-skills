@@ -9,7 +9,7 @@
 ## 支持的工具
 
 - **Claude Code** - `~/.claude/skills/`
-- **Codex** - `~/.codex/skills/`
+- **Codex / ZCode** - 共享入口 `~/.agents/skills/`；`~/.codex/skills/` 仅作为 Codex fallback，避免重复注册
 - **Trae CN Agent** - `~/.trae-cn/skills/`
 - **Gemini** - 通过 MCP 服务器
 

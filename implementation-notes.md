@@ -105,6 +105,20 @@ Branch: `chore/unify-global-skill-symlinks`
 - Changed sync to remove old universal-skills symlinks from `~/.zcode/skills/` instead of recreating them.
 - Did not delete non-symlink skills in `~/.agents/skills/` or `~/.trae-cn/skills/`, because those may be installed or managed by the tools themselves.
 
+## Task: prevent Codex and shared Agent root double registration
+
+## Findings
+
+- Codex and ZCode/Copilot can see the shared `~/.agents/skills/` root; syncing the same universal catalog into `~/.codex/skills/` registers duplicate names and descriptions.
+- The Codex root contains only fallback skills and Codex `.system` should remain tool-owned.
+
+## Decisions
+
+- Treat `~/.agents/skills/` as the shared canonical root when it exists.
+- `sync_codex` skips names already provided by that root and removes only universal-skills symlinks shadowed there.
+- Completely identical Codex entity copies are moved into `.backup/`; differing tool-managed copies are preserved and reported.
+- `scripts/check-skill-roots.sh` is the read-only regression check for broken links and cross-root duplicates.
+
 ## Task: hide near-duplicate skills from sync targets
 
 ## Findings
