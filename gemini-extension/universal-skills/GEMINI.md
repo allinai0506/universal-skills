@@ -207,6 +207,7 @@ _开发流程_
 | `blueprint-driven-development` | 按飞书产品蓝图逐小节实现标讯功能 |
 | `blueprint-e2e` | 针对飞书产品蓝图的每一个小节（小节粒度，如 4.2.1、4.3.2），独立编写和执行 Playwright E2E 测试， 验证功能实现是否符合蓝图需求。测试即文档——E2E 测试是对蓝图需求的机器可执行描述。 触发场景：用户提到"E2E 测试蓝图书"、"做蓝图的 E2E"、"测试某小节"、"e2e 覆盖"、"推进 E2E"、 "验证蓝图测试覆盖"、"blueprint E2E"、"蓝图书 e2e"、"补充测试覆盖"、"测试即文档"。 与 blueprint-driven-development 的区别：后者负责"实现"功能，本技能负责"验证"实现是否符合蓝图。 核心原则：每个蓝图小节必须有对应 E2E spec，不存在 = 未完成。 含测试覆盖缺口检测、Playwright 脚本自动生成辅助、CI 门禁绑定。 |
 | `brainstorming` | 创造性工作前探索用户意图、需求与设计 |
+| `cow-sandbox` | Use when starting non-trivial coding tasks that require workspace isolation without the overhead, branch locks, or residue of git worktrees. Uses macOS APFS (cp -cR) / Linux reflink copy-on-write snapshots for instant, zero-cost sandbox isolation. |
 | `create-migration` | 创建 Flyway 数据库迁移脚本（MySQL 8.0），自动检测下一版本号、生成迁移 SQL 和回滚脚本、执行格式校验。当检测到新增或修改数据库表结构需求时自动触发。 |
 | `dispatching-parallel-agents` | 并行派发相互独立的任务给多个代理 |
 | `executing-plans` | 在独立会话按检查点执行书面实现计划 |

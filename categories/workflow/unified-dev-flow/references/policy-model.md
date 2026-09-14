@@ -328,6 +328,13 @@ for the route's specification, planning, verification and capture requirements.
 An unknown or unavailable profile is a blocker until resolved; do not install,
 change profiles, or invent missing commands implicitly.
 
+## Workspace Isolation Hierarchy
+
+For non-trivial implementation, select workspace isolation in order:
+1. **CoW Sandbox (`cow-sandbox`)**: Preferred on macOS (APFS clonefile `cp -cR`) and Linux (reflink). Instant zero-block snapshot, zero `.git/worktrees` pollution, zero branch lock collisions, completely disposable.
+2. **Git Worktree (`using-git-worktrees`)**: Fallback when CoW is unsupported by the underlying filesystem or when a long-term multi-worktree workflow is explicitly requested.
+3. **In-place working tree**: Micro read-only or single-file edits with dirty tree guard.
+
 ## Proof Before Change
 
 | Work | First proof mode |
@@ -343,6 +350,19 @@ change profiles, or invent missing commands implicitly.
 
 TDD remains the default implementation method for bugs and features, but no
 single proof form is forced onto every intent.
+
+## S4 Exit Cleanup Gate
+
+Before advancing to S5, any route modifying source code must execute a mandatory
+`ai-slop-cleaner` cleanup pass in Mode B (standard write mode). This pass enforces
+a deletion-first discipline:
+1. Deleting dead code, unused functions/imports/exports, debug leftovers, and stale branches.
+2. Flattening needless indirection, single-use helper layers, and speculative abstractions.
+3. Consolidating copy-pasted or duplicate logic directly in the source.
+
+S4 cannot exit without this cleanup step. S5 verification runs immediately after,
+validating that the cleaned implementation preserves all intended behavior and passes
+all tests.
 
 ## Review Selection
 

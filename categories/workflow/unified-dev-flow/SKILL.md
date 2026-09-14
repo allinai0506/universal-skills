@@ -1,7 +1,7 @@
 ---
 name: unified-dev-flow
-version: "2026.09.14-1"
-synced-at: "2026-09-14T07:43:18"
+version: "2026.09.14-2"
+synced-at: "2026-09-14T10:51:02"
 description: 当开始非简单的功能开发、修 bug、重构或迁移，需要决定走哪些阶段、调用哪些技能、走多深时使用。当用户问该用什么流程或技能时使用。触发词：统一流程 / 标准流程 / 开发流程 / 完整流程 / 走流程 / 端到端开发 / 该用什么技能 / 帮我选流程 / 怎么推进这个需求 / 规范流程。Use when deciding which dev workflow/skills to use for a non-trivial coding task.
 ---
 
@@ -25,9 +25,11 @@ and execution loops to existing skills/controllers and never re-implements them.
 
 Before Entry Gate or policy resolution, inspect repository/worktree state,
 project constraints, relevant code, test entry points, active workflow state,
-and available spec backends without writing files. `.codegraph/` is
-project-local and optional: use it first when it already exists and project
-instructions require it; never initialize it here.
+and available spec backends without writing files. When workspace isolation is
+required, prefer `cow-sandbox` (APFS copy-on-write instant snapshot with zero
+disk overhead and zero git residue) over creating linked `git worktree`
+directories. `.codegraph/` is project-local and optional: use it first when it
+already exists and project instructions require it; never initialize it here.
 
 ## Resume Gate
 
@@ -177,12 +179,12 @@ procedures. Alternatives live in [alternatives.md](references/alternatives.md)
 
 | Stage | Delegate to | Exit when |
 |---|---|---|
-| S0 Prepare | `using-git-worktrees` as needed; `health` baseline before S4 where a comparison baseline can exist (single-edit typo-class changes exempt with §3 waiver) | Workspace ready; resume resolved; applicable baseline captured |
+| S0 Prepare | Workspace isolation: `cow-sandbox` (preferred: zero-overhead APFS copy-on-write sandbox, avoiding meaningless git worktrees) or `using-git-worktrees` fallback; `health` baseline before S4 where a comparison baseline can exist (single-edit typo-class changes exempt with §3 waiver) | Workspace ready; resume resolved; applicable baseline captured |
 | S1 Intent | `brainstorming`; PRD: `parse-prd`; terms: `domain-modeling` | Scope confirmed; blocking assumptions resolved |
 | S2 Spec | Selected Spec Adapter and its eligible local/publishing path | Spec and governing principles named; ambiguity resolved |
 | S3 Plan | `writing-plans`; architecture: `architect`; large: `plan-eng-review`; design: `prototype` | Plan at required depth with verification, rejected alternatives, and principles check |
-| S4 Implement | Chosen controller and its delegated workers; bugs/features: `test-driven-development`; DB: `create-migration` | Planned change and intent-appropriate tests implemented |
-| S5 Verify | `verification-before-completion`, `principle-prove-it-works`; E2E: `e2e-testing`; cross-layer: `self-verifying-tests` | Fresh command evidence meets selected proof and assurance requirements |
+| S4 Implement | Chosen controller and its delegated workers; bugs/features: `test-driven-development`; DB: `create-migration`; S4 Exit cleanup: `ai-slop-cleaner` (Mode B write mode: deletion-first slop cleanup) | Planned change implemented AND ai-slop-cleaner deletion-first cleanup completed |
+| S5 Verify | `verification-before-completion`, `principle-prove-it-works`; E2E: `e2e-testing`; cross-layer: `self-verifying-tests` | Fresh command evidence proves post-cleanup code satisfies all requirements |
 | S6 Review | `health` + `google-code-review`; spec-bearing: `code-review`; per policy Review Selection (no-baseline edits exempt from `health`, waiver in §3); every S6 declares via `.omc/review-<session>.md` | MERGE_READY or explicit waiver within authorization |
 | S7 Deliver | Project finish script when one exists (xiyu: `agent-finish-task.sh` six-step finish: 知识沉淀 → wiki checkpoint → merge confirmation → anchor sync → branch check → hygiene check); otherwise `six-step-finish` / `ship` within target; unattended: `ai-release-engineer`; deployment: `deployment-patterns`, `canary` | Fulfill delivery target |
 | S8 Capture | `knowledge-capture`; `show-me-your-work` where selected by policy Capture Selection | Findings and required decision trail filed |
@@ -191,7 +193,19 @@ procedures. Alternatives live in [alternatives.md](references/alternatives.md)
 
 - No S4 without the required planning depth and first proof; micro/small
   compress planning, never verification. Large plan review must pass first.
-- Every route reaching S6 requires `health` and `google-code-review`, except
+- **S4 Exit Cleanup Gate (Mandatory Mode B)**: Before exiting S4 and entering S5,
+  any route modifying source files must execute a mandatory `ai-slop-cleaner` pass
+  in Mode B (standard write mode: deletion-first strategy, directly removing dead
+  code, unused exports/imports, unreachable branches, flattening redundant wrapper
+  layers, and consolidating duplicated logic). Direct progression from S4 to S5
+  without running this cleanup is prohibited.
+- **S5 Post-Cleanup Verification Gate**: S5 executes fresh verification commands
+  specifically against the post-cleanup codebase, proving that `ai-slop-cleaner`
+  simplifications did not break any intended behavior or regression safety.
+  Evidence must be declared in `.omc/verify-<session>.md` (including S4 cleanup
+  and command exit codes).
+- **S6 Code Review Gate (google-code-review)**: Every route reaching S6 requires
+  `health` and `google-code-review` (in read-only reviewer posture), except
   no-baseline edits (single-edit typo-class changes with nothing structural to
   compare) which require `google-code-review` with the `health` waiver recorded
   in Entry Gate §3.
