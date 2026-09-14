@@ -248,6 +248,25 @@ cleanup_duplicate_skill_links() {
     echo "$removed"
 }
 
+cleanup_dead_universal_links() {
+    local target="$1"
+    [ -d "$target" ] || return 0
+
+    for entry in "$target"/*; do
+        [ -e "$entry" ] || [ -L "$entry" ] || continue
+        if [ -L "$entry" ]; then
+            local dest
+            dest="$(readlink "$entry" 2>/dev/null || true)"
+            if [[ "$dest" == "$UNIVERSAL_SKILLS/categories/"* ]]; then
+                if [ ! -e "$entry" ] || [ ! -e "$dest" ]; then
+                    rm -f "$entry"
+                fi
+            fi
+        fi
+    done
+    return 0
+}
+
 # 创建备份（自动清理旧备份，保留最新 2 份）
 backup() {
     local dir="$1"
@@ -1246,6 +1265,7 @@ sync_grok() {
     fi
 
     mkdir -p "$target"
+    cleanup_dead_universal_links "$target"
     local duplicate_removed
     duplicate_removed=$(cleanup_duplicate_skill_links "$target")
     [ "$duplicate_removed" -gt 0 ] && log "  清理 Grok 重复技能 symlink: $duplicate_removed 个"
@@ -1272,6 +1292,15 @@ sync_grok() {
             # 已是指向同一目标的 symlink → 跳过
             if [ -L "$link" ] && [ "$(readlink "$link")" = "$skill_dir" ]; then
                 continue
+            fi
+
+            # 如果是指向 universal-skills 的旧 symlink，清理以便重建
+            if [ -L "$link" ]; then
+                local dest
+                dest="$(readlink "$link")"
+                if [[ "$dest" == "$UNIVERSAL_SKILLS/categories/"* ]]; then
+                    rm -f "$link"
+                fi
             fi
 
             # 已存在且非我们管理的技能（Grok bundled/plugin/用户自有） → 跳过
@@ -1306,6 +1335,7 @@ sync_qoder() {
     fi
 
     mkdir -p "$target"
+    cleanup_dead_universal_links "$target"
     local duplicate_removed
     duplicate_removed=$(cleanup_duplicate_skill_links "$target")
     [ "$duplicate_removed" -gt 0 ] && log "  清理 Qoder 重复技能 symlink: $duplicate_removed 个"
@@ -1332,6 +1362,15 @@ sync_qoder() {
             # 已是指向同一目标的 symlink → 跳过
             if [ -L "$link" ] && [ "$(readlink "$link")" = "$skill_dir" ]; then
                 continue
+            fi
+
+            # 如果是指向 universal-skills 的旧 symlink，清理以便重建
+            if [ -L "$link" ]; then
+                local dest
+                dest="$(readlink "$link")"
+                if [[ "$dest" == "$UNIVERSAL_SKILLS/categories/"* ]]; then
+                    rm -f "$link"
+                fi
             fi
 
             # 已存在且非我们管理的技能（Qoder bundled/plugin/用户自有） → 跳过
@@ -1366,6 +1405,7 @@ sync_opencode() {
     fi
 
     mkdir -p "$target"
+    cleanup_dead_universal_links "$target"
     local duplicate_removed
     duplicate_removed=$(cleanup_duplicate_skill_links "$target")
     [ "$duplicate_removed" -gt 0 ] && log "  清理 OpenCode 重复技能 symlink: $duplicate_removed 个"
@@ -1392,6 +1432,15 @@ sync_opencode() {
             # 已是指向同一目标的 symlink -> 跳过
             if [ -L "$link" ] && [ "$(readlink "$link")" = "$skill_dir" ]; then
                 continue
+            fi
+
+            # 如果是指向 universal-skills 的旧 symlink，清理以便重建
+            if [ -L "$link" ]; then
+                local dest
+                dest="$(readlink "$link")"
+                if [[ "$dest" == "$UNIVERSAL_SKILLS/categories/"* ]]; then
+                    rm -f "$link"
+                fi
             fi
 
             # 已存在且非我们管理的技能（OpenCode plugin/builtin/用户自有） -> 跳过
@@ -1426,6 +1475,7 @@ sync_pi() {
     fi
 
     mkdir -p "$target"
+    cleanup_dead_universal_links "$target"
     local duplicate_removed
     duplicate_removed=$(cleanup_duplicate_skill_links "$target")
     [ "$duplicate_removed" -gt 0 ] && log "  清理 PI Agent 重复技能 symlink: $duplicate_removed 个"
@@ -1452,6 +1502,15 @@ sync_pi() {
             # 已是指向同一目标的 symlink -> 跳过
             if [ -L "$link" ] && [ "$(readlink "$link")" = "$skill_dir" ]; then
                 continue
+            fi
+
+            # 如果是指向 universal-skills 的旧 symlink，清理以便重建
+            if [ -L "$link" ]; then
+                local dest
+                dest="$(readlink "$link")"
+                if [[ "$dest" == "$UNIVERSAL_SKILLS/categories/"* ]]; then
+                    rm -f "$link"
+                fi
             fi
 
             # 已存在且非我们管理的技能（PI builtin/用户自有） -> 跳过
@@ -1586,6 +1645,7 @@ sync_kimi_code() {
     fi
 
     mkdir -p "$target"
+    cleanup_dead_universal_links "$target"
     local duplicate_removed
     duplicate_removed=$(cleanup_duplicate_skill_links "$target")
     [ "$duplicate_removed" -gt 0 ] && log "  清理 Kimi Code 重复技能 symlink: $duplicate_removed 个"
