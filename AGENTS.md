@@ -195,6 +195,21 @@ find ~/xiyu ~/clawd -maxdepth 4 -name "SKILL.md" -path "*/.Codex/skills/*" 2>/de
 
 1. 检查 `.superpowers/sdd/` 目录下是否有 ledger 文件（`progress.md`）
 2. 若存在，读取 ledger 首行确认所属计划文件，再按 `Task <N>: complete` 行确定断点位置
-3. 从断点处的下一个任务继续执行，不重新建计划、不重新分级
-
 只有在确认没有未完成的 ledger 或计划文件后，才走 unified-dev-flow 的正常分级路由。
+
+## 统一开发流程硬门禁铁律 (Unified Dev Flow Gates)
+
+在任何项目推进开发时，必须严格遵守统一开发流程（unified-dev-flow）的阶段门禁，绝不允许跨步冲刺：
+
+1. **S4 退出清理门禁 (Mandatory Mode B)**：源码修改完成后，必须先执行 `ai-slop-cleaner` 模式 B（deletion-first 瘦身/删死代码/化简层级），严禁直接带着 slop 代码进入 S5。
+2. **S5 验证证据门禁**：必须针对瘦身后的代码运行验证命令，并将命令退出码和证据写入 `.omc/verify-<session>.md`。
+3. **S6 Code Review 物理硬前置**：
+   - **S6 是 S7 Deliver（提 PR / git push / 分支收尾）的不可逆硬前置**！
+   - 严禁在未生成 `.omc/review-<session>.md` 且 `verdict: MERGE_READY` 之前执行任何 `git push`、创建 PR 或收尾任务！
+   - **系统已在物理层面设卡拦截**：
+     - `git push` 会触发 Git `pre-push` 门禁，无合格评审工件直接阻断（exit 1）；
+     - PR 创建脚本（如 `gitee-pr-helper.sh create`）会自动执行 `--guard-pr`，不达标直接拒绝建 PR；
+     - 任务收尾脚本（如 `agent-finish-task.sh` / `finish-task.sh`）会强制复核 S6 审查工件；
+     - AI 宿主 Stop Hook（`--check-review`）会在会话结束前强制核验。
+   - 必须通过独立审视者（`xiyu-code-review` / `google-code-review`），取得 `MERGE_READY` 后，方可进入 S7 交付。
+

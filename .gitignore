@@ -29,3 +29,6 @@ __pycache__/
 
 # 本项目的隔离 Git worktree
 .worktrees/
+
+# 会话运行期门禁工件
+.omc/
