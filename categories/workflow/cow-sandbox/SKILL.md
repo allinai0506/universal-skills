@@ -1,5 +1,7 @@
 ---
 name: cow-sandbox
+version: "2026.09.14-1"
+synced-at: "2026-09-14T10:51:02"
 description: Use when starting non-trivial coding tasks that require workspace isolation without the overhead, branch locks, or residue of git worktrees. Uses macOS APFS (cp -cR) / Linux reflink copy-on-write snapshots for instant, zero-cost sandbox isolation.
 ---
 
