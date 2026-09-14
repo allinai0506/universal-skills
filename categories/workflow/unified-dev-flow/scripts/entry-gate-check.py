@@ -442,18 +442,20 @@ def entry_gate_declares_patch(project_dir: str, session_id: str) -> bool:
 
 
 def validate_verify(content: str) -> str | None:
-    """S5 evidence declaration: heading + command list + minimum substance."""
+    """S5 evidence declaration: heading + command list + S4 cleanup record + minimum substance."""
     if not re.search(r"^##\s*.*验证证据", content, re.MULTILINE):
         return "缺少章节：验证证据（## 验证证据）。"
     if not re.search(r"^\s*(?:[-*]|\d+[.)])\s+\S", content, re.MULTILINE):
         return "验证证据缺少条目（用 - 或 1. 列出跑过的命令与 exit code）。"
+    if not re.search(r"(?:ai-slop-cleaner|slop[- ]clean|瘦身|清理|deletion-first)", content, re.IGNORECASE):
+        return "缺少 S4 收尾清理证据：必须记录 /ai-slop-cleaner 模式 B（deletion-first 瘦身/删死代码/化简结构）执行记录。"
     if len(content) < REVIEW_MIN_CHARS:
         return f"验证证据过短（{len(content)} < {REVIEW_MIN_CHARS} 字）。"
     return None
 
 
 def validate_review(content: str) -> str | None:
-    """S6 arrival declaration: heading + verdict + reviewer + round."""
+    """S6 arrival declaration: heading + verdict + reviewer + round + google-code-review."""
     if not re.search(r"^##\s*.*评审结论", content, re.MULTILINE):
         return "缺少章节：评审结论（## 评审结论）。"
     if not re.search(r"\b(MERGE_READY|NEEDS_FIXES|ESCALATE)\b", content):
@@ -463,6 +465,8 @@ def validate_review(content: str) -> str | None:
     m = re.search(r"round\s*[：:]\s*(\d+)", content, re.IGNORECASE)
     if not m or int(m.group(1)) < 1:
         return "评审结论缺少 round: N 行（N ≥ 1，本轮评审计数）。"
+    if not re.search(r"google-code-review", content, re.IGNORECASE):
+        return "缺少 google-code-review 审查记录：S6 评审必须包含 /google-code-review 审查结论。"
     if len(content) < REVIEW_MIN_CHARS:
         return f"评审结论过短（{len(content)} < {REVIEW_MIN_CHARS} 字）。"
     return None
@@ -728,9 +732,9 @@ def cmd_check_review(ns: argparse.Namespace) -> None:
     kind, path, reason = problems[0]
     hint = ("S6 无工件≈无门：有源码写操作就必须宣告 S5/S6。补两个小文件后再结束：\n"
             f"  {verify_artifact_path(project_dir, session_id)}"
-            "（## 验证证据 + 命令/exit 条目）\n"
+            "（## 验证证据 + S4 ai-slop-cleaner 瘦身记录 + 命令/exit 条目）\n"
             f"  {review_artifact_path(project_dir, session_id)}"
-            "（## 评审结论 + verdict + reviewer: + round: N）\n"
+            "（## 评审结论 + verdict + reviewer: + round: N + google-code-review 结论）\n"
             "micro 只需 3–5 行（约 15 秒），不许重述规则，只写实例。")
     fail(f"{reason}\n当前缺失或不合格：{path}\n{hint}",
          kind=kind, session=session_id, project=project_dir)

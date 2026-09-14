@@ -246,6 +246,7 @@ def phase_blocklog_flag() -> None:
         r = subprocess.run(
             [sys.executable, SCRIPT, "--project-dir", proj, "--session-id", "s-f",
              "--block-log", logf],
+            input="",
             capture_output=True, text=True, timeout=30, env=base_env)
         check("blocklog-flag-exit", r.returncode == 2, f"exit={r.returncode}")
         rows = []
@@ -493,6 +494,7 @@ def phase3_logging() -> None:
 def phase4_review() -> None:
     """--check-review: any source edit owes verify + review artifacts."""
     valid_verify = ("## S5 验证证据\n"
+                    "- ai-slop-cleaner: deletion-first 瘦身完成，无多余 wrapper 与冗余代码\n"
                     "- pytest tests/x_test.py → exit 0（3 passed）\n"
                     "- rg -n -F 'Y' path/to/file.md → exit 0，命中 2 行\n")
     valid_review = ("## S6 评审结论\n"
@@ -593,6 +595,30 @@ def phase4_review() -> None:
                  "--session-id", "r-noround", "--transcript", src_tp],
                 extra_env=env)
         check("review-no-round-blocks", r.returncode == 2,
+              f"exit={r.returncode}")
+
+        # 34a. verify without ai-slop-cleaner -> BLOCK
+        no_clean_verify = ("## S5 验证证据\n"
+                           "- pytest tests/x_test.py → exit 0（3 passed）\n"
+                           "- rg -n -F 'Y' path/to/file.md → exit 0，命中 2 行\n")
+        write_review_files(proj, "r-noclean", verify=no_clean_verify, review=valid_review)
+        r = run(["--check-review", "--project-dir", proj,
+                 "--session-id", "r-noclean", "--transcript", src_tp],
+                extra_env=env)
+        check("review-missing-cleaner-blocks", r.returncode == 2,
+              f"exit={r.returncode}")
+
+        # 34b. review without google-code-review -> BLOCK
+        no_google_review = ("## S6 评审结论\n"
+                            "verdict: MERGE_READY\n"
+                            "reviewer: claude (self, micro tier)\n"
+                            "round: 1\n"
+                            "手动确认代码逻辑正常，无阻断项，准备合并上线。\n")
+        write_review_files(proj, "r-nogoogle", verify=valid_verify, review=no_google_review)
+        r = run(["--check-review", "--project-dir", proj,
+                 "--session-id", "r-nogoogle", "--transcript", src_tp],
+                extra_env=env)
+        check("review-missing-google-review-blocks", r.returncode == 2,
               f"exit={r.returncode}")
 
         # 35. patch-declared route passes without artifacts

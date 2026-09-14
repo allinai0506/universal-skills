@@ -1,0 +1,19 @@
+name: cow-sandbox
+version: "2026.09.14-1"
+last_updated: "2026-09-14"
+
+platforms:
+  - claude-code
+  - codex
+  - cursor
+  - gemini
+  - trae
+
+trigger_keywords:
+  - cow-sandbox
+  - copy-on-write
+  - 沙盒隔离
+  - cow
+  - apfs clone
+  - 避免worktree
+  - 写时复制

@@ -141,11 +141,12 @@ python3 entry-gate-check.py --check-review --project-dir <dir> \
 Contracts (both live under `<project>/.omc/`, per-session filenames):
 
 - `.omc/verify-<session>.md` (S5): one `##` heading containing `验证证据`,
-  ≥1 list item (`-`/`*`/`1.`) naming a command and its exit code, ≥80 chars total.
+  ≥1 list item (`-`/`*`/`1.`) naming a command and its exit code,
+  包含 S4 收尾 `ai-slop-cleaner` (模式 B: deletion-first 瘦身) 执行记录, ≥80 chars total.
 - `.omc/review-<session>.md` (S6): one `##` heading containing `评审结论`,
   a verdict token (`MERGE_READY` / `NEEDS_FIXES` / `ESCALATE`), a `reviewer:` line
   (name the model/human; no-baseline edits may write `self`), a `round: N` line
-  (N ≥ 1, this round's review count), ≥80 chars total.
+  (N ≥ 1, this round's review count), 包含 `google-code-review` 审查记录, ≥80 chars total.
 
 Firing rule: count transcript toolUse blocks for real source edits
 (`.omc/` artifact writes excluded; unreadable transcripts fall back to the
@@ -158,6 +159,11 @@ Anti-spin mirrors the trail check: at most `--max-blocks` blocks per episode
 Micro form (passes the checker, ~15 seconds):
 
 ```md
+## S5 验证证据
+- ai-slop-cleaner: deletion-first 瘦身完成，无冗余 wrapper 与死代码
+- pytest tests/ → exit 0（3 passed）
+- git diff --stat 确认仅保留必要修改
+
 ## S6 评审结论
 verdict: MERGE_READY
 reviewer: claude (self, no-baseline edit)
