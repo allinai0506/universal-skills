@@ -1,0 +1,5 @@
+interface:
+  display_name: CoW Sandbox
+  short_description: Instant zero-cost workspace isolation via Copy-on-Write snapshots
+  description: Use when starting non-trivial tasks requiring workspace isolation without git worktree overhead, branch locks, or residue.
+  category: workflow
