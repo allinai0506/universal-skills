@@ -9,7 +9,8 @@ description: >
 license: MIT
 metadata:
   author: LottieFiles
-  version: "1.0.0"
+  version: "2026.09.15-1"
+synced-at: "2026-09-15T22:03:13"
 ---
 
 # Motion Design Skill
