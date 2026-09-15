@@ -465,8 +465,8 @@ def validate_review(content: str) -> str | None:
     m = re.search(r"round\s*[：:]\s*(\d+)", content, re.IGNORECASE)
     if not m or int(m.group(1)) < 1:
         return "评审结论缺少 round: N 行（N ≥ 1，本轮评审计数）。"
-    if not re.search(r"google-code-review", content, re.IGNORECASE):
-        return "缺少 google-code-review 审查记录：S6 评审必须包含 /google-code-review 审查结论。"
+    if not re.search(r"(?:google-code-review|xiyu-code-review|code-review)", content, re.IGNORECASE):
+        return "缺少审查记录：S6 评审必须包含 google-code-review、xiyu-code-review 或 code-review 审查结论。"
     if len(content) < REVIEW_MIN_CHARS:
         return f"评审结论过短（{len(content)} < {REVIEW_MIN_CHARS} 字）。"
     return None
@@ -476,6 +476,9 @@ def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--check-trail", action="store_true")
     ap.add_argument("--check-review", action="store_true")
+    ap.add_argument("--guard-pr", action="store_true")
+    ap.add_argument("--guard-push", action="store_true")
+    ap.add_argument("--branch", default="")
     ap.add_argument("--transcript", default="")
     ap.add_argument("--trail", default="")
     ap.add_argument("--min-edits", type=int, default=TRAIL_MIN_EDITS)
@@ -492,6 +495,12 @@ def main(argv: list[str] | None = None) -> None:
         return
     if early.check_review:
         cmd_check_review(early)
+        return
+    if early.guard_pr:
+        cmd_guard_pr(early)
+        return
+    if early.guard_push:
+        cmd_guard_push(early)
         return
     project_dir, session_id, target = resolve_context(argv)
     if target and is_artifact_target(project_dir, target):
@@ -738,6 +747,196 @@ def cmd_check_review(ns: argparse.Namespace) -> None:
             "micro 只需 3–5 行（约 15 秒），不许重述规则，只写实例。")
     fail(f"{reason}\n当前缺失或不合格：{path}\n{hint}",
          kind=kind, session=session_id, project=project_dir)
+
+
+def find_latest_omc_pair(project_dir: str, session_id: str = "") -> tuple[str | None, str | None]:
+    """Find (verify_path, review_path) under <project_dir>/.omc/.
+    If session_id is given, checks those paths directly.
+    Otherwise scans for newest review-*.md and matching/newest verify-*.md.
+    """
+    omc_dir = os.path.join(project_dir, ".omc")
+    if not os.path.isdir(omc_dir):
+        return None, None
+    if session_id:
+        v_path = os.path.join(omc_dir, f"verify-{session_id}.md")
+        r_path = os.path.join(omc_dir, f"review-{session_id}.md")
+        return (v_path if os.path.isfile(v_path) else None,
+                r_path if os.path.isfile(r_path) else None)
+
+    review_files: list[tuple[float, str, str]] = []
+    for fname in os.listdir(omc_dir):
+        if fname.startswith("review-") and fname.endswith(".md"):
+            p = os.path.join(omc_dir, fname)
+            try:
+                review_files.append((os.path.getmtime(p), p, fname[7:-3]))
+            except OSError:
+                pass
+    if not review_files:
+        return None, None
+    review_files.sort(key=lambda x: x[0], reverse=True)
+    best_review = review_files[0][1]
+    best_session = review_files[0][2]
+
+    v_path = os.path.join(omc_dir, f"verify-{best_session}.md")
+    if os.path.isfile(v_path):
+        return v_path, best_review
+
+    verify_files: list[tuple[float, str]] = []
+    for fname in os.listdir(omc_dir):
+        if fname.startswith("verify-") and fname.endswith(".md"):
+            p = os.path.join(omc_dir, fname)
+            try:
+                verify_files.append((os.path.getmtime(p), p))
+            except OSError:
+                pass
+    best_verify = max(verify_files, key=lambda x: x[0])[1] if verify_files else None
+    return best_verify, best_review
+
+
+def cmd_guard_pr(ns: argparse.Namespace) -> None:
+    """PR / Push Gate: Verify S6 Code Review is passed with MERGE_READY before PR or Push.
+
+    Exit codes:
+      0 = pass (allows PR creation or git push)
+      1 = block (rejects operation with guidance to run S6 review)
+    """
+    project_dir = ns.project_dir or ""
+    if not project_dir:
+        project_dir = os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd())
+
+    # 逃生阀 (Emergency escape hatch)
+    if os.environ.get("UNIFIED_DEV_FLOW_SKIP_REVIEW") == "1" or os.environ.get("UNIFIED_DEV_FLOW_FORCE") == "1":
+        sys.stderr.write("⚠️ [unified-dev-flow] 检测到 UNIFIED_DEV_FLOW_SKIP_REVIEW=1，跳过 S6 Review 门禁（已记录逃生事件）\n")
+        log_block("review-bypass", ns.session_id or "bypass", project_dir, "UNIFIED_DEV_FLOW_SKIP_REVIEW=1")
+        sys.exit(0)
+
+    branch = ns.branch or ""
+    if not branch:
+        try:
+            res = subprocess.run(["git", "branch", "--show-current"],
+                                 cwd=project_dir, capture_output=True, text=True, timeout=5)
+            if res.returncode == 0:
+                branch = res.stdout.strip()
+        except Exception:
+            branch = ""
+
+    verify_path, review_path = find_latest_omc_pair(project_dir, ns.session_id)
+    if not review_path or not os.path.isfile(review_path):
+        msg = (
+            "\n"
+            "╔══════════════════════════════════════════════════════════════════════════════╗\n"
+            "║  ⛔ [unified-dev-flow 门禁阻断] 尚未执行 S6 Code Review，禁止创建 PR / 推送！  ║\n"
+            "╚══════════════════════════════════════════════════════════════════════════════╝\n"
+            f"  项目目录: {project_dir}\n"
+            f"  当前分支: {branch or 'unknown'}\n"
+            "  【缺失工件】: .omc/review-*.md (S6 评审结论)\n\n"
+            "  【立即行动指南】:\n"
+            "  1. 运行 S6 Code Review：调用 xiyu-code-review 或 google-code-review 执行三透镜独立审查；\n"
+            "  2. 生成工件：.omc/review-<session>.md（须包含 ## 评审结论、verdict: MERGE_READY、reviewer、round）与 .omc/verify-<session>.md；\n"
+            "  3. 确认评审结论为 MERGE_READY 后，方可重新提交 PR 或推送分支。\n"
+            "  （紧急逃生阀: 仅限生产抢修故障时设置 UNIFIED_DEV_FLOW_SKIP_REVIEW=1）\n"
+        )
+        sys.stderr.write(msg + "\n")
+        log_block("guard-pr-missing", ns.session_id or "default", project_dir, "review artifact missing")
+        sys.exit(1)
+
+    try:
+        with open(review_path, "r", encoding="utf-8") as f:
+            review_content = f.read()
+    except OSError as e:
+        sys.stderr.write(f"⛔ [unified-dev-flow 门禁阻断]: 无法读取评审工件: {review_path} ({e})\n")
+        sys.exit(1)
+
+    reason = validate_review(review_content)
+    if reason:
+        msg = (
+            f"⛔ [unified-dev-flow 门禁阻断]: S6 评审工件不合规！\n"
+            f"  文件: {review_path}\n"
+            f"  原因: {reason}\n"
+            "  请按规范完善 S6 评审结论（需含 ## 评审结论、verdict、reviewer:、round: N、审查记录）。"
+        )
+        sys.stderr.write(msg + "\n")
+        log_block("guard-pr-malformed", ns.session_id or "default", project_dir, reason)
+        sys.exit(1)
+
+    m_verdict = re.search(r"\b(MERGE_READY|NEEDS_FIXES|ESCALATE)\b", review_content)
+    verdict = m_verdict.group(1) if m_verdict else "UNKNOWN"
+    if verdict != "MERGE_READY":
+        msg = (
+            f"⛔ [unified-dev-flow 门禁阻断]: 当前 S6 评审结论为 {verdict}，未达到 MERGE_READY 交付标准！\n"
+            f"  文件: {review_path}\n"
+            "  【处置要求】:\n"
+            "    • 若为 NEEDS_FIXES: 必须回到 S4 修复问题，S5 重新验证，S6 重新审查，直至达成 MERGE_READY。\n"
+            "    • 若为 ESCALATE: 需升级人工确认，禁止自动创建 PR。\n"
+        )
+        sys.stderr.write(msg + "\n")
+        log_block("guard-pr-verdict", ns.session_id or "default", project_dir, f"verdict is {verdict}")
+        sys.exit(1)
+
+    if not verify_path or not os.path.isfile(verify_path):
+        msg = (
+            "⛔ [unified-dev-flow 门禁阻断]: 缺少 S5 验证证据工件（.omc/verify-*.md）！\n"
+            "  请确保 S4 ai-slop-cleaner 瘦身与 S5 测试执行记录完整写入 .omc/verify-<session>.md。"
+        )
+        sys.stderr.write(msg + "\n")
+        log_block("guard-pr-verify-missing", ns.session_id or "default", project_dir, "verify artifact missing")
+        sys.exit(1)
+
+    try:
+        with open(verify_path, "r", encoding="utf-8") as f:
+            verify_content = f.read()
+    except OSError as e:
+        sys.stderr.write(f"⛔ [unified-dev-flow 门禁阻断]: 无法读取验证工件: {verify_path} ({e})\n")
+        sys.exit(1)
+
+    v_reason = validate_verify(verify_content)
+    if v_reason:
+        msg = (
+            f"⛔ [unified-dev-flow 门禁阻断]: S5 验证证据工件不合规！\n"
+            f"  文件: {verify_path}\n"
+            f"  原因: {v_reason}\n"
+        )
+        sys.stderr.write(msg + "\n")
+        log_block("guard-pr-verify-malformed", ns.session_id or "default", project_dir, v_reason)
+        sys.exit(1)
+
+    sys.stdout.write(
+        f"✅ [unified-dev-flow 门禁放行] S6 Code Review 验证通过: verdict=MERGE_READY\n"
+        f"   评审工件: {os.path.basename(review_path)} | 验证工件: {os.path.basename(verify_path)}\n"
+    )
+    sys.exit(0)
+
+
+def cmd_guard_push(ns: argparse.Namespace) -> None:
+    """Git pre-push hook mode.
+    Reads lines from stdin: <local ref> <local sha1> <remote ref> <remote sha1>.
+    """
+    raw = read_stdin_text()
+    lines = [line.strip() for line in raw.splitlines() if line.strip()]
+
+    if not lines:
+        cmd_guard_pr(ns)
+        return
+
+    for line in lines:
+        parts = line.split()
+        if len(parts) < 4:
+            continue
+        local_ref, local_sha, remote_ref, remote_sha = parts[:4]
+        # 删除远端分支操作不阻断
+        if local_sha == "0000000000000000000000000000000000000000" or local_ref == "(delete)":
+            continue
+        ref_name = local_ref.replace("refs/heads/", "")
+        # 如果是主干/保护分支，pre-push 本身不在此阻断（由专用保护策略处理）
+        if ref_name in ("main", "master"):
+            continue
+        # 对开发任务分支（agent/*, feat/*, fix/*, 或其它开发分支）必须检查 S6
+        ns.branch = ref_name
+        cmd_guard_pr(ns)
+        return
+
+    # 若全是已排除 ref，直接放行
+    sys.exit(0)
 
 
 if __name__ == "__main__":

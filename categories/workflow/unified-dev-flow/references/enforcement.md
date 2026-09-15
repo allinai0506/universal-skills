@@ -185,8 +185,33 @@ Claude example (`Stop` event, alongside the trail hook):
 }
 ```
 
-Same pattern maps 1:1 to Codex/Cursor/Trae/Qoder `Stop`. NOT auto-installed —
-same manual-step rule as the write gate and the trail check.
+## Guard PR & Pre-Push (S6→S7 Active Enforcement, PR/Push 物理门禁)
+
+Stop hook 是在会话结束时拦截，但 Agent 经常在 S4/S5 跑通后，直接顺手执行 `git push` 或调用 `gitee-pr-helper.sh create` 提交 PR（造成“PR 已开但 S6 未审”的既成事实）。
+为此，我们在提交 PR 与代码推送的入口点设立物理拦截：
+
+```bash
+# 1. PR 创建门禁（供 gitee-pr-helper / gh pr create / agent-finish-task 脚本调用）
+python3 entry-gate-check.py --guard-pr --project-dir <dir> --branch <branch>
+
+# 2. Git pre-push 门禁（供 .git/hooks/pre-push 调用）
+python3 entry-gate-check.py --guard-push
+```
+
+### 拦截判定契约：
+- **目标分支识别**：主干分支（`main` / `master`）或删除远端分支操作不阻断；任务开发分支（`agent/*`、`feat/*`、`fix/*` 等）**强制受检**。
+- **工件存在与合法性**：
+  - 必须存在 `.omc/review-*.md` 且通过结构校验（包含 `## 评审结论`、`reviewer:`、`round: N`，以及 `google-code-review` / `xiyu-code-review` / `code-review` 审查记录）。
+  - **verdict 必须为 `MERGE_READY`**！若为 `NEEDS_FIXES` 或 `ESCALATE`，直接 exit 1 阻断。
+  - 必须存在合格的 `.omc/verify-*.md`（S5 证据，含 S4 `ai-slop-cleaner` 瘦身记录与命令 exit 0）。
+- **阻断行为**：exit 1，向 stderr 打印醒目的多行红字指引，命令直接失败。
+- **紧急逃生阀**：仅限生产故障抢修时设置环境变量 `UNIFIED_DEV_FLOW_SKIP_REVIEW=1`，放行并记录 `review-bypass` 审计日志。
+
+### 自动化装配：
+运行 `./sync.sh` 即可全自动完成：
+- 部署 `~/.claude/scripts/` 中的门禁脚本；
+- 为 Claude Code / Codex / Antigravity 自动注入 PreToolUse 和 Stop `--check-review`；
+- 为受管 Git 项目（如 xiyu 等）安装 `.git/hooks/pre-push`。
 
 ## 1. Claude Code (one-time)
 

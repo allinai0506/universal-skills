@@ -658,6 +658,67 @@ def phase4_review() -> None:
               and any(x.get("kind") == "review-giveup" for x in rows),
               f"exits={r1.returncode},{r2.returncode}")
 
+        # 38. xiyu-code-review is accepted alongside google-code-review
+        write_review_files(proj, "r-xiyu",
+                           verify="## S5 验证证据\n- ai-slop-cleaner 瘦身完成\n- pytest -> exit 0\n" + ("x" * 60),
+                           review="## S6 评审结论\nverdict: MERGE_READY\nreviewer: claude\nround: 1\n"
+                                  "xiyu-code-review 三透镜审查全绿，无阻断问题。\n" + ("y" * 30))
+        r = run(["--check-review", "--project-dir", proj,
+                 "--session-id", "r-xiyu", "--transcript", src_tp],
+                extra_env=env)
+        check("review-xiyu-code-review-passes", r.returncode == 0,
+              f"exit={r.returncode} stderr={r.stderr[:200]}")
+
+        # 39. --guard-pr blocks when no review artifact exists
+        empty_proj = tempfile.mkdtemp(prefix="gate-pr-empty-")
+        r = run(["--guard-pr", "--project-dir", empty_proj, "--branch", "agent/gemini/task1"])
+        check("guard-pr-no-review-blocks", r.returncode == 1 and "门禁阻断" in r.stderr,
+              f"exit={r.returncode} stderr={r.stderr[:200]}")
+
+        # 40. --guard-pr blocks when verdict is NEEDS_FIXES
+        nf_proj = tempfile.mkdtemp(prefix="gate-pr-nf-")
+        write_review_files(nf_proj, "nf-session",
+                           verify="## S5 验证证据\n- ai-slop-cleaner: deletion-first 完成\n- exit 0\n" + ("v" * 50),
+                           review="## S6 评审结论\nverdict: NEEDS_FIXES\nreviewer: human\nround: 1\n"
+                                  "google-code-review: 发现边界未处理。\n" + ("r" * 40))
+        r = run(["--guard-pr", "--project-dir", nf_proj, "--branch", "agent/gemini/task2"])
+        check("guard-pr-needs-fixes-blocks", r.returncode == 1 and "NEEDS_FIXES" in r.stderr,
+              f"exit={r.returncode} stderr={r.stderr[:200]}")
+
+        # 41. --guard-pr passes when review is valid with MERGE_READY
+        mr_proj = tempfile.mkdtemp(prefix="gate-pr-mr-")
+        write_review_files(mr_proj, "mr-session",
+                           verify="## S5 验证证据\n- ai-slop-cleaner: deletion-first 完成\n- exit 0\n" + ("v" * 50),
+                           review="## S6 评审结论\nverdict: MERGE_READY\nreviewer: claude\nround: 1\n"
+                                  "xiyu-code-review 三透镜审查全绿通过。\n" + ("r" * 40))
+        r = run(["--guard-pr", "--project-dir", mr_proj, "--branch", "agent/gemini/task3"])
+        check("guard-pr-merge-ready-passes", r.returncode == 0 and "门禁放行" in r.stdout,
+              f"exit={r.returncode} stdout={r.stdout[:200]}")
+
+        # 42. --guard-pr bypass with escape hatch UNIFIED_DEV_FLOW_SKIP_REVIEW=1
+        r = run(["--guard-pr", "--project-dir", empty_proj, "--branch", "agent/gemini/task4"],
+                extra_env={"UNIFIED_DEV_FLOW_SKIP_REVIEW": "1"})
+        check("guard-pr-escape-hatch-passes", r.returncode == 0 and "UNIFIED_DEV_FLOW_SKIP_REVIEW=1" in r.stderr,
+              f"exit={r.returncode}")
+
+        # 43. --guard-push blocks for task branch without review
+        push_input = "refs/heads/agent/gemini/task1 aaaaa refs/heads/agent/gemini/task1 bbbbb\n"
+        r = run(["--guard-push", "--project-dir", empty_proj], stdin_text=push_input)
+        check("guard-push-task-branch-blocks", r.returncode == 1 and "门禁阻断" in r.stderr,
+              f"exit={r.returncode}")
+
+        # 44. --guard-push allows deleting remote branch
+        del_input = "refs/heads/agent/gemini/task1 0000000000000000000000000000000000000000 refs/heads/agent/gemini/task1 0000000000000000000000000000000000000000\n"
+        r = run(["--guard-push", "--project-dir", empty_proj], stdin_text=del_input)
+        check("guard-push-delete-branch-passes", r.returncode == 0,
+              f"exit={r.returncode}")
+
+        # 45. --guard-push allows pushing to main
+        main_input = "refs/heads/main 11111 refs/heads/main 22222\n"
+        r = run(["--guard-push", "--project-dir", empty_proj], stdin_text=main_input)
+        check("guard-push-main-branch-passes", r.returncode == 0,
+              f"exit={r.returncode}")
+
 
 if __name__ == "__main__":
     main()

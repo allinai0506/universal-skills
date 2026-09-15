@@ -46,41 +46,68 @@ def main() -> None:
             "--project-dir", str(project_dir),
             "--session-id", session_id]
     if stop_mode:
-        argv += ["--check-trail"]
         tpath = payload.get("transcriptPath")
+        extra_args = []
         if isinstance(tpath, str) and tpath.strip():
-            argv += ["--transcript", os.path.expanduser(tpath.strip())]
-    else:
-        tool_call = payload.get("toolCall") or {}
-        tool_args = tool_call.get("args") or {}
-        for key in ("TargetFile", "file", "path", "file_path"):
-            val = tool_args.get(key)
-            if isinstance(val, str) and val.strip():
-                argv += ["--target", val.strip()]
-                break
+            extra_args = ["--transcript", os.path.expanduser(tpath.strip())]
+
+        # 1. 优先检查 S6 Code Review 门禁 (check-review)
+        argv_review = [sys.executable, CHECKER,
+                       "--project-dir", str(project_dir),
+                       "--session-id", session_id,
+                       "--check-review"] + extra_args
+        try:
+            proc_review = subprocess.run(argv_review, capture_output=True, text=True, timeout=30)
+            if proc_review.returncode == 2:
+                reason = (proc_review.stderr or "S5/S6 审查工件缺失或不合格").strip()
+                print(json.dumps({"decision": "continue", "reason": reason}))
+                return
+        except OSError as e:
+            print(json.dumps({"decision": "stop", "reason": f"checker run error: {e}"}))
+            return
+
+        # 2. Review 通过后，检查决策痕迹门禁 (check-trail)
+        argv_trail = [sys.executable, CHECKER,
+                      "--project-dir", str(project_dir),
+                      "--session-id", session_id,
+                      "--check-trail"] + extra_args
+        try:
+            proc_trail = subprocess.run(argv_trail, capture_output=True, text=True, timeout=30)
+            if proc_trail.returncode == 2:
+                reason = (proc_trail.stderr or "决策痕迹缺失").strip()
+                print(json.dumps({"decision": "continue", "reason": reason}))
+                return
+        except OSError as e:
+            print(json.dumps({"decision": "stop", "reason": f"checker run error: {e}"}))
+            return
+
+        print(json.dumps({"decision": "stop"}))
+        return
+
+    # PreToolUse 模式
+    tool_call = payload.get("toolCall") or {}
+    tool_args = tool_call.get("args") or {}
+    for key in ("TargetFile", "file", "path", "file_path"):
+        val = tool_args.get(key)
+        if isinstance(val, str) and val.strip():
+            argv += ["--target", val.strip()]
+            break
 
     try:
         proc = subprocess.run(argv, capture_output=True, text=True, timeout=30)
     except OSError as e:
-        # Checker binary itself missing: writes stay denied (safe default),
-        # but a stop must never loop forever against a broken install.
-        print(json.dumps({"decision": "deny" if not stop_mode else "stop",
-                          "reason": f"entry-gate checker failed to run: {e}"}))
+        print(json.dumps({"decision": "deny", "reason": f"entry-gate checker failed to run: {e}"}))
         return
 
     if proc.returncode == 0:
-        print(json.dumps({"decision": "allow" if not stop_mode else "stop"}))
+        print(json.dumps({"decision": "allow"}))
     elif proc.returncode == 2:
         reason = (proc.stderr or "entry gate artifact missing or malformed").strip()
-        print(json.dumps({"decision": "deny" if not stop_mode else "continue",
-                          "reason": reason}))
+        print(json.dumps({"decision": "deny", "reason": reason}))
     else:
-        # Checker crashed (not a validation verdict): fail OPEN, warn loudly.
-        # A crashing gate must never brick the session (cf. delivery-gate).
         warn = f"entry-gate checker crashed (exit {proc.returncode}), fail-open"
         sys.stderr.write(warn + ": " + (proc.stderr or "").strip()[:200] + "\n")
-        print(json.dumps({"decision": "allow" if not stop_mode else "stop",
-                          "reason": warn}))
+        print(json.dumps({"decision": "allow", "reason": warn}))
 
 
 if __name__ == "__main__":

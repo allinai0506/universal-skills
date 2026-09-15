@@ -300,6 +300,28 @@ echo "  forge:       $FORGE$([[ "$FORGE" != "none" && -n "$REPO_SLUG" ]] && echo
 [[ "$DRY_RUN" == "1" ]] && echo "  模式:        🔍 DRY RUN（仅检查，不执行删除）"
 echo
 
+# ─── Step 0.5: S6 Code Review 门禁复核 ───────────────────────────────────────────
+hdr "S6 Code Review: 评审门禁复核"
+CHECKER="${HOME}/.claude/scripts/entry-gate-check.py"
+if [[ ! -f "$CHECKER" ]]; then
+  CHECKER="${REPO_ROOT}/categories/workflow/unified-dev-flow/scripts/entry-gate-check.py"
+fi
+if [[ -f "$CHECKER" && "$FORCE" != "1" ]]; then
+  if ! python3 "$CHECKER" --guard-pr --project-dir "$REPO_ROOT" --branch "$TASK_BRANCH"; then
+    warn "⚠️ 未在本地 .omc/ 检测到分支 $TASK_BRANCH 的合规 S6 评审工件（MERGE_READY）。"
+    warn "   规范要求: 每个任务分支合入收尾前必须有完整的三透镜 Code Review 记录。"
+    if [[ "$AUTO_CONFIRM" != "1" && "$DRY_RUN" != "1" ]]; then
+      if ! confirm "是否确认已完成审查并继续收尾？(y/N) "; then
+        error "收尾已取消。请先补齐 S6 Code Review 工件。"
+        exit 1
+      fi
+    fi
+  else
+    info "S6 Code Review 门禁复核通过 (MERGE_READY)"
+  fi
+fi
+echo ""
+
 # ─── Step 1: 知识沉淀（提醒；Agent 应在调用本脚本前已完成） ────────────────────
 hdr "Step 1/6: 知识沉淀"
 if [[ "$DRY_RUN" == "1" ]]; then

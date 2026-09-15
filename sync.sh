@@ -1702,6 +1702,177 @@ sync_kimi_code() {
     log "  路径: ~/.kimi-code/skills/ (已注册到 config.toml extra_skill_dirs)"
 }
 
+# 同步统一开发流程 (unified-dev-flow) 物理门禁钩子到宿主环境与 Git 项目
+sync_workflow_hooks() {
+    log "同步统一开发流程 (unified-dev-flow) 门禁钩子..."
+
+    local scripts_src="$UNIVERSAL_SKILLS/categories/workflow/unified-dev-flow/scripts"
+    local claude_scripts="$HOME/.claude/scripts"
+
+    mkdir -p "$claude_scripts"
+
+    # 1. 拷贝最新门禁脚本并赋权
+    cp -f "$scripts_src/entry-gate-check.py" "$claude_scripts/entry-gate-check.py"
+    cp -f "$scripts_src/entry-gate-antigravity.py" "$claude_scripts/entry-gate-antigravity.py"
+    cp -f "$scripts_src/git-pre-push-guard.sh" "$claude_scripts/git-pre-push-guard.sh"
+    chmod +x "$claude_scripts/entry-gate-check.py" "$claude_scripts/entry-gate-antigravity.py" "$claude_scripts/git-pre-push-guard.sh"
+    success "已同步最新门禁脚本到 $claude_scripts"
+
+    # 2. 配置 Claude Code (~/.claude/settings.json)
+    python3 - <<'EOF'
+import json, os
+
+settings_path = os.path.expanduser("~/.claude/settings.json")
+try:
+    if os.path.isfile(settings_path):
+        with open(settings_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    else:
+        data = {}
+except Exception:
+    data = {}
+
+hooks = data.setdefault("hooks", {})
+
+# PreToolUse
+pre = hooks.setdefault("PreToolUse", [])
+has_entry = any("entry-gate-check.py" in str(h) for h in pre)
+if not has_entry:
+    pre.append({
+        "matcher": "Edit|Write",
+        "hooks": [{
+            "command": "python3 ~/.claude/scripts/entry-gate-check.py",
+            "timeout": 10000,
+            "type": "command"
+        }]
+    })
+
+# Stop (enforce review check)
+stop = hooks.setdefault("Stop", [])
+has_stop_review = any("check-review" in str(h) for h in stop)
+if not has_stop_review:
+    stop.append({
+        "hooks": [{
+            "command": "python3 ~/.claude/scripts/entry-gate-check.py --check-review",
+            "timeout": 15000,
+            "type": "command"
+        }]
+    })
+
+os.makedirs(os.path.dirname(settings_path), exist_ok=True)
+with open(settings_path, "w", encoding="utf-8") as f:
+    json.dump(data, f, indent=2, ensure_ascii=False)
+EOF
+    success "已配置 Claude Code 门禁 (~/.claude/settings.json: PreToolUse + Stop check-review)"
+
+    # 3. 配置 Codex CLI (~/.codex/hooks.json)
+    python3 - <<'EOF'
+import json, os
+
+hooks_path = os.path.expanduser("~/.codex/hooks.json")
+try:
+    if os.path.isfile(hooks_path):
+        with open(hooks_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    else:
+        data = {}
+except Exception:
+    data = {}
+
+hooks = data.setdefault("hooks", {})
+
+# PreToolUse
+pre = hooks.setdefault("PreToolUse", [])
+has_entry = any("entry-gate-check.py" in str(h) for h in pre)
+if not has_entry:
+    pre.append({
+        "matcher": "Edit|Write|apply_patch",
+        "hooks": [{
+            "command": "python3 ~/.claude/scripts/entry-gate-check.py",
+            "timeout": 10,
+            "type": "command"
+        }]
+    })
+
+# Stop
+stop = hooks.setdefault("Stop", [])
+has_stop_review = any("check-review" in str(h) for h in stop)
+if not has_stop_review:
+    stop.append({
+        "hooks": [{
+            "command": "python3 ~/.claude/scripts/entry-gate-check.py --check-review",
+            "timeout": 15,
+            "type": "command"
+        }]
+    })
+
+os.makedirs(os.path.dirname(hooks_path), exist_ok=True)
+with open(hooks_path, "w", encoding="utf-8") as f:
+    json.dump(data, f, indent=2, ensure_ascii=False)
+EOF
+    success "已配置 Codex CLI 门禁 (~/.codex/hooks.json: PreToolUse + Stop check-review)"
+
+    # 4. 配置 Antigravity / Gemini CLI (~/.gemini/config/hooks.json)
+    python3 - <<'EOF'
+import json, os
+
+hooks_path = os.path.expanduser("~/.gemini/config/hooks.json")
+try:
+    if os.path.isfile(hooks_path):
+        with open(hooks_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    else:
+        data = {}
+except Exception:
+    data = {}
+
+# entry-gate PreToolUse
+data["entry-gate"] = {
+    "PreToolUse": [{
+        "matcher": "write_to_file|replace_file_content",
+        "hooks": [{
+            "command": "python3 ~/.claude/scripts/entry-gate-antigravity.py",
+            "timeout": 10,
+            "type": "command"
+        }]
+    }]
+}
+
+# entry-gate-stop Stop hook
+data["entry-gate-stop"] = {
+    "Stop": [{
+        "hooks": [{
+            "command": "python3 ~/.claude/scripts/entry-gate-antigravity.py --stop",
+            "timeout": 30,
+            "type": "command"
+        }]
+    }]
+}
+
+os.makedirs(os.path.dirname(hooks_path), exist_ok=True)
+with open(hooks_path, "w", encoding="utf-8") as f:
+    json.dump(data, f, indent=2, ensure_ascii=False)
+EOF
+    success "已配置 Antigravity / Gemini CLI 门禁 (~/.gemini/config/hooks.json)"
+
+    # 5. 为西域等 Git 仓库安装 pre-push 门禁
+    local target_repos=(
+        "$HOME/xiyu/xiyu-bid-poc"
+        "$UNIVERSAL_SKILLS"
+    )
+    for repo in "${target_repos[@]}"; do
+        if [ -d "$repo/.git" ]; then
+            local git_dir="$repo/.git"
+            local hook_dir="$git_dir/hooks"
+            mkdir -p "$hook_dir"
+            local pre_push="$hook_dir/pre-push"
+            cp -f "$claude_scripts/git-pre-push-guard.sh" "$pre_push"
+            chmod +x "$pre_push"
+            success "已安装 Git pre-push 门禁: $pre_push"
+        fi
+    done
+}
+
 # 刷新 SKILLS-INDEX.md 技能速查表（每次同步后自动更新）
 update_skills_index() {
     local script="$UNIVERSAL_SKILLS/scripts/generate-skills-index.py"
@@ -2178,6 +2349,9 @@ if [ "$SKIP_PI" = false ]; then
     echo ""
 fi
 
+sync_workflow_hooks
+echo ""
+
 update_skills_index
 
 success "同步完成！"
@@ -2206,4 +2380,5 @@ echo "已同步的目标："
 [ "$SKIP_OPENCODE" = false ] && echo "  ✓ OpenCode (~/.config/opencode/skills/) ← 增量 symlink"
 [ "$SKIP_PI" = false ] && echo "  ✓ PI Agent (~/.pi/agent/skills/) ← 增量 symlink"
 [ "$SKIP_PROJECTS" = false ] && echo "  ✓ 项目级 symlinks (clawd, xiyu, etc.)"
+echo "  ✓ 统一开发流程物理门禁 (PreToolUse, Stop check-review, Git pre-push)"
 echo ""

@@ -1,7 +1,7 @@
 ---
 name: unified-dev-flow
-version: "2026.09.14-2"
-synced-at: "2026-09-14T10:51:02"
+version: "2026.09.14-3"
+synced-at: "2026-09-14T21:18:00"
 description: 当开始非简单的功能开发、修 bug、重构或迁移，需要决定走哪些阶段、调用哪些技能、走多深时使用。当用户问该用什么流程或技能时使用。触发词：统一流程 / 标准流程 / 开发流程 / 完整流程 / 走流程 / 端到端开发 / 该用什么技能 / 帮我选流程 / 怎么推进这个需求 / 规范流程。Use when deciding which dev workflow/skills to use for a non-trivial coding task.
 ---
 
@@ -204,8 +204,8 @@ procedures. Alternatives live in [alternatives.md](references/alternatives.md)
   simplifications did not break any intended behavior or regression safety.
   Evidence must be declared in `.omc/verify-<session>.md` (including S4 cleanup
   and command exit codes).
-- **S6 Code Review Gate (google-code-review)**: Every route reaching S6 requires
-  `health` and `google-code-review` (in read-only reviewer posture), except
+- **S6 Code Review Gate (google-code-review / xiyu-code-review)**: Every route reaching S6 requires
+  `health` and `google-code-review` (or project-specific `xiyu-code-review`, in read-only reviewer posture), except
   no-baseline edits (single-edit typo-class changes with nothing structural to
   compare) which require `google-code-review` with the `health` waiver recorded
   in Entry Gate §3.
@@ -214,6 +214,15 @@ procedures. Alternatives live in [alternatives.md](references/alternatives.md)
   Select `ai-slop-cleaner --review` only for actual cleanup/slop/refactor evidence;
   keep reviewer-only posture. Compare `health` with baseline;
   regression blocks; unavailable → `codehealth-mcp` or explicit waiver.
+- **S6 是 S7 Deliver（提 PR / Push / 收尾）的绝对物理硬前置**：
+  任何任务分支在进入 S7（包括执行 `git push`、通过脚本创建 PR、或调用收尾脚本）之前，
+  **必须存在**合格的 `.omc/review-<session>.md` 且其 `verdict` 必须为 **`MERGE_READY`**。
+  严禁跳过 S6 提前提 PR 或提前向远端推送！
+  系统已在四个物理层级部署自动化门禁拦截：
+  1. **Git Pre-Push Hook**：拦截裸 `git push`，无合格 review 工件直接拒绝推送并 exit 1；
+  2. **PR 创建工具 (`gitee-pr-helper.sh create`)**：前置调用 `--guard-pr` 检查，未达标直接拒绝建 PR；
+  3. **任务收尾脚本 (`agent-finish-task.sh` / `finish-task.sh`)**：前置复核 S6 审查工件；
+  4. **AI 宿主 Stop Hook (`--check-review`)**：若发生源码修改，在 Agent 停止前强制检查 S5/S6 工件。
 - Independent reviewer receives spec/acceptance criteria, current diff, tests,
   and fresh evidence, not merely implementer claims. Use a different model/lab
   when available; otherwise require `interrogate` on routes with a baseline,
