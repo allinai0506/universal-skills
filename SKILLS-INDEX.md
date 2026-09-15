@@ -1,6 +1,6 @@
 # SKILLS-INDEX
 
-> 技能来源速查表 · 自动生成于 2026-09-14 21:21 · 共 118 个一级技能。
+> 技能来源速查表 · 自动生成于 2026-09-15 22:26 · 共 119 个一级技能。
 > 按「来源」检索：公开技能包（外部大神编写的成套技能） / 自建・单个技能。
 > 技能由 AI 按 description 自动触发，无需记住名字。
 
@@ -123,6 +123,7 @@ _前端界面设计技能_
 | 技能 | 用途 |
 | --- | --- |
 | `frontend-design` | 打造高质量且有辨识度的前端界面 |
+| `motion-design` | Applies motion design principles to create emotionally-driven, technically sound animations and transitions. Provides timing, easing, choreography, and Disney animation principles adapted for UI. Use when creating animations, transitions, micro-interactions, loading states, page transitions, scroll-triggered effects, or any motion work. Works with CSS, Framer Motion, GSAP, Lottie, Spring, or any animation system. |
 | `snapping-ui-to-grid` | Use when building, modifying, or reviewing any page-level UI layout — list pages, form pages, dashboards, drawers, or modal content. Triggers include new page scaffolds, UI/UX polish passes, review comments about misaligned edges, uneven toolbar control heights, ragged number columns, misplaced primary buttons, or arbitrary spacing values. |
 | `ui-ux-pro-max` | 覆盖多风格多栈的 UI/UX 设计智能库 |
 

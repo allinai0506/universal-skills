@@ -35,9 +35,20 @@ done
 echo ""
 
 # ─── 步骤 1.5: 更新变更技能的 version + synced-at ──────────────────────
-# 对每个变更的 SKILL.md 自动递增版本号（YYYY.MM.DD-N）并写入同步时间戳
+# 对每个变更的 SKILL.md 自动递增版本号（YYYY.MM.DD-N）并写入同步时间戳。
+# 若本次 commit 对该文件的改动仅为 version/synced-at 戳记本身（即 lock 提交），
+# 则跳过 bump——否则每次提交都让计数器空转 +1，工作树永远是脏的。
 for skill_md in $CHANGED_SKILLS; do
     skill_path="$REPO_DIR/$skill_md"
+    if git rev-parse -q --verify HEAD~1 >/dev/null 2>&1; then
+        substantive=$(git diff --no-color HEAD~1 HEAD -- "$skill_path" 2>/dev/null \
+            | grep -E "^[+-]" | grep -vE "^[+-]{3}" \
+            | grep -vE "^[+-][[:space:]]*(version|synced-at):" || true)
+        if [ -z "$substantive" ]; then
+            echo -e "${YELLOW}  ⏭️  $skill_md 本次仅戳记变更，跳过版本号递增${RESET}"
+            continue
+        fi
+    fi
     if [ -f "$skill_path" ]; then
         python3 - <<'PYEOF' "$skill_path"
 import sys, re, datetime

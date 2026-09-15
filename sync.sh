@@ -153,6 +153,14 @@ is_shared_agent_skill() {
     [ -f "$HOME/.agents/skills/$skill_name/SKILL.md" ]
 }
 
+# 项目级 .agents/skills 去重：Codex 会同时加载 USER(~/.agents/skills) 与
+# REPO($CWD/.agents/skills) 两个 scope，且同名不合并、选择器里并列展示
+# （"个人 + 项目名"双条目）。用户级已有的技能不再往项目级拷。
+is_user_level_agent_skill() {
+    local skill_name="$1"
+    [ -f "$HOME/.agents/skills/$skill_name/SKILL.md" ]
+}
+
 # 清理 Codex 入口中由 universal-skills 管理、且已被 ~/.agents/skills/ 覆盖的重复项。
 # - universal symlink：直接删除链接（可由下一次切换配置恢复）
 # - 完全相同的实体副本：移动到 .backup，而不是不可恢复删除
@@ -773,7 +781,7 @@ sync_claude_projects() {
     # - .claude    : Claude Code 项目级技能（发现/孤儿扫描在此）
     # - .trae      : Trae Work 项目级技能
     # - .trae-cn   : Trae CN Agent 项目级技能
-    # - .agents    : ZCode / Agent 项目级技能
+    # - .agents    : ZCode / Agent 项目级技能（用户级已有同名则跳过，防 Codex 双 scope 重复展示）
     local local_dir_names=(".claude" ".trae" ".trae-cn" ".agents")
 
     for project_dir in "${unique_projects[@]}"; do
@@ -849,6 +857,7 @@ sync_claude_projects() {
 
             # 第2步：用实体文件同步技能（避免 git 追踪绝对路径 symlink 死链接）
             local skill_count=0
+            local shared_skipped=0
             for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
                 if is_syncable_skill_dir "$skill_dir"; then
                     local skill_name="$(basename "$skill_dir")"
@@ -857,6 +866,12 @@ sync_claude_projects() {
                         if ! is_skill_allowed_for_project "$skill_name" "$project_dir"; then
                             continue
                         fi
+                    fi
+                    # 项目级 .agents 去重：用户级已有则跳过（防 Codex USER+REPO 双条目）；
+                    # 用户级缺失时仍拷贝兜底。第1步已清掉旧副本，不会残留。
+                    if [ "$dir_name" = ".agents" ] && is_user_level_agent_skill "$skill_name"; then
+                        shared_skipped=$((shared_skipped + 1))
+                        continue
                     fi
                     local target="$skills_dir/$skill_name"
                     # 已存在非 symlink 的同名技能（marketplace/项目自有）- 跳过保护
@@ -869,8 +884,10 @@ sync_claude_projects() {
                 fi
             done
 
-            if [ $skill_count -gt 0 ]; then
-                log "  -> [$dir_name] $project_name: $skill_count 个技能 (实体文件)"
+            if [ $skill_count -gt 0 ] || [ $shared_skipped -gt 0 ]; then
+                local skip_note=""
+                [ $shared_skipped -gt 0 ] && skip_note="，跳过 $shared_skipped 个用户级已有（防 Codex 双条目）"
+                log "  -> [$dir_name] $project_name: $skill_count 个技能 (实体文件)${skip_note}"
                 any_done=true
                 skill_count_total=$((skill_count_total + skill_count))
             fi
