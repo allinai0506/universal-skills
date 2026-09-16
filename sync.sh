@@ -1960,6 +1960,18 @@ sync_projects() {
             find "$target_dir" -mindepth 1 -maxdepth 1 -type d -empty -print0 2>/dev/null | while IFS= read -r -d '' d; do
                 rmdir "$d" 2>/dev/null || true
             done
+            # 4) 清理已从 categories 删除的过期技能副本（历史删除自动传播）
+            local known_list
+            local orphan_removed=0
+            known_list=$(find "$UNIVERSAL_SKILLS/categories" -mindepth 2 -maxdepth 2 -type f -name "SKILL.md" -exec dirname {} \; 2>/dev/null | while IFS= read -r p; do basename "$p"; done | sort)
+            for p in "$target_dir"/*; do
+                [ -e "$p" ] || [ -L "$p" ] || continue
+                if ! printf '%s\n' "$known_list" | grep -qx "$(basename "$p")"; then
+                    rm -rf "$p"
+                    orphan_removed=$((orphan_removed + 1))
+                fi
+            done
+            [ "$orphan_removed" -gt 0 ] && log "  清理 $orphan_removed 个已删除技能的过期副本"
         fi
 
         mkdir -p "$target_dir"

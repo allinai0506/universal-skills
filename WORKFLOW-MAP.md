@@ -47,10 +47,7 @@ Controller Ownership Invariant：同一时刻至多一个 Controller 持有执�
 
 | 角色 | 技能 | 说明 |
 |---|---|---|
-| **canonical** | `using-git-worktrees` | 按需创建或使用隔离 worktree；已有合适隔离工作区或纯只读路线不必新建 |
-| 备选 | `project-session-manager` | 多工单/多 worktree 并行场景升级替代 |
-| 备选 | `recall` | 接续之前的工作时先重建上下文 |
-| 辅助 | `deepinit` | 新代码库首次进入时生成分层 AGENTS.md |
+| **canonical** | `cow-sandbox` / `using-git-worktrees` | 首选 CoW 沙盒；`using-git-worktrees` 按需创建或使用隔离 worktree；已有合适隔离工作区或纯只读路线不必新建 |
 | 验证基线 | `health` | S4 前取得适用基线，供 S6 比较 |
 
 ### S1 意图澄清（为什么做）
@@ -58,9 +55,7 @@ Controller Ownership Invariant：同一时刻至多一个 Controller 持有执�
 | 角色 | 技能 | 说明 |
 |---|---|---|
 | **canonical** | `brainstorming` | 创造性工作前探索意图/需求/设计，微改动可跳过本阶段 |
-| 备选 | `grill-with-docs` | 需要同步产出 ADR 与领域词汇表时 |
-| 备选 | `deep-interview` | 需求歧义极大、需要苏格拉底式追问时 |
-| 输入适配 | `parse-prd` / `product-analysis` | 输入是飞书 PRD 或需要竞品/优先级分析时 |
+| 输入适配 | `parse-prd` | 输入是飞书 PRD 时 |
 
 ### S2 规格定义（做什么）
 
@@ -88,10 +83,10 @@ Spec Kit 的可裁剪序列由 policy-model 定义：ensure/read-only constituti
 | **canonical** | `writing-plans` | 动代码前写实现计划，bite-sized 步骤 + 预埋验证点 |
 | 架构先行 | `architect`（pstack） | 先勾勒类型签名与模块结构再填实现 |
 | 规格计划 | 选定 Spec Adapter；Spec Kit 下为 `speckit-plan` + `speckit-tasks` | medium+ 要求 spec/plan/tasks，large 增加评审和检查点 |
-| 计划评审 | `plan-eng-review` / `plan-ceo-review` / `plan-design-review` | 大型特性必过（门禁），其余可选 |
-| 一致性检查 | 选定 adapter 的检查；Spec Kit 下为 `speckit-analyze` / `speckit-checklist` | 规格-计划-任务交叉校验 |
+| 计划评审 | `plan-eng-review` | 大型特性必过（门禁），其余可选 |
+| 一致性检查 | 选定 adapter 的检查；Spec Kit 下为 `speckit-analyze` | 规格-计划-任务交叉校验 |
 | 章程违规检查 | （内置） | 中型以上：plan 无 constitution 违规，或豁免列表已列出（S3 exit 门禁） |
-| 原型探路 | `prototype` / `arena` / `principle-exhaust-the-design-space` | 无先例的交互或设计决策，先对比再定案 |
+| 原型探路 | `prototype` / `principle-exhaust-the-design-space` | 无先例的交互或设计决策，先对比再定案 |
 | 数据建模 | `access-pattern-driven-data-modeling` | 涉及建表/改表、加索引、列表/搜索/报表查询路径、反规范化或读模型设计时；从访问模式倒推 schema，每个索引对应具体查询 |
 
 ### S4 实现执行（动手做）
@@ -104,9 +99,8 @@ Spec Kit 的可裁剪序列由 policy-model 定义：ensure/read-only constituti
 | Controller 候选 | `subagent-driven-development` / `executing-plans` | 完整 SDD 或顺序执行必须被选为唯一 owner，或先接受明确交接 |
 | Worker 分派 | `dispatching-parallel-agents` / 本地 pstack `swarm` | 独立任务才可并行，由已选 Controller 管理；本地 swarm 与 OMC 已退役别名不同 |
 | Controller 候选 | `team` | 选为唯一 owner 后管理多 worker；不能嵌入另一 Controller 的主循环 |
-| 直改路线 | `implement`（matt pocock） | 已有规格/ticket 的中小型实现 |
 | 无人值守 Controller 候选 | `autopilot` / `ralph` / `figure-it-out` | 唯一 owner；按复杂度记录决策轨迹，交付受 delivery_target 与发布门禁约束 |
-| TDD 去重 | ~~`tdd-workflow`~~ `engineering/tdd` `pstack/tdd` | 见「五、冗余去重清单」 |
+| TDD | `coding/test-driven-development` | 去重后保留的唯一 TDD 入口（2026-09-16 已裁剪 engineering/pstack 变体） |
 
 ### S5 验证测试（证明对）
 
@@ -117,9 +111,8 @@ Spec Kit 的可裁剪序列由 policy-model 定义：ensure/read-only constituti
 | deterministic | 相关 test/build/lint/schema/dry-run | 运行真实检查，证据必须对应当前变更 |
 | adversarial | `self-verifying-tests` 与领域反例 | 授权违规、边界、跨层一致性、攻击复现和状态转换；高风险至少达到此级别 |
 | mutation | 合适核心逻辑的真实 mutation runner | 按选定 assurance 判定；reviewer 反例不是 mutation，不强加于 CSS/layout、生成代码、配置或迁移胶水 |
-| 测试专项 | `e2e-testing` / `cpp-testing` / `eval-harness` | 按层按语言选用 |
+| 测试专项 | `e2e-testing` | Playwright 端到端测试与页面对象模型 |
 | 验证与修复 | 已选 Controller 管理 | 验证发现问题回 S4 修改，再取得新证据；不另启嵌套主循环 |
-| 项目级 | `create-verification-skill` + `maintain-verification-skill` | 把"这个项目怎么验"固化成技能 |
 
 ### S6 审查质检（挑毛病）
 
@@ -132,8 +125,6 @@ Spec Kit 的可裁剪序列由 policy-model 定义：ensure/read-only constituti
 | 对抗审查 | `interrogate` / `cog-4d-audit` | 按 adversarial assurance/risk 或独立 reviewer 不可用时的 fallback 选择 interrogate；复杂度本身不触发 |
 | 生产风险 | `production-risk-review` | live/production 变更在 S7 前追加，不替代普通 review |
 | 安全 | `security-review` / `gstack-cso` | 清单式安全审查 / OWASP+威胁建模 |
-| 影响面 | `blast-radius` | 改动前评估可能破坏什么 |
-| QA | `qa-only`（只报不改） | 真机浏览器 QA；修复回 S4 |
 | AI 痕迹清理 | `ai-slop-cleaner --review` / `receiving-code-review` | 仅有实际 cleanup/slop/refactor 证据时选择 cleaner；审查保持 reviewer-only，只报不改，修复回 S4 |
 
 ### S7 交付集成（Fulfill delivery target）
@@ -143,7 +134,7 @@ Spec Kit 的可裁剪序列由 policy-model 定义：ensure/read-only constituti
 | 角色 | 技能 | 说明 |
 |---|---|---|
 | **canonical** | 项目收尾脚本（如 xiyu `agent-finish-task.sh`）/ `six-step-finish` / `ship` | 按目标选择所需交付步骤：patch / working_tree / commit / pr / merge / deploy |
-| 发布工程 | `ai-release-engineer` / `release` | AI 代码合并前的验证门禁 / 仓库规则驱动发布 |
+| 发布工程 | `ai-release-engineer` | AI 代码合并前的验证门禁 |
 | 部署专项 | `deployment/*`（docker/migrations/deployment-patterns）、项目专属如 `xiyu-server-deploy` | 按项目选用 |
 | 上线后 | `canary` | 金丝雀监控与回滚决策 |
 
@@ -153,9 +144,6 @@ Spec Kit 的可裁剪序列由 policy-model 定义：ensure/read-only constituti
 |---|---|---|
 | **canonical** | `knowledge-capture` | 按 docs/ 现有格式沉淀开发知识，归属明确 |
 | 决策轨迹 | `show-me-your-work` | intractable 必须审计轨迹与 capture；无人值守 Controller 在适用时可选此技能 |
-| 自动提炼 | `continuous-learning-v2` | 会话观察 → 本能 → 技能演化（v2 优先于 v1） |
-| 回顾复盘 | `gstack-retro` | 周期性工程回顾 |
-| 元技能 | `learner` / `reflect` / `automate-me` | 把成功流程固化为新技能 |
 
 research 路线使用 S8；intractable 要求审计轨迹与 S8 capture。large 要求完整规格、评审、切片和 checkpoint，不自动追加 S8。patch 的 capture 保留在回复中，其余目标仅写授权的本地产物。
 
@@ -173,10 +161,8 @@ SKILL.md 保留压缩版，本表补充阶段候选。完整路由由 Resume、I
 | UI 构建/打磨、看板/落地页 | `frontend-design` | `ui-ux-pro-max`（BM25 检索引擎：50+ 风格 / 97 色板 / 57 字体 / 99 UX 准则 / 25 图表） |
 | CPU/内存/GC/锁竞争、慢接口 | `performance-tuning` | 内置 profiling 工作流；数据访问慢查询另走 `access-pattern-driven-data-modeling` |
 | 行为保持重构（清理/精简/拆分/降嵌套） | `clean-code-behavior-preserving-refactoring` | `entropy-reduction`（模块化熵减：循环依赖、边界重划） |
-| 调研/选型，先不写代码 | `research`（一手资料 → Markdown 备忘） | `search-first`（写码前先找现成轮子） |
-| 客户交付/正式文档 | `html-first-workflow` | `technical-writing`（Diátaxis 分层规范）/ `gstack-make-pdf` |
+| 客户交付/正式文档 | `html-first-workflow` | `technical-writing`（Diátaxis 分层规范） |
 | API 设计/改造 | `api-design` | router Cross-cutting 已收录 |
-| 数据库方言专项 | `postgres-patterns` / `clickhouse-io` | 同上；漏派证据出现再升级 |
 
 ### 🔍 调试诊断（升级路径）
 
@@ -184,7 +170,7 @@ SKILL.md 保留压缩版，本表补充阶段候选。完整路由由 Resume、I
 systematic-debugging（canonical 入口）
   └─ 升级 root-cause-hunter（逆向追踪证明根因）
        └─ 升级 paranoid-debugging（生产关键代码的证据级再验证）
-其他工具：diagnosing-bugs（HITL 循环）/ trace（竞争假设）/ deep-dive / gstack-investigate；
+其他工具：`investigate`（gstack）；
 数据访问性能排查（慢查询、索引未命中）走 `access-pattern-driven-data-modeling` 的验证环节（EXPLAIN + 访问模式对照）
 ```
 
@@ -270,6 +256,7 @@ Complexity 只决定规划深度，不能降低 Risk 要求的 assurance。组�
 | continuous-learning ×2 | 删除 `workflow/continuous-learning/` 残留（无 SKILL.md，仅散落脚本）；保留 `misc/continuous-learning(+v2)` | 索引中仅剩 misc 版条目 |
 | strategic-compact 残留 | 删除 `architecture/strategic-compact/`（仅 suggest-compact.sh，无 SKILL.md）；保留 `misc/strategic-compact` | 索引中仅剩 misc 版条目 |
 | code-review 多份 | **澄清非重复**：`engineering/code-review`（双轴 Standards+Spec 并行审查）与 `workflow/xiyu-code-review`（西域定制版）功能不同，均保留；真正重复的只有 imported 旧副本（上条已删） | 通用双轴审查以 engineering 为 canonical |
+| 零使用技能裁剪 ×40（2026-09-16） | 删除 40 个零使用且未被 router 引用的技能：gstack 9（codex/freeze/guard/make-pdf/plan-ceo-review/plan-design-review/qa-only/retro/unfreeze）、pstack 5（arena/blast-radius/create-verification-skill/maintain-verification-skill/recall）、spec-kit 7（agent-context-update/checklist/converge/git-commit/git-remote/git-validate/taskstoissues）、TDD 与重复 6（engineering+tdd/pstack+tdd/diagnosing-bugs/implement/research/grill-with-docs）、栈不匹配 3（clickhouse-io/postgres-patterns/cpp-testing）、其余 10（architecture-defense/docker-patterns/llm-knowledge-base/product-analysis/search-first/continuous-learning-v2/skill-installer/snapping-ui-to-grid/writing-skills/generating-python-installer） | 依据 `scripts/analyze-skill-usage.py`（119 技能中 75 个零使用），裁剪后 79 个技能；SKILLS-INDEX.md / GEMINI.md 随 sync 重建 |
 
 **传播与验证**：删除完成后运行 `./sync.sh`，全部目标同步成功——SKILLS-INDEX.md 与 GEMINI.md 自动重建（`google-style-code-review`、旧版 `code-review` 条目消失，canonical 条目齐全），`~/.claude`、`~/.codex`、`~/.trae-cn`、`~/.agents` 四个同步目录经检查无残留链接。
 
@@ -285,8 +272,8 @@ Complexity 只决定规划深度，不能降低 Risk 要求的 assurance。组�
 | speckit | S2 的严谨规格流（constitution/specify/clarify/analyze） |
 | gstack | S3 多角色计划评审、S6 QA、S7 ship/canary 交付链 |
 | omc | S4 执行引擎（subagent/ralph/autopilot）、四阶段总纲（standard-workflow 即其简化版） |
-| pstack/poteto | 横切原则层、playbook 按场景分发思想、S3 architect/arena |
-| matt pocock | S2 to-spec 轻量路线、S4 implement、S6 双轴审查 |
+| pstack/poteto | 横切原则层、playbook 按场景分发思想、S3 architect |
+| matt pocock | S2 to-spec 轻量路线、S6 双轴审查 |
 
 ---
 
@@ -303,4 +290,4 @@ Complexity 只决定规划深度，不能降低 Risk 要求的 assurance。组�
 2. ✅ 第五节去重清单已执行完毕（结果见第五节表格）；
 3. ✅ 领域分派轴上线（2026-08-23）：SKILL.md Cross-cutting 新增 Domain specialists（UI / 性能 / 重构 / 调研 / 文档），Step 2 指令改为"阶段技能 + 领域专项"并行加载，"Load only" 眼罩指令移除；路由测试 7 场景全 PASS——规模轴 3（建表中型功能、AI 发布双门禁、错别字豁免）+ 领域轴 4（重构 / UI 看板 / CPU 内存性能 / 纯调研，修复前全 GAP、修复后全 PASS）；
 4. ⬜ 用第七节实战校验跑 3 个真实任务并记录结果（微改动 / 中型功能 / 大型特性各一）；
-5. ⬜ map 领域表中 DB 方言行（`postgres-patterns` / `clickhouse-io`）仅在实战出现漏派证据时升级进 SKILL.md。
+5. ✅（2026-09-16 结案）map 领域表 DB 方言行（`postgres-patterns` / `clickhouse-io`）未等到漏派证据，已随零使用技能裁剪删除；如未来技术栈变化再引入。

@@ -255,7 +255,7 @@ response without artifacts.
   performance → `performance-tuning`; docs → `technical-writing` /
   `html-first-workflow`; infrastructure → `deployment-patterns`.
 - Debug: `systematic-debugging` → `root-cause-hunter` → `paranoid-debugging`;
-  deep intent: `deep-interview` / `deep-dive`; refactor:
+  refactor:
   `clean-code-behavior-preserving-refactoring` / `entropy-reduction`.
 - Context/principles: `context-save` / `context-restore`, `strategic-compact`,
   `principle-fix-root-causes`, `principle-sequence-verifiable-units`, and

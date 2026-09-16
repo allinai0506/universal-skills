@@ -1,11 +1,9 @@
 cat,skill,desc_zh
 .system,skill-creator,创建或更新 AI 技能文件夹以扩展工具能力
-.system,skill-installer,从列表或 GitHub 仓库安装技能到本地工具目录
 ai,cost-aware-llm-pipeline,按任务复杂度路由模型并优化 LLM 调用成本
 ai,foundation-models-on-device,用 Apple 框架在端侧运行 LLM 并支持工具调用
 ai,iterative-retrieval,渐进式细化上下文检索以解决子代理上下文不足
 architecture,access-pattern-driven-data-modeling,依据访问模式设计数据库表、索引与查询路径
-architecture,architecture-defense,自动拦截错误依赖与分层违规以守护架构边界
 architecture,cog-4d-audit,对已通过 CI 的代码做四维深度审查揪出隐藏缺陷
 coding,api-design,设计生产级 REST API 并规范命名、状态码与分页
 coding,backend-patterns,Node.js、Express、Next.js 后端架构与 API 最佳实践
@@ -19,26 +17,18 @@ coding,regex-vs-llm-structured-text,在正则与 LLM 之间选择结构化文本
 coding,self-verifying-tests,编写跨层自验证测试核对 UI、数据库与代码一致性
 coding,tdd-workflow,强制 TDD 开发并覆盖单元、集成与端到端测试
 coding,test-driven-development,实现功能前先写失败测试并遵循 TDD 方法论
-data,clickhouse-io,ClickHouse 查询优化与高性能分析数据工程实践
-data,postgres-patterns,PostgreSQL 查询优化、表设计、索引与安全实践
 debugging,paranoid-debugging,对生产关键代码做证据驱动的高强度再验证
 debugging,root-cause-hunter,逆向追踪调用链定位问题源头并证明 bug 必然发生
 debugging,systematic-debugging,遇到 bug 或异常时先系统诊断再提出修复方案
 deployment,database-migrations,跨数据库的迁移、回滚与零停机部署最佳实践
 deployment,deployment-patterns,CI/CD、Docker 容器化与生产就绪检查的部署流程
-deployment,docker-patterns,Docker 与 Compose 的开发、安全与多服务编排模式
 deployment,xiyu-server-deploy,西域投标平台服务器部署、健康检查与回滚预案
 engineering,code-review,按规范与需求双轴并行审查分支改动并对比报告
 engineering,codebase-design,共享深层模块设计词汇以改进接口与可测试性
-engineering,diagnosing-bugs,针对疑难 bug 与性能回归的循环诊断流程
 engineering,domain-modeling,沉淀领域术语并记录架构决策以构建统一语言
-engineering,grill-with-docs,通过追问访谈打磨方案并同步产出 ADR 与词汇表
-engineering,implement,根据规格说明或工单实现具体工作项
 engineering,prototype,构建一次性原型验证设计方案与逻辑是否合理
-engineering,research,检索权威一手资料并将调研结论写成 Markdown 备忘
 engineering,resolving-merge-conflicts,解决进行中的 git 合并或变基冲突
 engineering,setup-matt-pocock-skills,工程技能首次使用前配置问题跟踪器与领域文档
-engineering,tdd,先写测试再实现功能并遵循红绿重构循环
 engineering,to-spec,把当前对话综合成规格并发布到问题跟踪器
 engineering,to-tickets,把计划或规格拆解成带阻塞关系的工单
 engineering,triage,对工单与外部 PR 进行分类校验并生成代理简报
@@ -106,21 +96,15 @@ imported,self-improve,用锦标赛选择实现代码的自主进化改进
 imported,setup,把安装诊断与 MCP 请求路由到正确流程
 imported,skill,列出、添加、移除并搜索本地技能
 imported,skillify,把可复用工作流提炼成可用的 OMC 技能
-imported,speckit-agent-context-update,刷新编码代理上下文文件中的 Spec Kit 章节
 imported,speckit-analyze,对规格、计划与任务文档做无损一致性分析
-imported,speckit-checklist,按需求为当前功能生成自定义检查清单
 imported,speckit-clarify,通过定向提问澄清需求中不明确的部分
 imported,speckit-constitution,创建或更新项目章程并保持模板同步
-imported,speckit-git-commit,在 Spec Kit 命令完成后自动提交改动
 imported,speckit-git-feature,创建带序号或时间戳的功能分支
 imported,speckit-git-initialize,初始化 Git 仓库并创建初始提交
-imported,speckit-git-remote,检测 Git 远端地址以集成 GitHub
-imported,speckit-git-validate,校验当前分支是否符合功能分支命名规范
 imported,speckit-implement,按任务清单执行并完成功能实现计划
 imported,speckit-plan,用计划模板生成设计产物并执行规划
 imported,speckit-specify,从自然语言功能描述创建或更新规格
 imported,speckit-tasks,根据设计产物生成有序可执行的任务清单
-imported,speckit-taskstoissues,把任务转换为有序的 GitHub 议题
 imported,team,多代理在共享任务清单上协同工作
 imported,test-real-skill,用于测试技能机制的示例技能
 imported,test-symlink-skill,验证 symlink 机制的示例测试技能
@@ -132,7 +116,6 @@ imported,visual-verdict,截图对比的结构化视觉质量裁决
 imported,wiki,跨会话累积的持久化 Markdown 知识库
 imported,writer-memory,为作家追踪角色、关系、场景与主题的记忆系统
 languages,cpp-coding-standards,基于 C++ Core Guidelines 的现代安全编码规范
-languages,cpp-testing,配置并诊断 GoogleTest 与 CTest 及覆盖率
 languages,golang-patterns,构建健壮可维护 Go 应用的惯用模式
 languages,golang-testing,表驱动测试、基准与模糊测试的 Go 测试实践
 languages,java-coding-standards,Spring Boot 服务的命名、不可变与异常规范
@@ -144,25 +127,19 @@ languages,swift-protocol-di-testing,用协议依赖注入提升 Swift 代码可�
 languages,swiftui-patterns,SwiftUI 架构、状态管理与性能优化模式
 misc,configure-ecc,交互式安装 Everything Claude Code 技能与规则
 misc,continuous-learning,从会话中自动提取可复用模式存为技能
-misc,continuous-learning-v2,基于本能观察会话并演化为技能的学习系统
 misc,nutrient-document-processing,用 Nutrient API 处理转换 OCR 各种文档
 misc,project-guidelines-example,基于真实应用的示例项目级技能模板
-misc,search-first,写自定义代码前先检索现有工具与库
 misc,security-scan,扫描 Claude Code 配置的安全漏洞与注入风险
 misc,skill-stocktake,审计 Claude 技能与命令的质量评估流程
 misc,strategic-compact,在合理节点手动压缩上下文以保留信息
 misc,verification-loop,Claude Code 会话的全面验证系统
 misc,visa-doc-translate,把签证申请图片翻译成英文并生成双语 PDF
 pstack,architect,先勾勒类型与模块结构再进入实现
-pstack,arena,并行生成多个候选方案并融合最优部分
 pstack,automate-me,把个人工作偏好沉淀为 -mode 技能
-pstack,blast-radius,找出改动上线前可能破坏的其他部分
 pstack,bro,用无行话的通俗语言复述上一条消息
-pstack,create-verification-skill,生成驱动应用的项目级验证技能
 pstack,figure-it-out,为大型迁移设计可审计的执行剧本
 pstack,how,讲解代码如何运作与各层归属
 pstack,interrogate,多模型从独立角度挑战代码并寻找盲点
-pstack,maintain-verification-skill,定期审计并保持项目验证技能与特性映射准确
 pstack,no-comments,处理代码注释问题并修复被接受的意见
 pstack,poteto-mode,以简洁详细且可验证的风格执行任务
 pstack,principle-boundary-discipline,把校验与错误处理集中在系统边界
@@ -186,12 +163,10 @@ pstack,principle-separate-before-serializing-shared-state,并发写入前先消�
 pstack,principle-sequence-verifiable-units,把多步工作拆成可验证的小单元逐步推进
 pstack,principle-subtract-before-you-add,先删除冗余再在更简单的基础上构建
 pstack,principle-type-system-discipline,让非法状态不可表示并坚守类型系统
-pstack,recall,从历史与记录重建近期工作状态并给出简报
 pstack,reflect,并行审查会话并提炼经验落到技能编辑
 pstack,setup-pstack,按角色配置 pstack 使用的模型
 pstack,show-me-your-work,用 TSV 日志保留可审阅的决策轨迹
 pstack,swarm,并行派出多个工作者并汇总为一份报告
-pstack,tdd,用户明确要求 TDD 或回归测试时才使用
 pstack,teach,把复杂工作讲得让人真正理解
 pstack,technical-writing,符合作者文档风格的分层技术写作标准
 pstack,typescript-best-practices,读写 TS 与 TSX 文件时的最佳实践
@@ -213,8 +188,6 @@ workflow,executing-plans,在独立会话按检查点执行书面实现计划
 workflow,google-code-review,执行 Google 风格的代码审查流程
 workflow,html-first-workflow,以 HTML 优先的工作流开发前端
 workflow,linear-task-creator,创建或更新 Linear 任务并套用项目模板
-workflow,llm-knowledge-base,构建跨会话累积的 LLM 知识库
-workflow,product-analysis,竞品分析、需求优先级与产品文档撰写
 workflow,production-risk-review,对上线系统 PR 做生产风险审计
 workflow,pseo,执行产品搜索优化相关的流程
 workflow,receiving-code-review,收到审查反馈时严谨验证而非盲从
@@ -225,7 +198,6 @@ workflow,subagent-driven-development,用子代理执行相互独立的实现计�
 workflow,using-git-worktrees,用 git worktree 创建隔离的开发工作区
 workflow,verification-before-completion,声明完成前先运行验证命令并确认结果
 workflow,writing-plans,动代码前为多步任务编写实现计划
-workflow,writing-skills,创建、编辑并在部署前验证技能
 workflow,xiyu-code-review,按西域投标平台规范审查 PR 的架构与安全
 security-review,security-review,安全审查清单与策略
 workflow,xiyu-mode,西域投标管理平台专属模式（质疑复用优先+SpecKit流程+FP-Java+多Agent收尾）

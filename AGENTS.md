@@ -49,15 +49,22 @@ python3 categories/.system/skill-creator/scripts/init_skill.py <skill-name>
 
 ```
 categories/
-├── .system/              # Meta-tools (skill-creator, skill-installer)
-├── architecture/         # Architecture patterns (defense, strategic planning)
-├── coding/              # Development patterns (TDD, standards, patterns)
-├── debugging/           # Debugging methodologies (systematic, root-cause)
+├── .system/              # Meta-tools (skill-creator)
+├── architecture/         # Architecture patterns (access-pattern-driven-data-modeling, cog-4d-audit)
+├── coding/              # Development patterns (TDD, API design, performance)
+├── debugging/           # Debugging methodologies (systematic, root-cause, paranoid)
+├── deployment/          # Deployment & migrations (database-migrations, xiyu-server-deploy)
+├── engineering/         # Engineering workflows (code-review, domain-modeling, prototype)
+├── gstack/              # gstack bundle (browse, health, plan-eng-review, ship, canary)
 ├── imported/            # Auto-discovered skills from projects (gitignored)
-├── refactoring/         # Refactoring practices (entropy reduction)
+├── misc/                # Misc (strategic-compact)
+├── pstack/              # pstack bundle (architect, interrogate, swarm, technical-writing)
+├── refactoring/         # Refactoring practices (entropy reduction, ai-slop-cleaner)
 ├── security/              # Security review checklist
-├── ui-ux/              # Frontend design (frontend-design, ui-ux-pro-max)
-└── workflow/           # Development workflows (brainstorming, plans, TDD)
+├── spec-kit/            # Spec Kit commands (speckit-*)
+├── testing/             # Testing (e2e-testing)
+├── ui-ux/              # Frontend design (frontend-design, ui-ux-pro-max, motion-design)
+└── workflow/           # Development workflows (unified-dev-flow, brainstorming, writing-plans)
 
 local/                  # Local overrides (gitignored)
 .backup/                # Timestamped backups (auto-cleaned, gitignored)
@@ -102,8 +109,8 @@ description: Use when [clear trigger conditions]. Describe what the skill does.
 
 | Category | Purpose | Examples |
 |----------|---------|----------|
-| `architecture/` | System design, constraints | architecture-defense |
-| `coding/` | Development patterns | tdd-workflow, self-verifying-tests |
+| `architecture/` | System design, constraints | access-pattern-driven-data-modeling |
+| `coding/` | Development patterns | test-driven-development, self-verifying-tests |
 | `debugging/` | Debugging methodologies | systematic-debugging, root-cause-hunter |
 | `refactoring/` | Code cleanup | entropy-reduction |
 | `ui-ux/` | Frontend design | ui-ux-pro-max, frontend-design |
