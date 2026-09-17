@@ -378,3 +378,27 @@ Branch: `feat/unified-dev-flow-entry-gate`
 - 泛化 `prune_codex_shared_duplicates` → `prune_shared_duplicates(target, label)`（Codex 行为与 `codex-shared-<ts>` 备份命名不变），`sync_qoder` 复用去重 + `is_shared_agent_skill` 跳过。
 - 存量 78 个重复 symlink 已清理；`~/.qoder-cn/skills/` 仅剩 `ego-browser`（不在共享入口，无冲突）。
 - 已知代价（S6 审查记录）：Qoder 技能版本跟随 `~/.agents/skills/` 的 App 拷贝节奏，可能滞后于仓库；`*-shared-*` 备份未纳入 2 份保留清理（Codex 既有模式，非本次引入）。
+
+## Task: PI Agent 双入口技能去重 + SKILL.md 注入污染修复（PR !44）
+
+## Findings
+
+- PI 0.85（`@earendil-works/pi-coding-agent`）的 `loadSkills` 默认同传 `~/.pi/agent/skills/`（userDirs.skills）与 `~/.agents/skills/`（userAgentsSkillsDir）两个 user 级入口；同名技能按 realpath 去重，但 symlink 与实体副本 realpath 不同 → 每个技能报一条 `name "<x>" collision`（共 78 条），且从未清理。
+- 同时暴露 4 条 YAML `Map keys must be unique`：`734a143`（chore: lock SKILL.md + metadata to 2026.09.14-1）批量注入 `version`/`synced-at` 时，对已有 semver `version:` 的 create-migration / parse-prd 产生重复 key；同批还把注入行插进了 blueprint-e2e 代码示例与 speckit-specify 列表项正文（无 YAML 报错但内容被毁）。
+- 宿主导入（`~/.agents`、`~/.claude`、`~/.trae*`）为实体副本，与仓库漂移后不会自动更新：`cp -R` 出来的错误 frontmatter 在 4 个宿主目录同时复现。
+
+## Decisions
+
+- `sync_pi` 复用 `is_shared_agent_skill` + `prune_shared_duplicates(target,label)`（与 Codex/Qoder 同策略）：共享入口已提供的技能不在 PI 目录重复注册；存量 78 个重复 symlink 一次性清理。
+- frontmatter 修复以 `734a143` 的意图为准：保留日期锁 `version: "2026.09.14-1"` 与 `synced-at`，删除旧 semver `version:`；正文两处按 `734a143^` 精确还原。
+- 修复同步至全部宿主实体副本（~/.agents、~/.claude、~/.trae、~/.trae-cn）与 7 个项目副本（`sync.sh --verify` 全量重拷自愈）。
+
+## Host audit（同根因排查矩阵，2026-09-17）
+
+- Grok：`grok inspect` 实测按名优先级去重（109 技能、0 告警）；OpenCode：本会话实证三入口按名去重；Kimi：`mergeAllAvailableSkills` 重名静默丢弃；Codex/Qoder/ZCode：已由共享入口去重策略覆盖；Claude/Trae：多 scope 属设计内行为，无 collision 报错。
+- YAML 层：403 个 SKILL.md（仓库源 + 11 宿主根 + gemini/plugins）用 Pi 同款 `yaml` 库 `uniqueKeys` 严格模式全量扫描 = 0 错误。
+
+## Known costs / follow-up
+
+- **共享入口新鲜度成为单点**：`~/.agents/skills/` 现为 78 个实体副本（非 symlink），`sync_zcode` 对已存在实体目录仅跳过（sync.sh:1227-1231 附近），后续 `categories/` 变更不会自动传播，而 Pi/Codex/Qoder 均依赖该入口；当前 drift=0，建议后续恢复共享入口 symlink 或为实体副本增加 drift 修复（S6 审查者标记为最重要 follow-up）。
+- `prune_shared_duplicates` 备份目录名含空格（label "PI Agent"），且 `*-shared-*` 未纳入 2 份保留清理（既有机制，本 PR 首次实际使用该 label 时未产生备份）。
