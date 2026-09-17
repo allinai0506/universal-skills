@@ -161,12 +161,15 @@ is_user_level_agent_skill() {
     [ -f "$HOME/.agents/skills/$skill_name/SKILL.md" ]
 }
 
-# 清理 Codex 入口中由 universal-skills 管理、且已被 ~/.agents/skills/ 覆盖的重复项。
+# 清理工具入口（Codex/Qoder 等）中由 universal-skills 管理、且已被 ~/.agents/skills/ 覆盖的重复项。
+# Codex 与 qoder-cn 都会同时加载自己的 skills 目录和 ~/.agents/skills/，
+# 同名技能会在宿主侧产生 "overrides same-source skill" 告警噪声。
 # - universal symlink：直接删除链接（可由下一次切换配置恢复）
 # - 完全相同的实体副本：移动到 .backup，而不是不可恢复删除
 # - 内容不同的实体副本：保留并报警，避免覆盖工具管理的技能
-prune_codex_shared_duplicates() {
+prune_shared_duplicates() {
     local target="$1"
+    local label="${2:-Shared}"
     local shared_root="$HOME/.agents/skills"
     local entry skill_name shared_skill dest backup_root removed moved
     removed=0
@@ -190,19 +193,19 @@ prune_codex_shared_duplicates() {
         elif [ -d "$entry" ] && [ -f "$entry/SKILL.md" ]; then
             if diff -rq "$entry" "$shared_skill" >/dev/null 2>&1; then
                 if [ -z "${backup_root:-}" ]; then
-                    backup_root="$BACKUP_DIR/codex-shared-$(date +%Y%m%d-%H%M%S)"
+                    backup_root="$BACKUP_DIR/$(printf '%s' "$label" | tr '[:upper:]' '[:lower:]')-shared-$(date +%Y%m%d-%H%M%S)"
                     mkdir -p "$backup_root"
                 fi
                 mv "$entry" "$backup_root/$skill_name"
                 moved=$((moved + 1))
             else
-                warn "Codex 重复技能 [$skill_name] 与 ~/.agents/skills/ 内容不同，保留 Codex 实体副本"
+                warn "$label 重复技能 [$skill_name] 与 ~/.agents/skills/ 内容不同，保留 $label 实体副本"
             fi
         fi
     done
 
-    [ "$removed" -gt 0 ] && log "Codex 共享入口重复 symlink 已清理 ($removed 个)"
-    [ "$moved" -gt 0 ] && log "Codex 共享入口重复实体副本已移入备份 ($moved 个): ${backup_root}"
+    [ "$removed" -gt 0 ] && log "$label 共享入口重复 symlink 已清理 ($removed 个)"
+    [ "$moved" -gt 0 ] && log "$label 共享入口重复实体副本已移入备份 ($moved 个): ${backup_root}"
     return 0
 }
 
@@ -1106,7 +1109,7 @@ sync_codex() {
     # rm 过程中 .system 被并发重建会导致 rm 报错 + set -e 中断，目标被清空（2026-09-10 实测）。
     # 只管理我们创建的 symlink：补缺失、更新指向、删孤立；点文件与实体原样保留。
     mkdir -p "$target"
-    prune_codex_shared_duplicates "$target"
+    prune_shared_duplicates "$target" "Codex"
 
     local skill_count=0
     local shared_skipped=0
@@ -1340,10 +1343,10 @@ sync_grok() {
     log "  路径: ~/.grok/skills/"
 }
 
-# 同步到 Qoder (~/.qoder/skills/)
-# Qoder 从 ~/.qoder/skills/ 加载用户级技能。
-# 这里显式增量 symlink，保证不依赖任何兼容开关即可注册，
-# 并保护已有的非 universal-skills 技能（如 lark-*）。
+# 同步到 Qoder (~/.qoder/skills/，~/.qoder 是指向 ~/.qoder-cn 的 symlink)
+# qoder-cn 会同时加载 ~/.qoder/skills/ 和 ~/.agents/skills/ 两个用户级入口，
+# 同名技能触发 "overrides same-source skill" 告警。因此已被 ~/.agents/skills/
+# 覆盖的技能不再重复注册（与 Codex 策略一致），只补共享入口缺失的部分。
 sync_qoder() {
     local target="$HOME/.qoder/skills"
 
@@ -1356,9 +1359,11 @@ sync_qoder() {
     local duplicate_removed
     duplicate_removed=$(cleanup_duplicate_skill_links "$target")
     [ "$duplicate_removed" -gt 0 ] && log "  清理 Qoder 重复技能 symlink: $duplicate_removed 个"
+    prune_shared_duplicates "$target" "Qoder"
 
     local skill_count=0
     local skipped=0
+    local shared_skipped=0
     for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
         if is_syncable_skill_dir "$skill_dir"; then
             local skill_name="$(basename "$skill_dir")"
@@ -1372,6 +1377,11 @@ sync_qoder() {
                         rm -f "$link"
                     fi
                 fi
+                continue
+            fi
+            # ~/.agents/skills/ 已提供同名技能 → 不重复注册（避免 qoder-cn 双入口告警）
+            if is_shared_agent_skill "$skill_name"; then
+                shared_skipped=$((shared_skipped + 1))
                 continue
             fi
             local link="$target/$skill_name"
@@ -1407,6 +1417,7 @@ sync_qoder() {
     else
         log "Qoder skills 无需更新（全部已同步）"
     fi
+    [ $shared_skipped -gt 0 ] && log "  跳过 $shared_skipped 个 ~/.agents/skills/ 已提供技能（双入口去重）"
     log "  路径: ~/.qoder/skills/"
 }
 
@@ -2388,7 +2399,7 @@ echo "已同步的目标："
 [ "$SKIP_TRAE_CN" = false ] && echo "  ✓ TraeWork (~/.trae/skills/) ← 增量 symlink"
 [ "$SKIP_GROK" = false ] && echo "  ✓ Grok Build (~/.grok/skills/) ← 增量 symlink"
 [ "$SKIP_KIMI" = false ] && echo "  ✓ Kimi Code (~/.kimi-code/skills/ + config.toml)"
-[ "$SKIP_QODER" = false ] && echo "  ✓ Qoder (~/.qoder/skills/) ← 增量 symlink"
+[ "$SKIP_QODER" = false ] && echo "  ✓ Qoder (~/.qoder/skills/) ← 增量 symlink; ~/.agents/skills/ 共享入口去重"
 [ "$SKIP_OPENCODE" = false ] && echo "  ✓ OpenCode (~/.config/opencode/skills/) ← 增量 symlink"
 [ "$SKIP_PI" = false ] && echo "  ✓ PI Agent (~/.pi/agent/skills/) ← 增量 symlink"
 [ "$SKIP_PROJECTS" = false ] && echo "  ✓ 项目级 symlinks (clawd, xiyu, etc.)"
