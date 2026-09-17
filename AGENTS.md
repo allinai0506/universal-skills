@@ -161,6 +161,7 @@ Meta-tool for creating new skills with:
 The `sync.sh` script handles:
 - **Codex 项目级:** Symlink 所有技能到每个项目的 `.Codex/skills/`（零磁盘开销）
 - **Codex / ZCode:** 以 `~/.agents/skills/` 作为共享技能入口；`~/.codex/skills/` 只补充共享入口缺失项并保留 `.system`，避免同名技能双重注册
+- **Qoder (`~/.qoder` → `~/.qoder-cn`):** 增量 symlink 到 `~/.qoder/skills/`；`qoder-cn` 同时加载 `~/.agents/skills/`，共享入口已提供的同名技能不再重复注册（去重消除 "overrides same-source skill" 告警）
 - **Trae CN Agent:** 增量 symlink 到 `~/.trae-cn/skills/`，保护 marketplace/builtin 技能
 - **ZCode/Agent:** 增量 symlink 到 `~/.agents/skills/`，清理旧 `~/.zcode/skills/` universal symlink 避免重复加载
 - **Cursor:** 不再生成 `.cursor/rules/*.mdc` 技能规则
