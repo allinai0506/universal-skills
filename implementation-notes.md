@@ -364,3 +364,17 @@ Branch: `feat/unified-dev-flow-entry-gate`
 - checker 编辑计数泛化：EDIT_TOOL_PATTERN 覆盖 agy 三工具名（transcript 实测取样）；Claude 系行为不变（回归测试锁）。
 - OpenCode 无可阻塞 stop 事件 → session.idle 提醒器（计数≥8、每会话一次、toast+log），human-in-loop，明示 warn-only。
 - ZCode 无 hook API（cli/config.json 仅 plugins+mcp；v2/setting.json 无 hook 键）→ prompt 版 only。附带发现其 MCP 已有 everme 记忆 + sequential-thinking，记入记忆 rollout。
+
+## Task: qoder-cn 双入口技能去重（PR !43）
+
+## Findings
+
+- qoder-cn 同时加载 `~/.qoder/skills/`（sync.sh 增量 symlink；`~/.qoder` 是指向 `~/.qoder-cn` 的 symlink）与共享入口 `~/.agents/skills/`，同名技能双重注册 → 每次登录输出 78 条 `Skill ... overrides same-source skill` 告警，且 `.qoder-cn` 版本获胜遮蔽共享入口。
+- 与 2026-09-13 Codex 去重（`prune_codex_shared_duplicates`）同根因：宿主多入口加载同名技能目录。
+
+## Decisions
+
+- 在"以共享入口为准"与"保留活 symlink"两个方案中，用户拍板：以 `~/.agents/skills/` 为唯一用户级来源，Qoder 只补共享入口缺失项（与 Codex 同策略）。
+- 泛化 `prune_codex_shared_duplicates` → `prune_shared_duplicates(target, label)`（Codex 行为与 `codex-shared-<ts>` 备份命名不变），`sync_qoder` 复用去重 + `is_shared_agent_skill` 跳过。
+- 存量 78 个重复 symlink 已清理；`~/.qoder-cn/skills/` 仅剩 `ego-browser`（不在共享入口，无冲突）。
+- 已知代价（S6 审查记录）：Qoder 技能版本跟随 `~/.agents/skills/` 的 App 拷贝节奏，可能滞后于仓库；`*-shared-*` 备份未纳入 2 份保留清理（Codex 既有模式，非本次引入）。
