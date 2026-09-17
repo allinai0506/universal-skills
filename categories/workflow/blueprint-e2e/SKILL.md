@@ -264,9 +264,7 @@ node .claude/skills/blueprint-e2e/scripts/generate-skeleton.mjs \
 
 ```javascript
 // ✅ 正确：用 HaveCount(0) 检查按钮不存在
-const btn = page.getByRole('button', { name: '删除'
-version: "2026.09.14-1"
-synced-at: "2026-09-14T07:43:18" })
+const btn = page.getByRole('button', { name: '删除' })
 await expect(btn).toHaveCount(0)
 
 // ❌ 错误：用 toBeHidden() 可能误报

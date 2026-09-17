@@ -2,7 +2,6 @@
 name: parse-prd
 version: "2026.09.14-1"
 synced-at: "2026-09-14T07:43:18"
-version: 1.0.1
 description: "解析飞书 PRD 文档：提取正文、画板、截图、HTML 片段和注释，合并为结构化需求简报。当用户提供飞书 PRD 链接时自动触发。"
 allowed-tools: Read, Write, Grep, Bash
 ---
