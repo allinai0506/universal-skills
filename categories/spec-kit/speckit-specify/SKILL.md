@@ -1,7 +1,7 @@
 ---
 name: "speckit-specify"
-version: "2026.09.14-1"
-synced-at: "2026-09-14T07:43:18"
+version: "2026.09.17-1"
+synced-at: "2026-09-17T20:08:20"
 description: "Create or update the feature specification from a natural language feature description."
 argument-hint: "Describe the feature you want to specify"
 compatibility: "Requires spec-kit project structure with .specify/ directory"
@@ -91,9 +91,7 @@ Given that feature description, do this:
       - Check `.specify/init-options.json` for `feature_numbering` (preferred) or `branch_numbering` (deprecated, migration only — will be removed in a future release)
       - If `"timestamp"`: prefix is `YYYYMMDD-HHMMSS` (current timestamp)
       - If `"sequential"` or absent: prefix is `NNN` (next available 3-digit number after scanning existing directories in `specs/`)
-      - Construct the directory name: `<prefix>-<short-name>`
-version: "2026.09.14-1"
-synced-at: "2026-09-14T07:43:18" (e.g., `003-user-auth` or `20260319-143022-user-auth`)
+      - Construct the directory name: `<prefix>-<short-name>` (e.g., `003-user-auth` or `20260319-143022-user-auth`)
       - Set `SPECIFY_FEATURE_DIRECTORY` to `specs/<directory-name>`
       - If `branch_numbering` was used (and `feature_numbering` was absent), emit a one-line warning: "⚠️ `branch_numbering` in init-options.json is deprecated. Rename to `feature_numbering`."
 

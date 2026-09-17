@@ -2,7 +2,6 @@
 name: create-migration
 version: "2026.09.14-1"
 synced-at: "2026-09-14T07:43:18"
-version: 1.0.0
 description: "创建 Flyway 数据库迁移脚本（MySQL 8.0），自动检测下一版本号、生成迁移 SQL 和回滚脚本、执行格式校验。当检测到新增或修改数据库表结构需求时自动触发。"
 allowed-tools: Read, Write, Bash, Grep
 ---

@@ -1492,9 +1492,10 @@ sync_opencode() {
 }
 
 # 同步到 PI Agent (~/.pi/agent/skills/)
-# PI 从 ~/.pi/agent/skills/ 加载全局技能，
-# 同时也兼容读取 ~/.agents/skills/。
-# 这里显式增量 symlink，保证不依赖兼容层即可注册。
+# PI 会同时加载 ~/.pi/agent/skills/ 与 ~/.agents/skills/ 两个 user 级入口
+# （pi 0.85 loadSkills：userDirs.skills + userAgentsSkillsDir）。
+# 两处同名技能会在宿主侧报 "name <x> collision" 告警噪声，
+# 因此 ~/.agents/skills/ 已提供的技能不再在 PI 目录重复注册。
 sync_pi() {
     local target="$HOME/.pi/agent/skills"
 
@@ -1507,12 +1508,19 @@ sync_pi() {
     local duplicate_removed
     duplicate_removed=$(cleanup_duplicate_skill_links "$target")
     [ "$duplicate_removed" -gt 0 ] && log "  清理 PI Agent 重复技能 symlink: $duplicate_removed 个"
+    prune_shared_duplicates "$target" "PI Agent"
 
     local skill_count=0
     local skipped=0
+    local shared_skipped=0
     for skill_dir in "$UNIVERSAL_SKILLS/categories"/*/*; do
         if is_syncable_skill_dir "$skill_dir"; then
             local skill_name="$(basename "$skill_dir")"
+            # ~/.agents/skills/ 已提供同名技能 -> 不重复注册（避免 PI 双入口 collision）
+            if is_shared_agent_skill "$skill_name"; then
+                shared_skipped=$((shared_skipped + 1))
+                continue
+            fi
             # 全局同步：跳过项目专用技能，清理遗留 symlink
             if is_project_only_skill "$skill_name"; then
                 local link="$target/$skill_name"
@@ -1553,10 +1561,10 @@ sync_pi() {
     done
 
     if [ $skill_count -gt 0 ]; then
-        success "PI Agent skills 已同步 ($skill_count 个技能，增量 symlink)"
+        success "PI Agent skills 已同步 ($skill_count 个独占 symlink，跳过 $shared_skipped 个 ~/.agents/skills/ 已提供技能)"
         [ $skipped -gt 0 ] && warn "  跳过 $skipped 个已存在的非 universal-skills 技能"
     else
-        log "PI Agent skills 无需更新（全部已同步）"
+        log "PI Agent skills 无需更新（$shared_skipped 个技能由 ~/.agents/skills/ 提供）"
     fi
     log "  路径: ~/.pi/agent/skills/"
 }
@@ -2401,7 +2409,7 @@ echo "已同步的目标："
 [ "$SKIP_KIMI" = false ] && echo "  ✓ Kimi Code (~/.kimi-code/skills/ + config.toml)"
 [ "$SKIP_QODER" = false ] && echo "  ✓ Qoder (~/.qoder/skills/) ← 增量 symlink; ~/.agents/skills/ 共享入口去重"
 [ "$SKIP_OPENCODE" = false ] && echo "  ✓ OpenCode (~/.config/opencode/skills/) ← 增量 symlink"
-[ "$SKIP_PI" = false ] && echo "  ✓ PI Agent (~/.pi/agent/skills/) ← 增量 symlink"
+[ "$SKIP_PI" = false ] && echo "  ✓ PI Agent (~/.pi/agent/skills/) ← 增量 symlink; ~/.agents/skills/ 共享入口去重"
 [ "$SKIP_PROJECTS" = false ] && echo "  ✓ 项目级 symlinks (clawd, xiyu, etc.)"
 echo "  ✓ 统一开发流程物理门禁 (PreToolUse, Stop check-review, Git pre-push)"
 echo ""
