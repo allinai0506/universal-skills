@@ -1,7 +1,7 @@
 ---
 name: "speckit-specify"
-version: "2026.09.14-1"
-synced-at: "2026-09-14T07:43:18"
+version: "2026.09.17-1"
+synced-at: "2026-09-17T20:08:20"
 description: "Create or update the feature specification from a natural language feature description."
 argument-hint: "Describe the feature you want to specify"
 compatibility: "Requires spec-kit project structure with .specify/ directory"
