@@ -1897,6 +1897,9 @@ EOF
             local hook_dir
             hook_dir="$(git -C "$repo" rev-parse --git-path hooks 2>/dev/null || echo "")"
             if [ -n "$hook_dir" ]; then
+                if [[ "$hook_dir" != /* ]]; then
+                    hook_dir="$repo/$hook_dir"
+                fi
                 mkdir -p "$hook_dir"
                 local pre_push="$hook_dir/pre-push"
                 cp -f "$claude_scripts/git-pre-push-guard.sh" "$pre_push"

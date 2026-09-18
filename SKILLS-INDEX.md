@@ -1,6 +1,6 @@
 # SKILLS-INDEX
 
-> 技能来源速查表 · 自动生成于 2026-09-17 20:08 · 共 79 个一级技能。
+> 技能来源速查表 · 自动生成于 2026-09-18 08:52 · 共 80 个一级技能。
 > 按「来源」检索：公开技能包（外部大神编写的成套技能） / 自建・单个技能。
 > 技能由 AI 按 description 自动触发，无需记住名字。
 
@@ -116,6 +116,7 @@ _编码规范与模式_
 | `performance-tuning` | 针对高 CPU、内存与锁竞争场景做性能优化 |
 | `self-verifying-tests` | 编写跨层自验证测试核对 UI、数据库与代码一致性 |
 | `test-driven-development` | 实现功能前先写失败测试并遵循 TDD 方法论 |
+| `typesafe-ai` | 基于 TypeSafe System One 模型（Jev）将自然语言与应用状态转换为类型化判断与概率决策原语 |
 
 ### debugging
 _调试方法论_
