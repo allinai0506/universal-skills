@@ -17,6 +17,7 @@ coding,regex-vs-llm-structured-text,在正则与 LLM 之间选择结构化文本
 coding,self-verifying-tests,编写跨层自验证测试核对 UI、数据库与代码一致性
 coding,tdd-workflow,强制 TDD 开发并覆盖单元、集成与端到端测试
 coding,test-driven-development,实现功能前先写失败测试并遵循 TDD 方法论
+coding,typesafe-ai,基于 TypeSafe System One 模型（Jev）将自然语言与应用状态转换为类型化判断与概率决策原语
 debugging,paranoid-debugging,对生产关键代码做证据驱动的高强度再验证
 debugging,root-cause-hunter,逆向追踪调用链定位问题源头并证明 bug 必然发生
 debugging,systematic-debugging,遇到 bug 或异常时先系统诊断再提出修复方案

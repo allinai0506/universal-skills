@@ -35,6 +35,7 @@ _编码规范与模式_
 | `performance-tuning` | 针对高 CPU、内存与锁竞争场景做性能优化 |
 | `self-verifying-tests` | 编写跨层自验证测试核对 UI、数据库与代码一致性 |
 | `test-driven-development` | 实现功能前先写失败测试并遵循 TDD 方法论 |
+| `typesafe-ai` | 基于 TypeSafe System One 模型（Jev）将自然语言与应用状态转换为类型化判断与概率决策原语 |
 
 ### 🐛 debugging
 _调试方法论_
