@@ -1848,7 +1848,7 @@ except Exception:
 # entry-gate PreToolUse
 data["entry-gate"] = {
     "PreToolUse": [{
-        "matcher": "write_to_file|replace_file_content",
+        "matcher": "code_action|write_to_file|replace_file_content",
         "hooks": [{
             "command": "python3 ~/.claude/scripts/entry-gate-antigravity.py",
             "timeout": 10,
@@ -1857,14 +1857,12 @@ data["entry-gate"] = {
     }]
 }
 
-# entry-gate-stop Stop hook
+# entry-gate-stop Stop hook (Flat structure: Stop is a list of handler objects directly)
 data["entry-gate-stop"] = {
     "Stop": [{
-        "hooks": [{
-            "command": "python3 ~/.claude/scripts/entry-gate-antigravity.py --stop",
-            "timeout": 30,
-            "type": "command"
-        }]
+        "command": "python3 ~/.claude/scripts/entry-gate-antigravity.py --stop",
+        "timeout": 30,
+        "type": "command"
     }]
 }
 
@@ -1874,20 +1872,37 @@ with open(hooks_path, "w", encoding="utf-8") as f:
 EOF
     success "已配置 Antigravity / Gemini CLI 门禁 (~/.gemini/config/hooks.json)"
 
-    # 5. 为西域等 Git 仓库安装 pre-push 门禁
+    # 5. 为全量已知 Git 仓库及 worktree 安装 pre-push 物理门禁
     local target_repos=(
+        "$HOME/clawd"
+        "$HOME/clawd-work"
+        "$HOME/nexusarchive"
+        "$HOME/everything-claude-code"
+        "$HOME/JLAF"
+        "$HOME/PLM"
+        "$HOME/zhitoujianli"
+        "$HOME/liujie"
+        "$HOME/mimo"
         "$HOME/xiyu/xiyu-bid-poc"
         "$UNIVERSAL_SKILLS"
     )
+    if [ -d "$HOME/xiyu/worktrees" ]; then
+        while IFS= read -r -d '' wt; do
+            target_repos+=("$wt")
+        done < <(find "$HOME/xiyu/worktrees" -maxdepth 1 -mindepth 1 -type d -print0 2>/dev/null)
+    fi
+
     for repo in "${target_repos[@]}"; do
-        if [ -d "$repo/.git" ]; then
-            local git_dir="$repo/.git"
-            local hook_dir="$git_dir/hooks"
-            mkdir -p "$hook_dir"
-            local pre_push="$hook_dir/pre-push"
-            cp -f "$claude_scripts/git-pre-push-guard.sh" "$pre_push"
-            chmod +x "$pre_push"
-            success "已安装 Git pre-push 门禁: $pre_push"
+        if [ -d "$repo/.git" ] || [ -f "$repo/.git" ]; then
+            local hook_dir
+            hook_dir="$(git -C "$repo" rev-parse --git-path hooks 2>/dev/null || echo "")"
+            if [ -n "$hook_dir" ]; then
+                mkdir -p "$hook_dir"
+                local pre_push="$hook_dir/pre-push"
+                cp -f "$claude_scripts/git-pre-push-guard.sh" "$pre_push"
+                chmod +x "$pre_push"
+                success "已安装 Git pre-push 门禁: $repo -> $pre_push"
+            fi
         fi
     done
 }
