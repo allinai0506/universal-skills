@@ -1,5 +1,7 @@
 ---
 name: typesafe-ai
+version: "2026.09.18-1"
+synced-at: "2026-09-18T09:03:19"
 license: MIT
 description: >
   Build AI-powered software with TypeSafe: small units of AI intelligence you
