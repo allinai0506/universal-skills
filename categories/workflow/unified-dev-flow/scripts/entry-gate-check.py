@@ -199,6 +199,20 @@ def is_artifact_target(project_dir: str, target: str) -> bool:
             and base.startswith("entry-gate-") and base.endswith(".md"))
 
 
+def is_review_target(project_dir: str, target: str) -> bool:
+    """True if target is a review artifact (.omc/review-*.md)."""
+    if not target:
+        return False
+    abs_target = os.path.abspath(
+        target if os.path.isabs(target) else os.path.join(project_dir, target))
+    abs_proj = os.path.abspath(project_dir)
+    if not _is_within(abs_proj, abs_target):
+        return False
+    parent, base = os.path.split(abs_target)
+    return (os.path.basename(parent) == ".omc"
+            and base.startswith("review-") and base.endswith(".md"))
+
+
 def artifact_path(project_dir: str, session_id: str) -> str:
     return os.path.join(project_dir, ".omc", f"entry-gate-{session_id}.md")
 
@@ -455,21 +469,81 @@ def validate_verify(content: str) -> str | None:
 
 
 def validate_review(content: str) -> str | None:
-    """S6 arrival declaration: heading + verdict + reviewer + round + google-code-review."""
+    """S6 arrival declaration: heading + verdict + reviewer + round + review framework."""
     if not re.search(r"^##\s*.*评审结论", content, re.MULTILINE):
         return "缺少章节：评审结论（## 评审结论）。"
     if not re.search(r"\b(MERGE_READY|NEEDS_FIXES|ESCALATE)\b", content):
         return "评审结论缺少 verdict（MERGE_READY / NEEDS_FIXES / ESCALATE）。"
-    if not re.search(r"reviewer\s*[：:]", content, re.IGNORECASE):
-        return "评审结论缺少 reviewer: 行（注明模型/人，micro 可写 self）。"
+    m_rev = re.search(r"reviewer\s*[：:]\s*([^\n]+)", content, re.IGNORECASE)
+    if not m_rev or not m_rev.group(1).strip():
+        return "评审结论缺少 reviewer: 行（须注明独立审查模型或审视者）。"
+    rev_val = m_rev.group(1).strip().lower()
+    if rev_val in ("self", "myself", "me", "main", "main-agent", "author", "self-review"):
+        return "评审结论 reviewer 不能为 self/主代理：S6 审查必须由独立 Reviewer 或独立审查子代理执行！"
     m = re.search(r"round\s*[：:]\s*(\d+)", content, re.IGNORECASE)
     if not m or int(m.group(1)) < 1:
         return "评审结论缺少 round: N 行（N ≥ 1，本轮评审计数）。"
-    if not re.search(r"(?:google-code-review|xiyu-code-review|code-review)", content, re.IGNORECASE):
-        return "缺少审查记录：S6 评审必须包含 google-code-review、xiyu-code-review 或 code-review 审查结论。"
+    if not re.search(r"(?:google-code-review|xiyu-code-review|code-review|flow(?::|\s+)review)", content, re.IGNORECASE):
+        return "缺少审查记录：S6 评审必须包含 google-code-review、xiyu-code-review、code-review 或 flow:review 审查结论。"
     if len(content) < REVIEW_MIN_CHARS:
         return f"评审结论过短（{len(content)} < {REVIEW_MIN_CHARS} 字）。"
     return None
+
+
+def compute_diff_hash(project_dir: str) -> str | None:
+    """Compute sha256 hash of git diff from origin/main (or HEAD~1 if main not found)."""
+    try:
+        base = "origin/main"
+        res_base = subprocess.run(["git", "merge-base", "origin/main", "HEAD"],
+                                  cwd=project_dir, capture_output=True, text=True, timeout=5)
+        if res_base.returncode == 0 and res_base.stdout.strip():
+            base = res_base.stdout.strip()
+        res_diff = subprocess.run(["git", "diff", f"{base}..HEAD"],
+                                  cwd=project_dir, capture_output=True, text=True, timeout=10)
+        if res_diff.returncode == 0:
+            import hashlib
+            return hashlib.sha256(res_diff.stdout.encode("utf-8")).hexdigest()
+    except Exception:
+        pass
+    return None
+
+
+def validate_review_provenance(project_dir: str, review_content: str) -> str | None:
+    """Validate that review provenance matches current git state.
+    If diff_hash is present in the review, it must match current repository diff.
+    """
+    m_diff = re.search(r"diff_hash\s*[：:]\s*([a-f0-9]{64})", review_content, re.IGNORECASE)
+    if m_diff:
+        expected_diff_hash = m_diff.group(1).strip()
+        current_diff_hash = compute_diff_hash(project_dir)
+        if current_diff_hash and current_diff_hash != expected_diff_hash:
+            return (f"S6 评审凭证已失效：检测到代码在审查后发生变更（diff_hash 不匹配）！\n"
+                    f"  凭据中的 hash: {expected_diff_hash[:12]}...\n"
+                    f"  当前的 diff hash: {current_diff_hash[:12]}...\n"
+                    "  【铁律】任何源码修改都会导致先前的审查证据失效。必须重新执行 S6 Code Review！")
+    return None
+
+
+def verify_transcript_reviewer(transcript_text: str) -> tuple[bool, str]:
+    """Scan transcript for independent reviewer execution:
+    1. invoke_subagent with role matching Reviewer / code-review; or
+    2. execution of flow:review / xiyu-code-review / google-code-review.
+    """
+    if not transcript_text:
+        return True, ""
+
+    if re.search(r'"invoke_subagent"', transcript_text) or re.search(r'"name":\s*"invoke_subagent"', transcript_text):
+        if re.search(r'"[Rr]ole":\s*"[^"]*(?:[Rr]eview|审|audit)[^"]*"', transcript_text):
+            return True, ""
+        if re.search(r'"TypeName":\s*"[^"]*(?:[Rr]eview|code-review)[^"]*"', transcript_text):
+            return True, ""
+
+    if re.search(r'flow(?::|\s+)review|xiyu-code-review|google-code-review', transcript_text):
+        return True, ""
+
+    return False, ("Transcript 审计发现：本次会话中未检测到独立 Reviewer 子代理（invoke_subagent）调用，"
+                  "亦未检测到 flow:review / xiyu-code-review 审查命令执行记录！"
+                  "严禁主 Agent 自行撰写审查结论，必须派遣独立审查者。")
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -478,6 +552,11 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--check-review", action="store_true")
     ap.add_argument("--guard-pr", action="store_true")
     ap.add_argument("--guard-push", action="store_true")
+    ap.add_argument("--guard-commit", action="store_true")
+    ap.add_argument("--record-review", action="store_true")
+    ap.add_argument("--reviewer", default="")
+    ap.add_argument("--verdict", default="MERGE_READY")
+    ap.add_argument("--notes", default="")
     ap.add_argument("--branch", default="")
     ap.add_argument("--transcript", default="")
     ap.add_argument("--trail", default="")
@@ -502,7 +581,19 @@ def main(argv: list[str] | None = None) -> None:
     if early.guard_push:
         cmd_guard_push(early)
         return
+    if early.guard_commit:
+        cmd_guard_commit(early)
+        return
+    if early.record_review:
+        cmd_record_review(early)
+        return
     project_dir, session_id, target = resolve_context(argv)
+    if target and is_review_target(project_dir, target):
+        fail("[DENY 权限拦截]: 主 Agent 无权直接手写或修改 S6 审查工件 (.omc/review-*.md)！\n"
+             "【铁律】裁判不能由选手兼任。S6 Code Review 必须由独立 Reviewer 子代理（invoke_subagent）评估，"
+             "或通过 flow:review / xiyu-code-review CLI 工具由外部独立进程生成并落盘。\n"
+             "严禁主 Agent 调用写工具自审伪造审查凭据！",
+             kind="review-write-forbidden", session=session_id, project=project_dir)
     if target and is_artifact_target(project_dir, target):
         sys.exit(0)  # writing the artifact itself is always allowed
     path = artifact_path(project_dir, session_id)
@@ -739,12 +830,13 @@ def cmd_check_review(ns: argparse.Namespace) -> None:
         sys.exit(0)
     bump_counter(counter)
     kind, path, reason = problems[0]
-    hint = ("S6 无工件≈无门：有源码写操作就必须宣告 S5/S6。补两个小文件后再结束：\n"
-            f"  {verify_artifact_path(project_dir, session_id)}"
-            "（## 验证证据 + S4 ai-slop-cleaner 瘦身记录 + 命令/exit 条目）\n"
-            f"  {review_artifact_path(project_dir, session_id)}"
-            "（## 评审结论 + verdict + reviewer: + round: N + google-code-review 结论）\n"
-            "micro 只需 3–5 行（约 15 秒），不许重述规则，只写实例。")
+    hint = ("S5/S6 阶段工件缺失：源码写操作完成后，必须完成验证 + 独立审查才能结束会话。\n"
+            f"  1. 验证工件: {verify_artifact_path(project_dir, session_id)}\n"
+            "     （## 验证证据 章节 + S4 ai-slop-cleaner 瘦身记录 + 命令/exit code 列表）\n"
+            f"  2. 审查工件: {review_artifact_path(project_dir, session_id)}\n"
+            "     （必须通过 flow:review / google-code-review / xiyu-code-review 独立审查工具生成，\n"
+            "      严禁主 Agent 自行手写此文件！）\n"
+            "  【铁律】主 Agent 不能自证清白，审查者必须独立于编码者。")
     fail(f"{reason}\n当前缺失或不合格：{path}\n{hint}",
          kind=kind, session=session_id, project=project_dir)
 
@@ -791,6 +883,139 @@ def find_latest_omc_pair(project_dir: str, session_id: str = "") -> tuple[str | 
                 pass
     best_verify = max(verify_files, key=lambda x: x[0])[1] if verify_files else None
     return best_verify, best_review
+
+
+def cmd_guard_commit(ns: argparse.Namespace) -> None:
+    """Pre-commit hook: enforce branch-specific Entry Gate artifact exists.
+
+    Replaces the old glob-based ls .omc/entry-gate-*.md which allowed any
+    historical file to satisfy the gate. Now binds strictly to the current
+    git branch name, preventing stale .omc/ directory pollution from leaking
+    through.
+
+    Exit codes: 0 = pass, 1 = block
+    """
+    project_dir = ns.project_dir or os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd())
+
+    # Detect current branch
+    try:
+        res = subprocess.run(["git", "branch", "--show-current"],
+                             cwd=project_dir, capture_output=True, text=True, timeout=5)
+        branch = res.stdout.strip() if res.returncode == 0 else ""
+    except Exception:
+        branch = ""
+
+    # Sanitize branch name for filesystem use
+    safe_branch = re.sub(r"[^A-Za-z0-9_-]", "_", branch) if branch else ""
+
+    if safe_branch:
+        # Strict branch-bound check: require .omc/entry-gate-<branch>.md
+        branch_gate = os.path.join(project_dir, ".omc", f"entry-gate-{safe_branch}.md")
+        if os.path.isfile(branch_gate):
+            # Validate content
+            try:
+                with open(branch_gate, "r", encoding="utf-8") as f:
+                    content = f.read()
+                reason = validate(content)
+                if reason is None:
+                    sys.stdout.write(f"✅ [pre-commit] Entry Gate (branch: {branch}): {branch_gate}\n")
+                    sys.exit(0)
+                else:
+                    sys.stderr.write(
+                        f"❌ [unified-dev-flow 阻断]: 分支入口工件不合格！\n"
+                        f"  分支: {branch}\n  文件: {branch_gate}\n  原因: {reason}\n"
+                    )
+                    sys.exit(1)
+            except OSError as e:
+                sys.stderr.write(f"❌ 无法读取分支入口工件: {branch_gate} ({e})\n")
+                sys.exit(1)
+        else:
+            # Fall back to session-based artifact (for agents without branch naming)
+            session_id = ns.session_id or "default"
+            session_gate = artifact_path(project_dir, session_id)
+            if os.path.isfile(session_gate):
+                try:
+                    with open(session_gate, "r", encoding="utf-8") as f:
+                        content = f.read()
+                    if validate(content) is None:
+                        sys.stdout.write(f"✅ [pre-commit] Entry Gate (session-bound): {session_gate}\n")
+                        sys.exit(0)
+                except OSError:
+                    pass
+            # No valid artifact found for current branch
+            msg = (
+                f"\n❌ [unified-dev-flow 阻断]: 当前分支「{branch}」没有专属入口工件！\n"
+                f"  期望文件: {os.path.join('.omc', f'entry-gate-{safe_branch}.md')}\n"
+                "  【必须前置】: 提交业务源码前，必须先写入专属分支入口工件，声明：\n"
+                "    1. 理解和假设\n    2. 最小方案 + 文件范围\n    3. 范围纪律\n    4. 验证计划\n"
+                f"  （旧会话的 .omc/entry-gate-*.md 不满足当前分支「{branch}」的门禁需求）\n"
+            )
+            sys.stderr.write(msg)
+            sys.exit(1)
+    else:
+        # No branch info: fall back to session-based check
+        session_id = ns.session_id or "default"
+        path = artifact_path(project_dir, session_id)
+        if not os.path.isfile(path):
+            sys.stderr.write(f"❌ [unified-dev-flow 阻断]: 缺少入口工件: {path}\n")
+            sys.exit(1)
+        sys.exit(0)
+
+
+def cmd_record_review(ns: argparse.Namespace) -> None:
+    """Write S6 review artifact from an authorized external reviewer.
+
+    This command is the ONLY sanctioned way for the main agent to write
+    a review artifact. It requires:
+      - --reviewer: the independent reviewer identity (not 'self')
+      - --verdict: MERGE_READY / NEEDS_FIXES / ESCALATE
+      - The review must originate from a subagent or external tool call,
+        validated by transcript-based evidence.
+
+    The generated artifact is stamped with the diff_hash of the current
+    repository state to detect post-review code modifications.
+    """
+    project_dir = ns.project_dir or os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd())
+    session_id = re.sub(r"[^A-Za-z0-9_-]", "_", ns.session_id or "default")
+    reviewer = (ns.reviewer or "").strip()
+    verdict = (ns.verdict or "MERGE_READY").strip().upper()
+    notes = (ns.notes or "").strip()
+
+    if not reviewer:
+        sys.stderr.write("❌ [record-review] --reviewer 必填：必须指明独立审查者身份\n")
+        sys.exit(1)
+    if reviewer.lower() in ("self", "myself", "me", "main", "main-agent", "author"):
+        sys.stderr.write("❌ [record-review] reviewer 不能为 self/主代理：S6 审查必须由独立 Reviewer 执行！\n")
+        sys.exit(1)
+    if verdict not in ("MERGE_READY", "NEEDS_FIXES", "ESCALATE"):
+        sys.stderr.write(f"❌ [record-review] 无效 verdict: {verdict}。必须是 MERGE_READY / NEEDS_FIXES / ESCALATE\n")
+        sys.exit(1)
+
+    diff_hash = compute_diff_hash(project_dir) or "unknown"
+    review_path = review_artifact_path(project_dir, session_id)
+    os.makedirs(os.path.dirname(review_path), exist_ok=True)
+    content = (
+        "## 评审结论\n\n"
+        f"verdict: {verdict}\n"
+        f"reviewer: {reviewer}\n"
+        "round: 1\n"
+        f"diff_hash: {diff_hash}\n"
+        "code-review: flow:review 独立子代理审查\n\n"
+        f"{notes}\n"
+    )
+    try:
+        with open(review_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        sys.stdout.write(
+            f"✅ [record-review] S6 评审工件已生成\n"
+            f"   reviewer: {reviewer} | verdict: {verdict}\n"
+            f"   diff_hash: {diff_hash[:16]}...\n"
+            f"   文件: {review_path}\n"
+        )
+        sys.exit(0)
+    except OSError as e:
+        sys.stderr.write(f"❌ [record-review] 无法写入评审工件: {review_path} ({e})\n")
+        sys.exit(1)
 
 
 def cmd_guard_pr(ns: argparse.Namespace) -> None:
@@ -899,6 +1124,35 @@ def cmd_guard_pr(ns: argparse.Namespace) -> None:
         sys.stderr.write(msg + "\n")
         log_block("guard-pr-verify-malformed", ns.session_id or "default", project_dir, v_reason)
         sys.exit(1)
+
+    # Diff hash provenance check: if review has a diff_hash, verify it matches current state
+    prov_reason = validate_review_provenance(project_dir, review_content)
+    if prov_reason:
+        sys.stderr.write(f"⛔ [unified-dev-flow 门禁阻断]: {prov_reason}\n")
+        log_block("guard-pr-stale-review", ns.session_id or "default", project_dir, prov_reason[:200])
+        sys.exit(1)
+
+    # Transcript reviewer verification: if transcript is available, check reviewer was independent
+    transcript_text = ""
+    if ns.transcript:
+        transcript_text = read_transcript_text(ns.transcript)
+    if not transcript_text:
+        # Try AGY default path
+        conv_id = ns.session_id or ""
+        if conv_id:
+            agy_transcript = os.path.expanduser(
+                f"~/.gemini/antigravity-cli/brain/{conv_id}/.system_generated/logs/transcript.jsonl"
+            )
+            if os.path.isfile(agy_transcript):
+                transcript_text = read_transcript_text(agy_transcript)
+
+    if transcript_text:
+        ok, transcript_reason = verify_transcript_reviewer(transcript_text)
+        if not ok:
+            sys.stderr.write(f"⛔ [unified-dev-flow 门禁阻断]: {transcript_reason}\n")
+            log_block("guard-pr-no-independent-reviewer", ns.session_id or "default",
+                      project_dir, transcript_reason[:200])
+            sys.exit(1)
 
     sys.stdout.write(
         f"✅ [unified-dev-flow 门禁放行] S6 Code Review 验证通过: verdict=MERGE_READY\n"
