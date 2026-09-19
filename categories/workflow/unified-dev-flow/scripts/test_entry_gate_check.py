@@ -499,9 +499,9 @@ def phase4_review() -> None:
                     "- rg -n -F 'Y' path/to/file.md → exit 0，命中 2 行\n")
     valid_review = ("## S6 评审结论\n"
                     "verdict: MERGE_READY\n"
-                    "reviewer: claude (self, micro tier)\n"
+                    "reviewer: subagent-reviewer-1\n"
                     "round: 1\n"
-                    "google-code-review 无阻断项；health 不适用（micro 豁免，见入口 §3）。\n")
+                    "google-code-review 无阻断项；三透镜审查全绿通过。\n")
 
     def write_review_files(proj: str, session: str,
                            verify: str | None = None,
@@ -802,17 +802,18 @@ def phase4_review() -> None:
                                       + ("r" * 40))
             r = run(["--guard-pr", "--project-dir", ph_proj, "--session-id", "ph-session",
                      "--branch", "feat/something"])
-            # Only block if compute_diff_hash can compute a real hash (requires git + origin/main or merge-base)
-            # In isolated test env without real remote, diff_hash check is best-effort; we test the logic
-            # by checking that if blocked, the reason includes diff_hash
-            if r.returncode == 1:
-                check("guard-pr-stale-diff-hash-blocks", "diff_hash" in r.stderr,
-                      f"exit={r.returncode} stderr={r.stderr[:300]}")
-            else:
-                # compute_diff_hash may return None in test env (no origin/main remote)
-                # Verify the review content at least has the fake hash (provenance check attempted)
-                check("guard-pr-stale-diff-hash-blocks", True,
-                      "diff_hash check skipped (no git remote in test env — provenance logic tested in unit test)")
+            check("guard-pr-stale-diff-hash-blocks", r.returncode == 1 and "diff_hash" in r.stderr,
+                  f"exit={r.returncode} stderr={r.stderr[:300]}")
+
+        # 52b. validate_review rejects 'claude (self)' due to word-boundary regex
+        with tempfile.TemporaryDirectory() as rv2_proj:
+            write_review_files(rv2_proj, "rv-self2",
+                               verify="## S5 验证证据\n- ai-slop-cleaner: deletion-first 完成\n- exit 0\n" + ("v" * 50),
+                               review="## S6 评审结论\nverdict: MERGE_READY\nreviewer: claude (self, no-baseline)\nround: 1\n"
+                                      "google-code-review 通过。\n" + ("r" * 40))
+            r = run(["--guard-pr", "--project-dir", rv2_proj, "--branch", "feat/test2"])
+            check("guard-pr-self-regex-blocks", r.returncode == 1 and "self" in r.stderr.lower(),
+                  f"exit={r.returncode} stderr={r.stderr[:300]}")
 
 
         # 53. Stop hook hint no longer contains "15 秒" / "micro" shortcut wording

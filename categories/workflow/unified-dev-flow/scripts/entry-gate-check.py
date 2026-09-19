@@ -478,7 +478,7 @@ def validate_review(content: str) -> str | None:
     if not m_rev or not m_rev.group(1).strip():
         return "评审结论缺少 reviewer: 行（须注明独立审查模型或审视者）。"
     rev_val = m_rev.group(1).strip().lower()
-    if rev_val in ("self", "myself", "me", "main", "main-agent", "author", "self-review"):
+    if re.search(r"\b(self|myself|me|main|main[-_]agent|author|self-review)\b", rev_val):
         return "评审结论 reviewer 不能为 self/主代理：S6 审查必须由独立 Reviewer 或独立审查子代理执行！"
     m = re.search(r"round\s*[：:]\s*(\d+)", content, re.IGNORECASE)
     if not m or int(m.group(1)) < 1:
@@ -491,13 +491,24 @@ def validate_review(content: str) -> str | None:
 
 
 def compute_diff_hash(project_dir: str) -> str | None:
-    """Compute sha256 hash of git diff from origin/main (or HEAD~1 if main not found)."""
+    """Compute sha256 hash of git diff from origin/main (or fallback base / HEAD~1 if not found)."""
     try:
-        base = "origin/main"
-        res_base = subprocess.run(["git", "merge-base", "origin/main", "HEAD"],
-                                  cwd=project_dir, capture_output=True, text=True, timeout=5)
-        if res_base.returncode == 0 and res_base.stdout.strip():
-            base = res_base.stdout.strip()
+        candidates = ("origin/main", "gitee/main", "main", "origin/master", "gitee/master", "master")
+        base = None
+        for candidate in candidates:
+            res_base = subprocess.run(["git", "merge-base", candidate, "HEAD"],
+                                      cwd=project_dir, capture_output=True, text=True, timeout=5)
+            if res_base.returncode == 0 and res_base.stdout.strip():
+                base = res_base.stdout.strip()
+                break
+        if not base:
+            res_rev = subprocess.run(["git", "rev-parse", "--verify", "HEAD~1"],
+                                     cwd=project_dir, capture_output=True, text=True, timeout=5)
+            if res_rev.returncode == 0 and res_rev.stdout.strip():
+                base = res_rev.stdout.strip()
+        if not base:
+            return None
+
         res_diff = subprocess.run(["git", "diff", f"{base}..HEAD"],
                                   cwd=project_dir, capture_output=True, text=True, timeout=10)
         if res_diff.returncode == 0:
@@ -841,19 +852,20 @@ def cmd_check_review(ns: argparse.Namespace) -> None:
          kind=kind, session=session_id, project=project_dir)
 
 
-def find_latest_omc_pair(project_dir: str, session_id: str = "") -> tuple[str | None, str | None]:
-    """Find (verify_path, review_path) under <project_dir>/.omc/.
+def find_latest_omc_pair(project_dir: str, session_id: str = "") -> tuple[str | None, str | None, str | None]:
+    """Find (verify_path, review_path, discovered_session) under <project_dir>/.omc/.
     If session_id is given, checks those paths directly.
     Otherwise scans for newest review-*.md and matching/newest verify-*.md.
     """
     omc_dir = os.path.join(project_dir, ".omc")
     if not os.path.isdir(omc_dir):
-        return None, None
+        return None, None, None
     if session_id:
         v_path = os.path.join(omc_dir, f"verify-{session_id}.md")
         r_path = os.path.join(omc_dir, f"review-{session_id}.md")
         return (v_path if os.path.isfile(v_path) else None,
-                r_path if os.path.isfile(r_path) else None)
+                r_path if os.path.isfile(r_path) else None,
+                session_id)
 
     review_files: list[tuple[float, str, str]] = []
     for fname in os.listdir(omc_dir):
@@ -864,14 +876,14 @@ def find_latest_omc_pair(project_dir: str, session_id: str = "") -> tuple[str | 
             except OSError:
                 pass
     if not review_files:
-        return None, None
+        return None, None, None
     review_files.sort(key=lambda x: x[0], reverse=True)
     best_review = review_files[0][1]
     best_session = review_files[0][2]
 
     v_path = os.path.join(omc_dir, f"verify-{best_session}.md")
     if os.path.isfile(v_path):
-        return v_path, best_review
+        return v_path, best_review, best_session
 
     verify_files: list[tuple[float, str]] = []
     for fname in os.listdir(omc_dir):
@@ -882,7 +894,7 @@ def find_latest_omc_pair(project_dir: str, session_id: str = "") -> tuple[str | 
             except OSError:
                 pass
     best_verify = max(verify_files, key=lambda x: x[0])[1] if verify_files else None
-    return best_verify, best_review
+    return best_verify, best_review, best_session
 
 
 def cmd_guard_commit(ns: argparse.Namespace) -> None:
@@ -984,7 +996,7 @@ def cmd_record_review(ns: argparse.Namespace) -> None:
     if not reviewer:
         sys.stderr.write("❌ [record-review] --reviewer 必填：必须指明独立审查者身份\n")
         sys.exit(1)
-    if reviewer.lower() in ("self", "myself", "me", "main", "main-agent", "author"):
+    if re.search(r"\b(self|myself|me|main|main[-_]agent|author|self-review)\b", reviewer.lower()):
         sys.stderr.write("❌ [record-review] reviewer 不能为 self/主代理：S6 审查必须由独立 Reviewer 执行！\n")
         sys.exit(1)
     if verdict not in ("MERGE_READY", "NEEDS_FIXES", "ESCALATE"):
@@ -1045,7 +1057,9 @@ def cmd_guard_pr(ns: argparse.Namespace) -> None:
         except Exception:
             branch = ""
 
-    verify_path, review_path = find_latest_omc_pair(project_dir, ns.session_id)
+    verify_path, review_path, discovered_session = find_latest_omc_pair(project_dir, ns.session_id)
+    if not ns.session_id and discovered_session:
+        ns.session_id = discovered_session
     if not review_path or not os.path.isfile(review_path):
         msg = (
             "\n"
