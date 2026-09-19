@@ -499,9 +499,9 @@ def phase4_review() -> None:
                     "- rg -n -F 'Y' path/to/file.md → exit 0，命中 2 行\n")
     valid_review = ("## S6 评审结论\n"
                     "verdict: MERGE_READY\n"
-                    "reviewer: claude (self, micro tier)\n"
+                    "reviewer: subagent-reviewer-1\n"
                     "round: 1\n"
-                    "google-code-review 无阻断项；health 不适用（micro 豁免，见入口 §3）。\n")
+                    "google-code-review 无阻断项；三透镜审查全绿通过。\n")
 
     def write_review_files(proj: str, session: str,
                            verify: str | None = None,
@@ -718,6 +718,123 @@ def phase4_review() -> None:
         r = run(["--guard-push", "--project-dir", empty_proj], stdin_text=main_input)
         check("guard-push-main-branch-passes", r.returncode == 0,
               f"exit={r.returncode}")
+
+        # ── New: Self-attestation / review-write denial tests ──────────────────
+
+        # 46. Main agent writing .omc/review-*.md is DENIED by PreToolUse gate
+        with tempfile.TemporaryDirectory() as rev_proj:
+            # Create a valid entry gate
+            write_artifact(rev_proj, "rw-session", VALID)
+            # Try to write a review file as main agent (simulate via --target pointing at review artifact)
+            r = run(["--project-dir", rev_proj, "--session-id", "rw-session",
+                     "--target", f"{rev_proj}/.omc/review-rw-session.md"])
+            check("review-write-denied-by-gate", r.returncode == 2 and "DENY" in r.stderr,
+                  f"exit={r.returncode} stderr={r.stderr[:300]}")
+
+        # 47. validate_review rejects 'self' reviewer
+        with tempfile.TemporaryDirectory() as rv_proj:
+            write_review_files(rv_proj, "rv-self",
+                               verify="## S5 验证证据\n- ai-slop-cleaner: deletion-first 完成\n- exit 0\n" + ("v" * 50),
+                               review="## S6 评审结论\nverdict: MERGE_READY\nreviewer: self\nround: 1\n"
+                                      "google-code-review 通过。\n" + ("r" * 40))
+            r = run(["--guard-pr", "--project-dir", rv_proj, "--branch", "feat/test"])
+            check("guard-pr-self-reviewer-blocks", r.returncode == 1 and "self" in r.stderr.lower(),
+                  f"exit={r.returncode} stderr={r.stderr[:300]}")
+
+        # 48. --guard-commit: no artifact at all blocks
+        with tempfile.TemporaryDirectory() as gc_proj:
+            subprocess.run(["git", "init", gc_proj], capture_output=True)
+            subprocess.run(["git", "-C", gc_proj, "checkout", "-b", "feat/gate-test"], capture_output=True)
+            r = run(["--guard-commit", "--project-dir", gc_proj])
+            check("guard-commit-missing-blocks", r.returncode == 1,
+                  f"exit={r.returncode} stderr={r.stderr[:300]}")
+
+        # 49. --guard-commit: valid session-based artifact passes even without branch-named file
+        with tempfile.TemporaryDirectory() as gc_proj2:
+            subprocess.run(["git", "init", gc_proj2], capture_output=True)
+            write_artifact(gc_proj2, "default", VALID)
+            r = run(["--guard-commit", "--project-dir", gc_proj2, "--session-id", "default"])
+            check("guard-commit-session-artifact-passes", r.returncode == 0,
+                  f"exit={r.returncode} stderr={r.stderr[:300]}")
+
+        # 50. --record-review: self reviewer is blocked
+        with tempfile.TemporaryDirectory() as rr_proj:
+            r = run(["--record-review", "--project-dir", rr_proj, "--session-id", "rr-s1",
+                     "--reviewer", "self", "--verdict", "MERGE_READY"])
+            check("record-review-self-reviewer-blocks", r.returncode == 1 and "self" in r.stderr.lower(),
+                  f"exit={r.returncode} stderr={r.stderr[:200]}")
+
+        # 51. --record-review: valid external reviewer succeeds and stamps diff_hash
+        with tempfile.TemporaryDirectory() as rr2_proj:
+            subprocess.run(["git", "init", rr2_proj], capture_output=True)
+            r = run(["--record-review", "--project-dir", rr2_proj, "--session-id", "rr-s2",
+                     "--reviewer", "gemini-pro-subagent", "--verdict", "MERGE_READY",
+                     "--notes", "三透镜审查通过：行为正确/结构健康/交付就绪"])
+            review_file = os.path.join(rr2_proj, ".omc", "review-rr-s2.md")
+            check("record-review-valid-passes",
+                  r.returncode == 0 and os.path.isfile(review_file) and "diff_hash" in open(review_file).read(),
+                  f"exit={r.returncode} stdout={r.stdout[:200]}")
+
+        # 52. diff_hash provenance: guard-pr blocks when diff changed after review
+        with tempfile.TemporaryDirectory() as ph_proj:
+            # Set up a minimal git repo with commits so compute_diff_hash can produce a real hash
+            subprocess.run(["git", "init", ph_proj], capture_output=True)
+            subprocess.run(["git", "-C", ph_proj, "config", "user.email", "test@test.com"], capture_output=True)
+            subprocess.run(["git", "-C", ph_proj, "config", "user.name", "Test"], capture_output=True)
+            main_file = os.path.join(ph_proj, "main.py")
+            with open(main_file, "w") as f:
+                f.write("x = 1\n")
+            subprocess.run(["git", "-C", ph_proj, "add", "."], capture_output=True)
+            subprocess.run(["git", "-C", ph_proj, "commit", "-m", "init"], capture_output=True)
+            subprocess.run(["git", "-C", ph_proj, "checkout", "-b", "origin/main"], capture_output=True)
+            subprocess.run(["git", "-C", ph_proj, "checkout", "-b", "feat/something"], capture_output=True)
+            # Make a change on feat branch so diff is non-empty and has a real hash
+            with open(main_file, "w") as f:
+                f.write("x = 2\n")
+            subprocess.run(["git", "-C", ph_proj, "add", "."], capture_output=True)
+            subprocess.run(["git", "-C", ph_proj, "commit", "-m", "change"], capture_output=True)
+            # Write review with a FAKE (mismatched) diff_hash
+            write_review_files(ph_proj, "ph-session",
+                               verify="## S5 验证证据\n- ai-slop-cleaner: deletion-first 完成\n- exit 0\n" + ("v" * 50),
+                               review="## S6 评审结论\nverdict: MERGE_READY\nreviewer: gemini-pro\nround: 1\n"
+                                      "code-review 通过\n"
+                                      "diff_hash: 0000000000000000000000000000000000000000000000000000000000000001\n"
+                                      + ("r" * 40))
+            r = run(["--guard-pr", "--project-dir", ph_proj, "--session-id", "ph-session",
+                     "--branch", "feat/something"])
+            check("guard-pr-stale-diff-hash-blocks", r.returncode == 1 and "diff_hash" in r.stderr,
+                  f"exit={r.returncode} stderr={r.stderr[:300]}")
+
+        # 52b. validate_review rejects 'claude (self)' due to word-boundary regex
+        with tempfile.TemporaryDirectory() as rv2_proj:
+            write_review_files(rv2_proj, "rv-self2",
+                               verify="## S5 验证证据\n- ai-slop-cleaner: deletion-first 完成\n- exit 0\n" + ("v" * 50),
+                               review="## S6 评审结论\nverdict: MERGE_READY\nreviewer: claude (self, no-baseline)\nround: 1\n"
+                                      "google-code-review 通过。\n" + ("r" * 40))
+            r = run(["--guard-pr", "--project-dir", rv2_proj, "--branch", "feat/test2"])
+            check("guard-pr-self-regex-blocks", r.returncode == 1 and "self" in r.stderr.lower(),
+                  f"exit={r.returncode} stderr={r.stderr[:300]}")
+
+
+        # 53. Stop hook hint no longer contains "15 秒" / "micro" shortcut wording
+        with tempfile.TemporaryDirectory() as sh_proj:
+            os.makedirs(os.path.join(sh_proj, "src"))
+            with open(os.path.join(sh_proj, "src", "x.py"), "w") as f:
+                f.write("x = 1\n")
+            write_artifact(sh_proj, "sh-session", VALID)
+            src_tp2 = os.path.join(sh_proj, "t.jsonl")
+            with open(src_tp2, "w") as f:
+                f.write(json.dumps({"message": {"content": [
+                    {"type": "toolUse", "name": "Edit", "input": {"file_path": "src/x.py"}}]}}) + "\n")
+            r = run(["--check-review", "--project-dir", sh_proj, "--session-id", "sh-session",
+                     "--transcript", src_tp2])
+            check("stop-hook-no-15sec-shortcut",
+                  "15 秒" not in r.stderr and "micro 只需" not in r.stderr,
+                  f"stderr={r.stderr[:300]}")
+            check("stop-hook-hints-independent-review",
+                  "独立" in r.stderr or "independent" in r.stderr.lower() or "flow:review" in r.stderr
+                  or "严禁主" in r.stderr,
+                  f"stderr={r.stderr[:300]}")
 
 
 if __name__ == "__main__":

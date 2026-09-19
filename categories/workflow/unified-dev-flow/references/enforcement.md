@@ -128,7 +128,7 @@ Same pattern maps 1:1 to Codex/Cursor/Trae/Qoder `Stop` (stdin
 NOT auto-installed — Stop-hook wiring stays a deliberate manual step like
 the write gate.
 
-## Review check (Stop-hook mode, S6 teeth)
+### Review check (Stop-hook mode, S6 teeth)
 
 `--check-review` reuses the checker for S6 arrival enforcement — S6 无工件≈无门，
 so every S6 must declare itself on disk:
@@ -145,8 +145,34 @@ Contracts (both live under `<project>/.omc/`, per-session filenames):
   包含 S4 收尾 `ai-slop-cleaner` (模式 B: deletion-first 瘦身) 执行记录, ≥80 chars total.
 - `.omc/review-<session>.md` (S6): one `##` heading containing `评审结论`,
   a verdict token (`MERGE_READY` / `NEEDS_FIXES` / `ESCALATE`), a `reviewer:` line
-  (name the model/human; no-baseline edits may write `self`), a `round: N` line
-  (N ≥ 1, this round's review count), 包含 `google-code-review` 审查记录, ≥80 chars total.
+  (**must name an independent reviewer — `self`/`main`/`author` is REJECTED**),
+  a `round: N` line (N ≥ 1), 包含 `google-code-review`/`xiyu-code-review`/`code-review`/`flow:review`
+  审查记录, ≥80 chars total.
+
+**Zero-trust S6 audit (铁律 — 零信任审查链)**:
+
+The checker actively blocks three self-attestation bypass paths:
+
+1. **Review write denial**: The `PreToolUse` hook intercepts any write targeting
+   `.omc/review-*.md` by the main agent (exit 2 + `[DENY 权限拦截]`). Only `--record-review`
+   or an independent subagent may write this file.
+
+2. **Self-reviewer rejection**: `reviewer: self` or `reviewer: main` are structurally
+   rejected by `validate_review()`. A reviewer must be an identifiable external entity.
+
+3. **Diff-hash provenance**: When a review artifact contains `diff_hash: <sha256>`,
+   `cmd_guard_pr` computes the current repository diff hash and blocks if they differ
+   (indicating the code was modified after the review).
+
+The **only sanctioned review write path** is:
+```bash
+python3 entry-gate-check.py --record-review \
+  --project-dir <dir> --session-id <id> \
+  --reviewer <independent-reviewer-name> \
+  --verdict MERGE_READY \
+  --notes "审查结论..."
+```
+This stamps `diff_hash` automatically, making stale reviews detectable.
 
 Firing rule: count transcript toolUse blocks for real source edits
 (`.omc/` artifact writes excluded; unreadable transcripts fall back to the
@@ -156,19 +182,20 @@ artifacts. Otherwise a missing/malformed artifact exits 2 and blocks the stop.
 Anti-spin mirrors the trail check: at most `--max-blocks` blocks per episode
 (default 3), then loud give-up (`review-giveup` log row) and let the stop through.
 
-Micro form (passes the checker, ~15 seconds):
+S5/S6 artifact example:
 
 ```md
 ## S5 验证证据
-- ai-slop-cleaner: deletion-first 瘦身完成，无冗余 wrapper 与死代码
-- pytest tests/ → exit 0（3 passed）
-- git diff --stat 确认仅保留必要修改
+- ai-slop-cleaner: deletion-first 瘦身完成，删除 3 个冗余 wrapper
+- pytest tests/ → exit 0（5 passed）
+- git diff --stat 确认变更范围符合范围纪律
 
 ## S6 评审结论
 verdict: MERGE_READY
-reviewer: claude (self, no-baseline edit)
+reviewer: gemini-pro-subagent-<conversationId>
 round: 1
-google-code-review 无阻断项；health 豁免（无基线可比，见入口 §3）。
+diff_hash: <auto-stamped by --record-review>
+flow:review 三透镜独立审查通过：行为正确/结构健康/交付就绪
 ```
 
 Claude example (`Stop` event, alongside the trail hook):
@@ -185,9 +212,30 @@ Claude example (`Stop` event, alongside the trail hook):
 }
 ```
 
+## Guard Commit (Pre-Commit, 分支精准绑定)
+
+The old `ls .omc/entry-gate-*.md` glob check allowed any historical session artifact
+to satisfy the gate — including files from previous branches or sessions.
+
+The new `--guard-commit` mode binds strictly to the current git branch:
+
+```bash
+python3 entry-gate-check.py --guard-commit --project-dir <dir>
+```
+
+- Derives the current branch via `git branch --show-current`
+- Requires `.omc/entry-gate-<branch-safe>.md` (branch slashes → underscores)
+- Falls back to session-bound artifact if branch-named file absent but session is known
+- If neither exists: exit 1 with clear "current branch has no dedicated gate artifact" message
+
+**Install in `scripts/pre-commit.sh`** by replacing the old `ls .omc/entry-gate-*.md` line:
+```bash
+python3 ~/.claude/scripts/entry-gate-check.py --guard-commit --project-dir "${REPO_ROOT}"
+```
+
 ## Guard PR & Pre-Push (S6→S7 Active Enforcement, PR/Push 物理门禁)
 
-Stop hook 是在会话结束时拦截，但 Agent 经常在 S4/S5 跑通后，直接顺手执行 `git push` 或调用 `gitee-pr-helper.sh create` 提交 PR（造成“PR 已开但 S6 未审”的既成事实）。
+Stop hook 是在会话结束时拦截，但 Agent 经常在 S4/S5 跑通后，直接顺手执行 `git push` 或调用 `gitee-pr-helper.sh create` 提交 PR（造成"PR 已开但 S6 未审"的既成事实）。
 为此，我们在提交 PR 与代码推送的入口点设立物理拦截：
 
 ```bash
@@ -201,9 +249,11 @@ python3 entry-gate-check.py --guard-push
 ### 拦截判定契约：
 - **目标分支识别**：主干分支（`main` / `master`）或删除远端分支操作不阻断；任务开发分支（`agent/*`、`feat/*`、`fix/*` 等）**强制受检**。
 - **工件存在与合法性**：
-  - 必须存在 `.omc/review-*.md` 且通过结构校验（包含 `## 评审结论`、`reviewer:`、`round: N`，以及 `google-code-review` / `xiyu-code-review` / `code-review` 审查记录）。
+  - 必须存在 `.omc/review-*.md` 且通过结构校验（包含 `## 评审结论`、`reviewer:`（非 self）、`round: N`，以及 `google-code-review` / `xiyu-code-review` / `code-review` / `flow:review` 审查记录）。
   - **verdict 必须为 `MERGE_READY`**！若为 `NEEDS_FIXES` 或 `ESCALATE`，直接 exit 1 阻断。
   - 必须存在合格的 `.omc/verify-*.md`（S5 证据，含 S4 `ai-slop-cleaner` 瘦身记录与命令 exit 0）。
+  - **diff_hash 凭据完整性**：若 review 含 `diff_hash`，必须与当前 repo diff 匹配；代码改动后审查证据自动失效。
+  - **Transcript 独立审查溯源**：若 transcript 可读，必须有 `invoke_subagent` Reviewer 角色记录或 `flow:review` 命令执行记录。
 - **阻断行为**：exit 1，向 stderr 打印醒目的多行红字指引，命令直接失败。
 - **紧急逃生阀**：仅限生产故障抢修时设置环境变量 `UNIFIED_DEV_FLOW_SKIP_REVIEW=1`，放行并记录 `review-bypass` 审计日志。
 
