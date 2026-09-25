@@ -254,7 +254,7 @@ response without artifacts.
   database → `access-pattern-driven-data-modeling` / `database-migrations`;
   performance → `performance-tuning`; docs → `technical-writing` /
   `html-first-workflow`; infrastructure → `deployment-patterns`.
-- Debug: `systematic-debugging` → `root-cause-hunter` → `paranoid-debugging`;
+- Debug: `systematic-debugging` → `root-cause-hunter` → `root-cause-debugging` → `paranoid-debugging`;
   refactor:
   `clean-code-behavior-preserving-refactoring` / `entropy-reduction`.
 - Context/principles: `context-save` / `context-restore`, `strategic-compact`,

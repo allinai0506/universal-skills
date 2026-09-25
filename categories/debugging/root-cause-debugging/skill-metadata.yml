@@ -1,0 +1,29 @@
+version: "1.0.0"
+author: "Universal Skills"
+skillFormat: "aiss-1.0"
+
+tags: [debugging, root-cause, testing, reliability, prevention]
+platforms: [claude, codex, gemini, opencode]
+
+triggers:
+  keywords:
+    - "root-cause-debugging"
+    - "根因诊断"
+    - "因果证明"
+    - "因果验证"
+    - "防回归"
+    - "三道门禁"
+    - "check_evidence"
+    - "治标不治本"
+    - "反复回归"
+    - "shallow patch"
+    - "causal evidence"
+  filePatterns:
+    - "**/*.ts"
+    - "**/*.tsx"
+    - "**/*.java"
+    - "**/*.py"
+    - "**/*.go"
+    - "**/*.rs"
+  contextRequired:
+    - "git"

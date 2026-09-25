@@ -1,0 +1,44 @@
+test_absolute_path (test_check_evidence.EvidenceChecks.test_absolute_path) ... ok
+test_boolean_not_valid_exit_code (test_check_evidence.EvidenceChecks.test_boolean_not_valid_exit_code) ... ok
+test_cli_duplicate_json_key_exit_two (test_check_evidence.EvidenceChecks.test_cli_duplicate_json_key_exit_two) ... ok
+test_cli_incomplete_record_exit_one (test_check_evidence.EvidenceChecks.test_cli_incomplete_record_exit_one) ... ok
+test_cli_invalid_json_exit_two (test_check_evidence.EvidenceChecks.test_cli_invalid_json_exit_two) ... ok
+test_cli_success (test_check_evidence.EvidenceChecks.test_cli_success) ... ok
+test_counterfactual_wrong_case (test_check_evidence.EvidenceChecks.test_counterfactual_wrong_case) ... ok
+test_duplicate_evidence_identifier (test_check_evidence.EvidenceChecks.test_duplicate_evidence_identifier) ... ok
+test_empty_experiment (test_check_evidence.EvidenceChecks.test_empty_experiment) ... ok
+test_green_wrong_fixed_version (test_check_evidence.EvidenceChecks.test_green_wrong_fixed_version) ... ok
+test_guard_needs_source_or_diff (test_check_evidence.EvidenceChecks.test_guard_needs_source_or_diff) ... ok
+test_high_risk_requires_counterfactual (test_check_evidence.EvidenceChecks.test_high_risk_requires_counterfactual) ... ok
+test_inconsistent_exit_code (test_check_evidence.EvidenceChecks.test_inconsistent_exit_code) ... ok
+test_malformed_objects_do_not_crash (test_check_evidence.EvidenceChecks.test_malformed_objects_do_not_crash) ... ok
+test_missing_contract_evidence (test_check_evidence.EvidenceChecks.test_missing_contract_evidence) ... ok
+test_missing_file (test_check_evidence.EvidenceChecks.test_missing_file) ... ok
+test_missing_limitations (test_check_evidence.EvidenceChecks.test_missing_limitations) ... ok
+test_mitigation_is_not_root_fix (test_check_evidence.EvidenceChecks.test_mitigation_is_not_root_fix) ... ok
+test_neighbor_requires_same_environment (test_check_evidence.EvidenceChecks.test_neighbor_requires_same_environment) ... ok
+test_no_boundary_integration_optional (test_check_evidence.EvidenceChecks.test_no_boundary_integration_optional) ... ok
+test_no_red_test (test_check_evidence.EvidenceChecks.test_no_red_test) ... ok
+test_path_traversal (test_check_evidence.EvidenceChecks.test_path_traversal) ... ok
+test_placeholder_rejected (test_check_evidence.EvidenceChecks.test_placeholder_rejected) ... ok
+test_post_fix_failure_blocks_close (test_check_evidence.EvidenceChecks.test_post_fix_failure_blocks_close) ... ok
+test_post_fix_not_run_blocks_close (test_check_evidence.EvidenceChecks.test_post_fix_not_run_blocks_close) ... ok
+test_real_boundary_requires_integration (test_check_evidence.EvidenceChecks.test_real_boundary_requires_integration) ... ok
+test_recorded_commands_never_execute (test_check_evidence.EvidenceChecks.test_recorded_commands_never_execute) ... ok
+test_red_green_case_mismatch (test_check_evidence.EvidenceChecks.test_red_green_case_mismatch) ... ok
+test_red_green_environment_mismatch (test_check_evidence.EvidenceChecks.test_red_green_environment_mismatch) ... ok
+test_red_green_same_version (test_check_evidence.EvidenceChecks.test_red_green_same_version) ... ok
+test_standard_risk_without_counterfactual (test_check_evidence.EvidenceChecks.test_standard_risk_without_counterfactual) ... ok
+test_symlink_escape (test_check_evidence.EvidenceChecks.test_symlink_escape) ... ok
+test_tampered_file (test_check_evidence.EvidenceChecks.test_tampered_file) ... ok
+test_template_is_not_accepted (test_check_evidence.EvidenceChecks.test_template_is_not_accepted) ... ok
+test_tests_need_log_not_only_source (test_check_evidence.EvidenceChecks.test_tests_need_log_not_only_source) ... ok
+test_unknown_reference (test_check_evidence.EvidenceChecks.test_unknown_reference) ... ok
+test_unverified_cause (test_check_evidence.EvidenceChecks.test_unverified_cause) ... ok
+test_valid_close (test_check_evidence.EvidenceChecks.test_valid_close) ... ok
+test_valid_diagnosis_does_not_require_fix (test_check_evidence.EvidenceChecks.test_valid_diagnosis_does_not_require_fix) ... ok
+
+----------------------------------------------------------------------
+Ran 39 tests in 4.312s
+
+OK

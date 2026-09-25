@@ -111,7 +111,7 @@ description: Use when [clear trigger conditions]. Describe what the skill does.
 |----------|---------|----------|
 | `architecture/` | System design, constraints | access-pattern-driven-data-modeling |
 | `coding/` | Development patterns | test-driven-development, self-verifying-tests |
-| `debugging/` | Debugging methodologies | systematic-debugging, root-cause-hunter |
+| `debugging/` | Debugging methodologies | systematic-debugging, root-cause-hunter, root-cause-debugging |
 | `refactoring/` | Code cleanup | entropy-reduction |
 | `ui-ux/` | Frontend design | ui-ux-pro-max, frontend-design |
 | `workflow/` | Process management | brainstorming, writing-plans, skill-creator |

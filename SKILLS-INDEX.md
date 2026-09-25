@@ -124,6 +124,7 @@ _调试方法论_
 | 技能 | 用途 |
 | --- | --- |
 | `paranoid-debugging` | 对生产关键代码做证据驱动的高强度再验证 |
+| `root-cause-debugging` | 因果验证、防回归与反浅层补丁门禁 |
 | `root-cause-hunter` | 逆向追踪调用链定位问题源头并证明 bug 必然发生 |
 | `systematic-debugging` | 遇到 bug 或异常时先系统诊断再提出修复方案 |
 

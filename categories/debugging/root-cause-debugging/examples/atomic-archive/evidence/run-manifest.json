@@ -1,0 +1,82 @@
+[
+  {
+    "label": "red",
+    "implementation": "buggy",
+    "version": "sha256:c18e725acf464dd8c5744949d256e7fe5e973446414e02c5e4c106e537812af5",
+    "command": "ARCHIVE_IMPL=buggy python3 -m unittest -v test_archive.ArchiveTests.test_interruption_rolls_back",
+    "actual_argv": [
+      "/opt/pyvenv/bin/python3",
+      "-m",
+      "unittest",
+      "-v",
+      "test_archive.ArchiveTests.test_interruption_rolls_back"
+    ],
+    "environment": "Python 3.13.5; SQLite 3.46.1; Linux; single connection :memory:",
+    "utc": "2026-09-25T01:23:51.089398+00:00",
+    "exit_code": 1
+  },
+  {
+    "label": "green",
+    "implementation": "fixed",
+    "version": "sha256:5ba9f0c7d458fff08ece25cd2cff52355c0310b44658afe8a6f1098f6bc8832c",
+    "command": "ARCHIVE_IMPL=fixed python3 -m unittest -v test_archive.ArchiveTests.test_interruption_rolls_back",
+    "actual_argv": [
+      "/opt/pyvenv/bin/python3",
+      "-m",
+      "unittest",
+      "-v",
+      "test_archive.ArchiveTests.test_interruption_rolls_back"
+    ],
+    "environment": "Python 3.13.5; SQLite 3.46.1; Linux; single connection :memory:",
+    "utc": "2026-09-25T01:23:51.940054+00:00",
+    "exit_code": 0
+  },
+  {
+    "label": "neighbor",
+    "implementation": "fixed",
+    "version": "sha256:5ba9f0c7d458fff08ece25cd2cff52355c0310b44658afe8a6f1098f6bc8832c",
+    "command": "ARCHIVE_IMPL=fixed python3 -m unittest -v test_archive.ArchiveTests.test_success_commits_both",
+    "actual_argv": [
+      "/opt/pyvenv/bin/python3",
+      "-m",
+      "unittest",
+      "-v",
+      "test_archive.ArchiveTests.test_success_commits_both"
+    ],
+    "environment": "Python 3.13.5; SQLite 3.46.1; Linux; single connection :memory:",
+    "utc": "2026-09-25T01:23:52.801397+00:00",
+    "exit_code": 0
+  },
+  {
+    "label": "integration",
+    "implementation": "fixed",
+    "version": "sha256:5ba9f0c7d458fff08ece25cd2cff52355c0310b44658afe8a6f1098f6bc8832c",
+    "command": "ARCHIVE_IMPL=fixed python3 -m unittest -v test_archive",
+    "actual_argv": [
+      "/opt/pyvenv/bin/python3",
+      "-m",
+      "unittest",
+      "-v",
+      "test_archive"
+    ],
+    "environment": "Python 3.13.5; SQLite 3.46.1; Linux; single connection :memory:",
+    "utc": "2026-09-25T01:23:53.714657+00:00",
+    "exit_code": 0
+  },
+  {
+    "label": "reintroduced",
+    "implementation": "buggy",
+    "version": "sha256:c18e725acf464dd8c5744949d256e7fe5e973446414e02c5e4c106e537812af5",
+    "command": "ARCHIVE_IMPL=buggy python3 -m unittest -v test_archive.ArchiveTests.test_interruption_rolls_back",
+    "actual_argv": [
+      "/opt/pyvenv/bin/python3",
+      "-m",
+      "unittest",
+      "-v",
+      "test_archive.ArchiveTests.test_interruption_rolls_back"
+    ],
+    "environment": "Python 3.13.5; SQLite 3.46.1; Linux; single connection :memory:",
+    "utc": "2026-09-25T01:23:55.450553+00:00",
+    "exit_code": 1
+  }
+]

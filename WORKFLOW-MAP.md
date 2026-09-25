@@ -169,7 +169,8 @@ SKILL.md 保留压缩版，本表补充阶段候选。完整路由由 Resume、I
 ```
 systematic-debugging（canonical 入口）
   └─ 升级 root-cause-hunter（逆向追踪证明根因）
-       └─ 升级 paranoid-debugging（生产关键代码的证据级再验证）
+       └─ 升级 root-cause-debugging（因果验证与防回归门禁、反浅层补丁）
+            └─ 升级 paranoid-debugging（生产关键代码的证据级再验证）
 其他工具：`investigate`（gstack）；
 数据访问性能排查（慢查询、索引未命中）走 `access-pattern-driven-data-modeling` 的验证环节（EXPLAIN + 访问模式对照）
 ```

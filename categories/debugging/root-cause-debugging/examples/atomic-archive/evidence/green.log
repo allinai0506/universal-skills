@@ -1,0 +1,12 @@
+COMMAND: ARCHIVE_IMPL=fixed python3 -m unittest -v test_archive.ArchiveTests.test_interruption_rolls_back
+ENVIRONMENT: Python 3.13.5; SQLite 3.46.1; Linux; single connection :memory:
+VERSION: sha256:5ba9f0c7d458fff08ece25cd2cff52355c0310b44658afe8a6f1098f6bc8832c
+UTC: 2026-09-25T01:23:51.940054+00:00
+EXIT_CODE: 0
+
+test_interruption_rolls_back (test_archive.ArchiveTests.test_interruption_rolls_back) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.001s
+
+OK
