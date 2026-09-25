@@ -1,8 +1,9 @@
 ---
 name: root-cause-debugging
+version: "2026.09.25-1"
+synced-at: "2026-09-25T10:20:58"
 description: Diagnose and close software bugs with causal proof, bounded prevention, and anti-regression gates. Use when dealing with repeated regressions, shallow patches (治标不治本), multi-cause defects, incident postmortems, or reviewing claimed root-cause fixes. Not for routine feature code, simple single-step bugs (use systematic-debugging), or deep stack peeling without test harnesses (use root-cause-hunter).
 metadata:
-  version: "1.0.0"
   language: "zh-CN"
   compatibility: "Requires repository and test access for verified fixes. Optional evidence checker uses Python 3.9+ standard library. No network service or MCP dependency."
 ---
