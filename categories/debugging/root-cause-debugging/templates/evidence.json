@@ -1,0 +1,214 @@
+{
+  "schema_version": 1,
+  "id": "<真实缺陷编号>",
+  "mode": "fix",
+  "status": "unverified",
+  "risk": "high",
+  "symptom": "<实际可观察失败>",
+  "expected": {
+    "statement": "<正确行为及适用范围>",
+    "source_refs": [
+      "E-CONTRACT"
+    ]
+  },
+  "reproduction": {
+    "command": "<实际执行命令或复现步骤>",
+    "environment": "<运行条件标识>",
+    "version": "<运行代码版本>",
+    "observed": "<目标失败断言，不是环境错误>",
+    "evidence_refs": [
+      "E-RED"
+    ]
+  },
+  "causality": {
+    "status": "unverified",
+    "trigger": "<触发条件>",
+    "mechanism": "<具体致错机制>",
+    "last_good": "<最后已知正确观察及其证据>",
+    "first_bad": "<最早已知错误观察及其证据>",
+    "escape": "<未被现有保护发现/阻断的原因，与致错机制分开>",
+    "evidence_refs": [
+      "E-CODE",
+      "E-RED"
+    ],
+    "experiment": {
+      "prediction": "<假设成立时的可证伪预测>",
+      "intervention": "<控制条件和区分实验>",
+      "observation": "<真实执行结果及不能排除的解释>",
+      "evidence_refs": [
+        "E-RED",
+        "E-GREEN"
+      ]
+    }
+  },
+  "impact": {
+    "behaviors": [
+      "<受影响业务行为>"
+    ],
+    "locations": [
+      "<真实代码/数据/接口位置>"
+    ],
+    "boundaries": [
+      "<涉及真实持久化/外部调用等边界；无则空数组>"
+    ],
+    "risks": [
+      "<兼容性、并发、历史数据风险>"
+    ]
+  },
+  "fix": {
+    "summary": "<最小完整修复>",
+    "version": "<修复版本>",
+    "data_repair": "<历史数据处置，或不适用的依据>",
+    "guard": {
+      "statement": "<受保护的正确性要求>",
+      "location": "<实际执行约束的位置>",
+      "scope": "<阻断的复发路径和适用范围>",
+      "evidence_refs": [
+        "E-FIX"
+      ]
+    }
+  },
+  "checks": [
+    {
+      "id": "RED",
+      "kind": "regression",
+      "stage": "before",
+      "case": "<稳定业务场景/断言标识>",
+      "environment": "<与对照一致的环境标识>",
+      "version": "<实际执行版本>",
+      "command": "<实际命令>",
+      "outcome": "not_run",
+      "exit_code": null,
+      "observation": "<实际观察，未执行则说明原因>",
+      "evidence_refs": [
+        "E-RED"
+      ]
+    },
+    {
+      "id": "GREEN",
+      "kind": "regression",
+      "stage": "after",
+      "case": "<稳定业务场景/断言标识>",
+      "environment": "<与对照一致的环境标识>",
+      "version": "<实际执行版本>",
+      "command": "<实际命令>",
+      "outcome": "not_run",
+      "exit_code": null,
+      "observation": "<实际观察，未执行则说明原因>",
+      "evidence_refs": [
+        "E-GREEN"
+      ]
+    },
+    {
+      "id": "NEIGHBOR",
+      "kind": "neighbor",
+      "stage": "after",
+      "case": "<稳定业务场景/断言标识>",
+      "environment": "<与对照一致的环境标识>",
+      "version": "<实际执行版本>",
+      "command": "<实际命令>",
+      "outcome": "not_run",
+      "exit_code": null,
+      "observation": "<实际观察，未执行则说明原因>",
+      "evidence_refs": [
+        "E-NEIGHBOR"
+      ]
+    },
+    {
+      "id": "INTEGRATION",
+      "kind": "integration",
+      "stage": "after",
+      "case": "<稳定业务场景/断言标识>",
+      "environment": "<与对照一致的环境标识>",
+      "version": "<实际执行版本>",
+      "command": "<实际命令>",
+      "outcome": "not_run",
+      "exit_code": null,
+      "observation": "<实际观察，未执行则说明原因>",
+      "evidence_refs": [
+        "E-INTEGRATION"
+      ]
+    },
+    {
+      "id": "REINTRODUCED",
+      "kind": "counterfactual",
+      "stage": "reintroduced",
+      "case": "<稳定业务场景/断言标识>",
+      "environment": "<与对照一致的环境标识>",
+      "version": "<实际执行版本>",
+      "command": "<实际命令>",
+      "outcome": "not_run",
+      "exit_code": null,
+      "observation": "<实际观察，未执行则说明原因>",
+      "evidence_refs": [
+        "E-REINTRODUCED"
+      ]
+    }
+  ],
+  "release": {
+    "deployment": "not_deployed",
+    "observation": "<线上观察办法/当前未部署>",
+    "rollback": "<回滚计划或无部署变动的依据>"
+  },
+  "limitations": [
+    "<仍未覆盖的条件，不得承诺永久无 Bug>"
+  ],
+  "evidence": [
+    {
+      "id": "E-CONTRACT",
+      "kind": "contract",
+      "path": "evidence/contract.md",
+      "sha256": "<实际文件 SHA-256 小写十六进制>",
+      "description": "<该证据证明什么及其真实来源>"
+    },
+    {
+      "id": "E-CODE",
+      "kind": "code",
+      "path": "evidence/before.txt",
+      "sha256": "<实际文件 SHA-256 小写十六进制>",
+      "description": "<该证据证明什么及其真实来源>"
+    },
+    {
+      "id": "E-FIX",
+      "kind": "code",
+      "path": "evidence/after.txt",
+      "sha256": "<实际文件 SHA-256 小写十六进制>",
+      "description": "<该证据证明什么及其真实来源>"
+    },
+    {
+      "id": "E-RED",
+      "kind": "log",
+      "path": "evidence/red.log",
+      "sha256": "<实际文件 SHA-256 小写十六进制>",
+      "description": "<该证据证明什么及其真实来源>"
+    },
+    {
+      "id": "E-GREEN",
+      "kind": "log",
+      "path": "evidence/green.log",
+      "sha256": "<实际文件 SHA-256 小写十六进制>",
+      "description": "<该证据证明什么及其真实来源>"
+    },
+    {
+      "id": "E-NEIGHBOR",
+      "kind": "log",
+      "path": "evidence/neighbor.log",
+      "sha256": "<实际文件 SHA-256 小写十六进制>",
+      "description": "<该证据证明什么及其真实来源>"
+    },
+    {
+      "id": "E-INTEGRATION",
+      "kind": "log",
+      "path": "evidence/integration.log",
+      "sha256": "<实际文件 SHA-256 小写十六进制>",
+      "description": "<该证据证明什么及其真实来源>"
+    },
+    {
+      "id": "E-REINTRODUCED",
+      "kind": "log",
+      "path": "evidence/reintroduced.log",
+      "sha256": "<实际文件 SHA-256 小写十六进制>",
+      "description": "<该证据证明什么及其真实来源>"
+    }
+  ]
+}

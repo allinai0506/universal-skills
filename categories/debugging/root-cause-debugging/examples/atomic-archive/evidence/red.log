@@ -1,0 +1,24 @@
+COMMAND: ARCHIVE_IMPL=buggy python3 -m unittest -v test_archive.ArchiveTests.test_interruption_rolls_back
+ENVIRONMENT: Python 3.13.5; SQLite 3.46.1; Linux; single connection :memory:
+VERSION: sha256:c18e725acf464dd8c5744949d256e7fe5e973446414e02c5e4c106e537812af5
+UTC: 2026-09-25T01:23:51.089398+00:00
+EXIT_CODE: 1
+
+test_interruption_rolls_back (test_archive.ArchiveTests.test_interruption_rolls_back) ... FAIL
+
+======================================================================
+FAIL: test_interruption_rolls_back (test_archive.ArchiveTests.test_interruption_rolls_back)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/mnt/data/root-cause-debugging/examples/atomic-archive/test_archive.py", line 38, in test_interruption_rolls_back
+    self.assertEqual("DRAFT", self.state(1))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'DRAFT' != 'ARCHIVED'
+- DRAFT
++ ARCHIVED
+
+
+----------------------------------------------------------------------
+Ran 1 test in 0.001s
+
+FAILED (failures=1)

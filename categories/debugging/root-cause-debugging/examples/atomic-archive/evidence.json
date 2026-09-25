@@ -1,0 +1,229 @@
+{
+  "schema_version": 1,
+  "id": "DEMO-ATOMIC-ARCHIVE",
+  "mode": "fix",
+  "status": "fixed",
+  "risk": "high",
+  "symptom": "合成归档调用在写回执前失败后，旧实现仍把档案持久化为 ARCHIVED。",
+  "expected": {
+    "statement": "本示例约定：状态与回执原子提交；中途失败回滚到 DRAFT 且不新增回执。",
+    "source_refs": [
+      "E-CONTRACT"
+    ]
+  },
+  "reproduction": {
+    "command": "ARCHIVE_IMPL=buggy python3 -m unittest -v test_archive.ArchiveTests.test_interruption_rolls_back",
+    "environment": "Python 3.13.5; SQLite 3.46.1; Linux; single connection :memory:",
+    "version": "sha256:c18e725acf464dd8c5744949d256e7fe5e973446414e02c5e4c106e537812af5",
+    "observed": "目标断言 DRAFT != ARCHIVED，异常被捕获后数据库仍有部分提交。",
+    "evidence_refs": [
+      "E-RED"
+    ]
+  },
+  "causality": {
+    "status": "supported",
+    "trigger": "状态更新后、写回执前注入 RuntimeError。",
+    "mechanism": "buggy.py 在回执写入前 db.commit()；之后异常无法回滚已提交状态。",
+    "last_good": "test_archive.py setUp 创建并提交 DRAFT 初始状态；源码和固定夹具可核对。",
+    "first_bad": "E-RED 中捕获注入异常后，读取到 ARCHIVED 而非 DRAFT；提前提交位置见 E-CODE。",
+    "escape": "教学旧实现只有分步提交，没有把两次写入置于同一事务；成功路径无法检出中途失败。",
+    "evidence_refs": [
+      "E-CODE",
+      "E-TEST",
+      "E-RED"
+    ],
+    "experiment": {
+      "prediction": "业务预期和失败注入点不变时，提前提交版本失败；原子事务版本通过；恢复旧实现再次失败。",
+      "intervention": "共享 test_archive.py，仅切换 ARCHIVE_IMPL；同一 Python/SQLite 与内存库初始数据。",
+      "observation": "red=1、green=0、reintroduced=1，原失败与恢复旧实现均在同一目标断言失败。",
+      "evidence_refs": [
+        "E-RED",
+        "E-GREEN",
+        "E-REINTRODUCED"
+      ]
+    }
+  },
+  "impact": {
+    "behaviors": [
+      "单次归档中途失败回滚",
+      "归档成功写入状态和回执",
+      "无关档案保持 DRAFT"
+    ],
+    "locations": [
+      "buggy.py:archive",
+      "fixed.py:archive",
+      "test_archive.py:ArchiveTests"
+    ],
+    "boundaries": [
+      "真实 sqlite3 Connection 的提交/回滚与读取"
+    ],
+    "risks": [
+      "不覆盖并发、嵌套事务、重复归档、其他写入者和历史生产数据。"
+    ]
+  },
+  "fix": {
+    "summary": "把状态写入、失败注入点和回执写入放进同一个连接事务。",
+    "version": "sha256:5ba9f0c7d458fff08ece25cd2cff52355c0310b44658afe8a6f1098f6bc8832c",
+    "data_repair": "仅合成内存数据，无生产历史数据修改。",
+    "guard": {
+      "statement": "在此单连接单次归档范围内，两次写入共同提交或回滚。",
+      "location": "fixed.py:archive 的 with db 事务范围",
+      "scope": "阻断本例中状态更新后/写回执前异常留下部分提交的路径。",
+      "evidence_refs": [
+        "E-FIX",
+        "E-TEST"
+      ]
+    }
+  },
+  "checks": [
+    {
+      "id": "RED",
+      "kind": "regression",
+      "stage": "before",
+      "case": "interruption-rolls-back",
+      "environment": "Python 3.13.5; SQLite 3.46.1; Linux; single connection :memory:",
+      "version": "sha256:c18e725acf464dd8c5744949d256e7fe5e973446414e02c5e4c106e537812af5",
+      "command": "ARCHIVE_IMPL=buggy python3 -m unittest -v test_archive.ArchiveTests.test_interruption_rolls_back",
+      "outcome": "failed",
+      "exit_code": 1,
+      "observation": "真实 unittest 输出见同名日志。",
+      "evidence_refs": [
+        "E-RED"
+      ]
+    },
+    {
+      "id": "GREEN",
+      "kind": "regression",
+      "stage": "after",
+      "case": "interruption-rolls-back",
+      "environment": "Python 3.13.5; SQLite 3.46.1; Linux; single connection :memory:",
+      "version": "sha256:5ba9f0c7d458fff08ece25cd2cff52355c0310b44658afe8a6f1098f6bc8832c",
+      "command": "ARCHIVE_IMPL=fixed python3 -m unittest -v test_archive.ArchiveTests.test_interruption_rolls_back",
+      "outcome": "passed",
+      "exit_code": 0,
+      "observation": "真实 unittest 输出见同名日志。",
+      "evidence_refs": [
+        "E-GREEN"
+      ]
+    },
+    {
+      "id": "NEIGHBOR",
+      "kind": "neighbor",
+      "stage": "after",
+      "case": "neighbor",
+      "environment": "Python 3.13.5; SQLite 3.46.1; Linux; single connection :memory:",
+      "version": "sha256:5ba9f0c7d458fff08ece25cd2cff52355c0310b44658afe8a6f1098f6bc8832c",
+      "command": "ARCHIVE_IMPL=fixed python3 -m unittest -v test_archive.ArchiveTests.test_success_commits_both",
+      "outcome": "passed",
+      "exit_code": 0,
+      "observation": "真实 unittest 输出见同名日志。",
+      "evidence_refs": [
+        "E-NEIGHBOR"
+      ]
+    },
+    {
+      "id": "INTEGRATION",
+      "kind": "integration",
+      "stage": "after",
+      "case": "integration",
+      "environment": "Python 3.13.5; SQLite 3.46.1; Linux; single connection :memory:",
+      "version": "sha256:5ba9f0c7d458fff08ece25cd2cff52355c0310b44658afe8a6f1098f6bc8832c",
+      "command": "ARCHIVE_IMPL=fixed python3 -m unittest -v test_archive",
+      "outcome": "passed",
+      "exit_code": 0,
+      "observation": "真实 unittest 输出见同名日志。",
+      "evidence_refs": [
+        "E-INTEGRATION"
+      ]
+    },
+    {
+      "id": "REINTRODUCED",
+      "kind": "counterfactual",
+      "stage": "reintroduced",
+      "case": "interruption-rolls-back",
+      "environment": "Python 3.13.5; SQLite 3.46.1; Linux; single connection :memory:",
+      "version": "sha256:c18e725acf464dd8c5744949d256e7fe5e973446414e02c5e4c106e537812af5",
+      "command": "ARCHIVE_IMPL=buggy python3 -m unittest -v test_archive.ArchiveTests.test_interruption_rolls_back",
+      "outcome": "failed",
+      "exit_code": 1,
+      "observation": "真实 unittest 输出见同名日志。",
+      "evidence_refs": [
+        "E-REINTRODUCED"
+      ]
+    }
+  ],
+  "release": {
+    "deployment": "not_deployed",
+    "observation": "仅本地合成示例验证；没有业务服务部署或线上观察。",
+    "rollback": "无生产变更。恢复教学旧实现仅用于隔离测试。"
+  },
+  "limitations": [
+    "结论只覆盖 contract.md 中单连接、已存在 DRAFT 档案、单次调用场景；不是完整归档服务。",
+    "未在用户本地 Agent 或真实项目中运行，未验证所有平台/数据库。"
+  ],
+  "evidence": [
+    {
+      "id": "E-CONTRACT",
+      "kind": "contract",
+      "path": "contract.md",
+      "sha256": "6091ff5cf27ae71f980f52be81ac0a56bab9812ff45a69523b10236de876d3e0",
+      "description": "合成示例的明确业务约定"
+    },
+    {
+      "id": "E-CODE",
+      "kind": "code",
+      "path": "buggy.py",
+      "sha256": "c18e725acf464dd8c5744949d256e7fe5e973446414e02c5e4c106e537812af5",
+      "description": "提前提交的缺陷实现"
+    },
+    {
+      "id": "E-FIX",
+      "kind": "code",
+      "path": "fixed.py",
+      "sha256": "5ba9f0c7d458fff08ece25cd2cff52355c0310b44658afe8a6f1098f6bc8832c",
+      "description": "同一事务的修复实现"
+    },
+    {
+      "id": "E-TEST",
+      "kind": "code",
+      "path": "test_archive.py",
+      "sha256": "c5ed430e1da51ba311162e94878c0a3d6df548f2feccb2dfab8474cfda9c5025",
+      "description": "两实现共享的测试断言和初始数据"
+    },
+    {
+      "id": "E-RED",
+      "kind": "log",
+      "path": "evidence/red.log",
+      "sha256": "2b541937b0564edd457bb5f4bfc7e3604aed2e1af190164582c6edc7104bcb2d",
+      "description": "实际运行 red 的标准输出/错误与退出码"
+    },
+    {
+      "id": "E-GREEN",
+      "kind": "log",
+      "path": "evidence/green.log",
+      "sha256": "b21ba62633db76fdac29000ba8df9b2ff9cdf391dd642c959228fb126617b2c1",
+      "description": "实际运行 green 的标准输出/错误与退出码"
+    },
+    {
+      "id": "E-NEIGHBOR",
+      "kind": "log",
+      "path": "evidence/neighbor.log",
+      "sha256": "a8b4139572b7b47a9824b4e8f6cb0d59475522c4971ade2d6ff797651a5b7ae5",
+      "description": "实际运行 neighbor 的标准输出/错误与退出码"
+    },
+    {
+      "id": "E-INTEGRATION",
+      "kind": "log",
+      "path": "evidence/integration.log",
+      "sha256": "dc52ca06509955d8c49b40859a21ea392828f8b97ba44508205f347707958fa8",
+      "description": "实际运行 integration 的标准输出/错误与退出码"
+    },
+    {
+      "id": "E-REINTRODUCED",
+      "kind": "log",
+      "path": "evidence/reintroduced.log",
+      "sha256": "27d565934609443785c3f7a075b205263d2c4b533afe2f62c6ad0998787d8fb8",
+      "description": "实际运行 reintroduced 的标准输出/错误与退出码"
+    }
+  ]
+}

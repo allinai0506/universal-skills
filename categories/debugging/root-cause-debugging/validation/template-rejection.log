@@ -1,0 +1,88 @@
+FAIL: evidence checks
+- id must contain real text
+- symptom must contain real text
+- record is not supported/fixed; unverified or mitigated work cannot pass
+- evidence[0].description must contain real text
+- evidence[0].sha256 must be 64 lowercase hex characters
+- evidence[0]: missing/unsafe evidence path: not a readable regular file
+- evidence[1].description must contain real text
+- evidence[1].sha256 must be 64 lowercase hex characters
+- evidence[1]: missing/unsafe evidence path: not a readable regular file
+- evidence[2].description must contain real text
+- evidence[2].sha256 must be 64 lowercase hex characters
+- evidence[2]: missing/unsafe evidence path: not a readable regular file
+- evidence[3].description must contain real text
+- evidence[3].sha256 must be 64 lowercase hex characters
+- evidence[3]: missing/unsafe evidence path: not a readable regular file
+- evidence[4].description must contain real text
+- evidence[4].sha256 must be 64 lowercase hex characters
+- evidence[4]: missing/unsafe evidence path: not a readable regular file
+- evidence[5].description must contain real text
+- evidence[5].sha256 must be 64 lowercase hex characters
+- evidence[5]: missing/unsafe evidence path: not a readable regular file
+- evidence[6].description must contain real text
+- evidence[6].sha256 must be 64 lowercase hex characters
+- evidence[6]: missing/unsafe evidence path: not a readable regular file
+- evidence[7].description must contain real text
+- evidence[7].sha256 must be 64 lowercase hex characters
+- evidence[7]: missing/unsafe evidence path: not a readable regular file
+- expected.statement must contain real text
+- reproduction.command must contain real text
+- reproduction.environment must contain real text
+- reproduction.version must contain real text
+- reproduction.observed must contain real text
+- causality.trigger must contain real text
+- causality.mechanism must contain real text
+- causality.last_good must contain real text
+- causality.first_bad must contain real text
+- causality.escape must contain real text
+- causality.status must be supported
+- experiment.prediction must contain real text
+- experiment.intervention must contain real text
+- experiment.observation must contain real text
+- behaviors must be a list of real strings
+- locations must be a list of real strings
+- risks must be a list of real strings
+- boundaries must be a list of real strings
+- close requires status=fixed
+- fix.summary must contain real text
+- fix.version must contain real text
+- fix.data_repair must contain real text
+- guard.statement must contain real text
+- guard.location must contain real text
+- guard.scope must contain real text
+- checks[0].case must contain real text
+- checks[0].environment must contain real text
+- checks[0].version must contain real text
+- checks[0].command must contain real text
+- checks[0].observation must contain real text
+- checks[1].case must contain real text
+- checks[1].environment must contain real text
+- checks[1].version must contain real text
+- checks[1].command must contain real text
+- checks[1].observation must contain real text
+- checks[1]: required post-fix check did not pass
+- checks[2].case must contain real text
+- checks[2].environment must contain real text
+- checks[2].version must contain real text
+- checks[2].command must contain real text
+- checks[2].observation must contain real text
+- checks[2]: required post-fix check did not pass
+- checks[3].case must contain real text
+- checks[3].environment must contain real text
+- checks[3].version must contain real text
+- checks[3].command must contain real text
+- checks[3].observation must contain real text
+- checks[3]: required post-fix check did not pass
+- checks[4].case must contain real text
+- checks[4].environment must contain real text
+- checks[4].version must contain real text
+- checks[4].command must contain real text
+- checks[4].observation must contain real text
+- need matched regression red/green: same case/environment, different versions, green=fix
+- need passing fixed-version neighbor check
+- need passing fixed-version integration check
+- high risk needs matched failing counterfactual with defect reintroduced
+- release.observation must contain real text
+- release.rollback must contain real text
+- limitations must be a list of real strings

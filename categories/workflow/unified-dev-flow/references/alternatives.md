@@ -82,5 +82,6 @@ work or evidence to that owner; they do not take ownership implicitly.
 ## Debug escalation (full)
 
 `systematic-debugging` (entry) → `root-cause-hunter` (prove root cause) →
+`root-cause-debugging` (causal proof & anti-regression gates) →
 `paranoid-debugging` (prod-critical evidence pass).
 Others: `investigate` (gstack).

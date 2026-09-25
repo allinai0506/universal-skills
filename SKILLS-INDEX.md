@@ -1,6 +1,6 @@
 # SKILLS-INDEX
 
-> 技能来源速查表 · 自动生成于 2026-09-18 09:03 · 共 80 个一级技能。
+> 技能来源速查表 · 自动生成于 2026-09-25 10:21 · 共 81 个一级技能。
 > 按「来源」检索：公开技能包（外部大神编写的成套技能） / 自建・单个技能。
 > 技能由 AI 按 description 自动触发，无需记住名字。
 
@@ -124,6 +124,7 @@ _调试方法论_
 | 技能 | 用途 |
 | --- | --- |
 | `paranoid-debugging` | 对生产关键代码做证据驱动的高强度再验证 |
+| `root-cause-debugging` | Diagnose and close software bugs with causal proof, bounded prevention, and anti-regression gates. Use when dealing with repeated regressions, shallow patches (治标不治本), multi-cause defects, incident postmortems, or reviewing claimed root-cause fixes. Not for routine feature code, simple single-step bugs (use systematic-debugging), or deep stack peeling without test harnesses (use root-cause-hunter). |
 | `root-cause-hunter` | 逆向追踪调用链定位问题源头并证明 bug 必然发生 |
 | `systematic-debugging` | 遇到 bug 或异常时先系统诊断再提出修复方案 |
 
