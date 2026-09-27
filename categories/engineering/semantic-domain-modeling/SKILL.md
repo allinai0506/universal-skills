@@ -1,5 +1,7 @@
 ---
 name: semantic-domain-modeling
+version: "2026.09.27-1"
+synced-at: "2026-09-27T11:13:41"
 description: Align domain semantics before coding by defining shared terminology, core objects, relationships, states, actions, invariants, and authoritative sources of truth. Supports both Greenfield and Brownfield repositories. In Brownfield mode, first reconstruct Intended, Implemented, and Observed semantics in READ_ONLY discovery before any business-code change.
 ---
 
