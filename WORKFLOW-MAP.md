@@ -67,6 +67,7 @@ Controller Ownership Invariant：同一时刻至多一个 Controller 持有执�
 | 备选 | `spec` | 产出物直接是 issue/ticket、要与 GitHub 流衔接时 |
 | 配套 | constitution ensure/read-only | 确认并只读现有章程/项目原则；记录所依据文档，缺失时在选定 adapter 下补足必要约束，不因每次任务重复改写章程 |
 | 配套 | `domain-modeling` | 有领域建模诉求时沉淀统一语言 |
+| 配套 | `semantic-domain-modeling` | 跨模块/多智能体协作或语义冲突风险高时，先走 MVO 语义建模协议（含 brownfield 考古模式）再动代码 |
 
 #### Spec Adapter Resolution
 

@@ -1,0 +1,23 @@
+version: "1.1.0"
+author: "Universal Skills"
+skillFormat: "aiss-1.0"
+
+tags: [domain-modeling, architecture, semantics, multi-agent, brownfield]
+platforms: [claude, codex, gemini, opencode]
+
+triggers:
+  keywords:
+    - "semantic-domain-modeling"
+    - "领域建模"
+    - "领域语义"
+    - "统一语言"
+    - "术语对齐"
+    - "source of truth"
+    - "真相来源"
+    - "领域不变量"
+    - "业务语义"
+    - "semantic conflict"
+    - "Minimum Viable Ontology"
+    - "brownfield archaeology"
+  contextRequired:
+    - "git"

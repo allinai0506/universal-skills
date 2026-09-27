@@ -1,0 +1,3 @@
+interface:
+  display_name: "Semantic Domain Modeling"
+  short_description: "Align domain semantics before coding (MVO + brownfield archaeology)"

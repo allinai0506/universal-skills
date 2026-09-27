@@ -64,6 +64,7 @@ _mattpocock 工程技能_
 | `code-review` | 按规范与需求双轴并行审查分支改动并对比报告 |
 | `domain-modeling` | 沉淀领域术语并记录架构决策以构建统一语言 |
 | `prototype` | 构建一次性原型验证设计方案与逻辑是否合理 |
+| `semantic-domain-modeling` | Align domain semantics before coding by defining shared terminology, core objects, relationships, states, actions, invariants, and authoritative sources of truth. Supports both Greenfield and Brownfield repositories. In Brownfield mode, first reconstruct Intended, Implemented, and Observed semantics in READ_ONLY discovery before any business-code change. |
 | `to-spec` | 把当前对话综合成规格并发布到问题跟踪器 |
 
 ### 🧙 gstack
