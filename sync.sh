@@ -1902,9 +1902,18 @@ EOF
                 fi
                 mkdir -p "$hook_dir"
                 local pre_push="$hook_dir/pre-push"
-                cp -f "$claude_scripts/git-pre-push-guard.sh" "$pre_push"
-                chmod +x "$pre_push"
-                success "已安装 Git pre-push 门禁: $repo -> $pre_push"
+
+# 幂等检测：钩子已含 S6 门禁调用（entry-gate-check.py + --guard-push）则不覆写。
+# 两个标记在守卫脚本里分属两行，必须分别 grep 再求与，单串匹配永远落空。
+if [ -f "$pre_push" ] \
+   && grep -q "entry-gate-check.py" "$pre_push" \
+   && grep -q -- "--guard-push" "$pre_push"; then
+    log "Git pre-push 门禁已存在 (含 S6 调用)，跳过: $repo"
+else
+    cp -f "$claude_scripts/git-pre-push-guard.sh" "$pre_push"
+    chmod +x "$pre_push"
+    success "已安装/更新 Git pre-push 门禁: $repo -> $pre_push"
+fi
             fi
         fi
     done
