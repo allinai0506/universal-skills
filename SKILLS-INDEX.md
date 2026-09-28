@@ -1,6 +1,6 @@
 # SKILLS-INDEX
 
-> 技能来源速查表 · 自动生成于 2026-09-27 11:13 · 共 82 个一级技能。
+> 技能来源速查表 · 自动生成于 2026-09-28 12:46 · 共 82 个一级技能。
 > 按「来源」检索：公开技能包（外部大神编写的成套技能） / 自建・单个技能。
 > 技能由 AI 按 description 自动触发，无需记住名字。
 
@@ -64,8 +64,8 @@ _需求→规格→工单→实现→验证的完整工程闭环_
 | --- | --- |
 | `code-review` | 按规范与需求双轴并行审查分支改动并对比报告 |
 | `domain-modeling` | 沉淀领域术语并记录架构决策以构建统一语言 |
+| `enterprise-ontology-as-code` | Build and continuously evolve a versioned, validated, executable ontology/ asset layer for enterprise software. Use for greenfield bootstrap on new repos, READ_ONLY brownfield discovery on existing repos, cross-system capabilities needing objects/relations/states/actions/policies contracts, fixing semantic drift across frontend/backend/database, establishing a shared semantic layer for multi-agent systems with context projections, or proposing evidence-based ontology evolution (OEP) with diff, golden tests and human review. |
 | `prototype` | 构建一次性原型验证设计方案与逻辑是否合理 |
-| `semantic-domain-modeling` | Align domain semantics before coding by defining shared terminology, core objects, relationships, states, actions, invariants, and authoritative sources of truth. Supports both Greenfield and Brownfield repositories. In Brownfield mode, first reconstruct Intended, Implemented, and Observed semantics in READ_ONLY discovery before any business-code change. |
 | `to-spec` | 把当前对话综合成规格并发布到问题跟踪器 |
 
 ### poteto 工程方法论
