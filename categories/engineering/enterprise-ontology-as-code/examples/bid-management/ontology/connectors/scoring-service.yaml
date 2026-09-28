@@ -1,0 +1,8 @@
+id: scoring_service
+name: 评分解析服务
+lifecycle: active
+type: internal_service
+operations:
+  - {id: parseAndPersist, method: POST, endpoint: "/api/scoring/parse"}
+timeout_ms: 120000
+retry: {mode: safe_only}

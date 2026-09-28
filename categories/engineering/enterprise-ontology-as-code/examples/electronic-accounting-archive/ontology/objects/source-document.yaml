@@ -1,0 +1,11 @@
+id: source_document
+name: 原始凭证
+description: 支撑记账凭证的业务原始资料
+lifecycle: active
+identity:
+  primary_key: id
+properties:
+  - {id: id, name: 主键, type: string, required: true}
+  - {id: document_type, name: 单据类型, type: string, required: true}
+evidence:
+  - {kind: implemented, source: document-pool, locator: source_document, confidence: high}

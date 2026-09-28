@@ -1,0 +1,18 @@
+id: bad_action
+name: 错误动作
+lifecycle: active
+target: missing_object
+inputs: []
+preconditions: [missing_rule]
+authorization:
+  policies: [missing_policy]
+effects: {}
+side_effects: []
+idempotency: {}
+transaction: {}
+audit: {}
+failure_behavior: {}
+bindings:
+  - connector: missing_connector
+    operation: x
+verification: {}

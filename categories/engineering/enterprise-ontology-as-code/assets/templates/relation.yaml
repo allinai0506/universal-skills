@@ -1,0 +1,9 @@
+id: voucher_has_source_document
+name: 凭证关联原始凭证
+description: "一张记账凭证对应其业务依据原始凭证"
+lifecycle: experimental
+from: accounting_voucher
+to: source_document
+cardinality: one_to_many
+object_backed: false
+evidence: []

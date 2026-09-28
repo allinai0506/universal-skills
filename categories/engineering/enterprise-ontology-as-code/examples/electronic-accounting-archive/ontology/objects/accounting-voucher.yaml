@@ -1,0 +1,12 @@
+id: accounting_voucher
+name: 记账凭证
+description: 会计核算形成的记账凭证
+lifecycle: active
+identity:
+  primary_key: id
+properties:
+  - {id: id, name: 主键, type: string, required: true}
+  - {id: voucher_no, name: 凭证号, type: string, required: true}
+  - {id: status, name: 生命周期状态, type: string, required: true}
+evidence:
+  - {kind: implemented, source: domain-model, locator: accounting_voucher, confidence: high}

@@ -1,0 +1,8 @@
+id: readable_document_can_parse
+name: 可读取招标文件允许解析
+facts:
+  document_exists: true
+  object_accessible: true
+expected:
+  rules: {tender_document_readable: true}
+  allowed_actions: [parse_scoring_criteria]

@@ -1,0 +1,21 @@
+id: accounting_voucher
+name: 记账凭证
+description: "会计核算形成的记账凭证业务对象"
+lifecycle: experimental
+identity:
+  primary_key: id
+properties:
+  - id: id
+    name: 主键
+    type: string
+    required: true
+  - id: status
+    name: 状态
+    type: string
+    required: true
+aliases: []
+evidence:
+  - kind: implemented
+    source: "<path-or-system>"
+    locator: "<symbol/table/api>"
+    confidence: high

@@ -1,0 +1,13 @@
+id: accounting_voucher_db_mapping
+name: 记账凭证数据库映射
+lifecycle: experimental
+object: accounting_voucher
+source:
+  type: database
+  table: acc_voucher
+fields:
+  id: id
+  status: status
+authority:
+  read: database
+  write: archive_service

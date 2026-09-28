@@ -1,0 +1,11 @@
+id: scoring_criterion
+name: 评分项
+description: 从招标文件中识别出的可评分规则单元
+lifecycle: active
+identity: {primary_key: id}
+properties:
+  - {id: id, name: 评分项ID, type: string, required: true}
+  - {id: title, name: 标题, type: string, required: true}
+  - {id: score, name: 分值, type: number, required: false}
+evidence:
+  - {kind: intended, source: product-requirement, locator: scoring-criteria, confidence: high}

@@ -1,0 +1,11 @@
+id: archive_complete_voucher
+name: 完整凭证允许归档
+facts:
+  accounting_voucher:
+    id: V001
+    status: READY_TO_ARCHIVE
+expected:
+  rules:
+    voucher_source_complete: true
+  allowed_actions:
+    - archive_voucher

@@ -1,5 +1,0 @@
-# Domain Model
-
-## Objects
-
-Something.

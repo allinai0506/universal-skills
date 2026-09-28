@@ -1,0 +1,32 @@
+id: archive_voucher
+name: 归档凭证
+description: 将满足归档条件的凭证归档
+lifecycle: active
+target: accounting_voucher
+inputs: []
+preconditions: [voucher_source_complete]
+authorization:
+  policies: [archivist_archive_policy]
+effects:
+  state_transition:
+    state_machine: voucher_lifecycle
+    from: READY_TO_ARCHIVE
+    to: ARCHIVED
+side_effects:
+  - create_archive_record
+idempotency:
+  strategy: business_key
+  key: accounting_voucher.id
+transaction:
+  mode: atomic
+  owner: archive_service
+audit:
+  required: true
+  event: voucher_archived
+failure_behavior:
+  retry: safe_only
+  compensation: none
+bindings:
+  - {connector: archive_service, operation: completeArchive}
+verification:
+  strategy: reread_target

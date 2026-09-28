@@ -1,0 +1,10 @@
+id: voucher_has_source_document
+name: 凭证关联原始凭证
+description: 记账凭证与支撑其会计事项的原始资料关系
+lifecycle: active
+from: accounting_voucher
+to: source_document
+cardinality: many_to_many
+object_backed: true
+evidence:
+  - {kind: implemented, source: relation-table, locator: voucher_source_link, confidence: high}

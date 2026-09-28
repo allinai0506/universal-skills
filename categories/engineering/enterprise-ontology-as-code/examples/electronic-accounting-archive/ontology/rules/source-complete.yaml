@@ -1,0 +1,9 @@
+id: voucher_source_complete
+name: 原始资料完整性
+lifecycle: active
+description: 判断凭证所需原始资料是否齐全且关联正确
+inputs: [accounting_voucher, source_document]
+returns: boolean
+logic_ref: archive-domain.checkVoucherSourceCompleteness
+evidence:
+  - {kind: implemented, source: service, locator: checkVoucherSourceCompleteness, confidence: high}

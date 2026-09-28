@@ -1,0 +1,7 @@
+id: tender_document_db_mapping
+name: 招标文件数据映射
+lifecycle: active
+object: tender_document
+source: {type: database, table: tender_document}
+fields: {id: id, object_key: object_key, parse_status: parse_status}
+authority: {read: database, write: scoring_service}

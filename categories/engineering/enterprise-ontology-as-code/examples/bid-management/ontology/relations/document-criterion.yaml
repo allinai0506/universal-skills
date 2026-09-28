@@ -1,0 +1,10 @@
+id: document_defines_scoring_criterion
+name: 招标文件定义评分项
+description: 评分项来源于特定招标文件及其位置
+lifecycle: active
+from: tender_document
+to: scoring_criterion
+cardinality: one_to_many
+object_backed: true
+evidence:
+  - {kind: intended, source: scoring-parser, locator: criterion-source, confidence: medium}

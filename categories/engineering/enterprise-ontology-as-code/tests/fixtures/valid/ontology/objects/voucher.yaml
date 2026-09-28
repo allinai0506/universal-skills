@@ -1,0 +1,16 @@
+id: voucher
+name: 凭证
+description: 测试对象
+lifecycle: active
+identity:
+  primary_key: id
+properties:
+  - id: id
+    name: ID
+    type: string
+    required: true
+evidence:
+  - kind: implemented
+    source: test
+    locator: voucher
+    confidence: high

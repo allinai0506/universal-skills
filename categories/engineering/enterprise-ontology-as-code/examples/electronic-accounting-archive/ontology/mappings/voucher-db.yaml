@@ -1,0 +1,7 @@
+id: accounting_voucher_db_mapping
+name: 凭证数据映射
+lifecycle: active
+object: accounting_voucher
+source: {type: database, table: acc_voucher}
+fields: {id: id, voucher_no: voucher_no, status: status}
+authority: {read: database, write: archive_service}

@@ -1,0 +1,3 @@
+interface:
+  display_name: "Enterprise Ontology as Code"
+  short_description: "Versioned, validated ontology/ assets with brownfield discovery and continuous evolution"

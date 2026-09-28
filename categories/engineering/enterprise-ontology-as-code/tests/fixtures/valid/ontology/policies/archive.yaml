@@ -1,0 +1,10 @@
+id: archive_policy
+name: 归档权限
+lifecycle: active
+subjects:
+  roles: [archivist]
+resources:
+  objects: [voucher]
+allowed_actions: [archive_voucher]
+agent_execution:
+  mode: inherit_user

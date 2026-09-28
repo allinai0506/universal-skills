@@ -18,3 +18,5 @@ ts	phase	decision	why	evidence	result
 2026-09-25T10:10:00Z	integrate	将 root-cause-debugging 融入 unified-dev-flow 调试升级梯队	响应用户需求完善四层调试防御体系	WORKFLOW-MAP.md, SKILL.md	全套路由与测试验证通过
 2026-09-27T11:15:00Z	recon	接收 Downloads/semantic-domain-modeling v1.1.0 技能包并做纳管前体检	确认包完整性与运行安全（测试/校验/脚本只读性）	unittest 6/6, validate PASS, quick_validate valid	包完整，源内容零改动纳管
 2026-09-27T11:20:00Z	integrate	归类至 categories/engineering/ 并补齐 skill-metadata.yml 与 openai.yaml，WORKFLOW-MAP S2 加引导行	与相邻 domain-modeling 互补（重协议 vs 轻纪律），engineering 为既有领域建模技能归属	SKILLS-INDEX 82, sync 16 目标全绿	全端传播完成，索引已刷新
+2026-09-28T12:45:00Z	recon	接收 enterprise-ontology-as-code v2.0.0 升级包并体检	语义对齐技能的工程化升级：ontology/ YAML 资产 + 验证器/索引/Diff 脚本	unittest 2/2, fixtures 退出码符合预期, PyYAML 6.0.3	SKILL.md 缺 frontmatter 已补齐
+2026-09-28T12:50:00Z	integrate	feat 分支上以 enterprise-ontology-as-code 替换 semantic-domain-modeling 并更新 WORKFLOW-MAP	用户拍板全新替换；v2 完整覆盖 v1 语义对齐能力	73 文件与源 diff 一致, 全部校验 exit 符合预期	PR !49 更新为最终态

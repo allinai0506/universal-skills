@@ -1,0 +1,22 @@
+version: 0.1.0
+name: enterprise-ontology
+description: "当前仓库的业务本体定义"
+default_language: zh-CN
+lifecycle_values:
+  - experimental
+  - active
+  - deprecated
+roots:
+  objects: objects
+  relations: relations
+  states: states
+  rules: rules
+  actions: actions
+  policies: policies
+  workflows: workflows
+  connectors: connectors
+  mappings: mappings
+  projections: projections
+  golden_tests: tests/golden
+  decisions: decisions
+  proposals: proposals
