@@ -1,0 +1,10 @@
+id: project_has_tender_document
+name: 项目关联招标文件
+description: 项目当前用于评分解析的权威招标文件
+lifecycle: active
+from: tender_project
+to: tender_document
+cardinality: one_to_many
+object_backed: false
+evidence:
+  - {kind: implemented, source: project_documents, locator: tender_document_id, confidence: high}

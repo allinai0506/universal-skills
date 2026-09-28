@@ -1,0 +1,13 @@
+id: voucher_archive_workflow
+name: 凭证归档工作流
+lifecycle: experimental
+trigger:
+  type: event
+  event: voucher_ready_to_archive
+steps:
+  - id: validate
+    type: rule
+    ref: voucher_source_complete
+  - id: archive
+    type: action
+    ref: archive_voucher

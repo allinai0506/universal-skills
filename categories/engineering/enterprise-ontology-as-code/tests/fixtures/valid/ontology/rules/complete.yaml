@@ -1,0 +1,13 @@
+id: voucher_complete
+name: 凭证完整
+lifecycle: active
+description: 判断是否完整
+inputs:
+  - voucher
+returns: boolean
+logic_ref: test.complete
+evidence:
+  - kind: implemented
+    source: test
+    locator: complete
+    confidence: high

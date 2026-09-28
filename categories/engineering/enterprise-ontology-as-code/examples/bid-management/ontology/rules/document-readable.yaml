@@ -1,0 +1,9 @@
+id: tender_document_readable
+name: 招标文件可读取
+lifecycle: active
+description: 权威招标文件存在且可被解析流水线读取
+inputs: [tender_document]
+returns: boolean
+logic_ref: documentInsight.ensureReadable
+evidence:
+  - {kind: implemented, source: parser-service, locator: ensureReadable, confidence: high}

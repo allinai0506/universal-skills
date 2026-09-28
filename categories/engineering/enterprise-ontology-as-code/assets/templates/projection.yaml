@@ -1,0 +1,19 @@
+id: archive_agent_context
+name: 归档智能体上下文投影
+lifecycle: experimental
+consumers:
+  - role: archive_agent
+objects:
+  accounting_voucher:
+    properties:
+      - id
+      - status
+relations:
+  - voucher_has_source_document
+rules:
+  - voucher_source_complete
+actions:
+  - archive_voucher
+policies:
+  - archivist_archive_policy
+exclude_by_default: true

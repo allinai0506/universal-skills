@@ -1,0 +1,11 @@
+id: archive_service
+name: 归档服务
+lifecycle: experimental
+type: internal_service
+operations:
+  - id: completeArchive
+    method: POST
+    endpoint: /api/archive/{voucherId}/complete
+timeout_ms: 10000
+retry:
+  mode: none

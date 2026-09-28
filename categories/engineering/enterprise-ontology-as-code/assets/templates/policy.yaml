@@ -1,0 +1,14 @@
+id: archivist_archive_policy
+name: 档案员归档权限
+lifecycle: experimental
+subjects:
+  roles:
+    - archivist
+resources:
+  objects:
+    - accounting_voucher
+allowed_actions:
+  - archive_voucher
+conditions: []
+agent_execution:
+  mode: inherit_user

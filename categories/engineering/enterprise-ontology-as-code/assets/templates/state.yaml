@@ -1,0 +1,17 @@
+id: voucher_lifecycle
+name: 凭证生命周期
+lifecycle: experimental
+object: accounting_voucher
+initial: ENTRY
+terminal:
+  - ARCHIVED
+states:
+  - ENTRY
+  - MATCHED
+  - READY_TO_ARCHIVE
+  - ARCHIVED
+transitions:
+  - from: ENTRY
+    to: MATCHED
+    trigger: match_source_document
+    guards: []

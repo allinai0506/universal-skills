@@ -1,0 +1,9 @@
+id: complete_voucher_can_archive
+name: 完整凭证允许归档
+facts:
+  voucher_status: READY_TO_ARCHIVE
+  required_source_count: 3
+  linked_source_count: 3
+expected:
+  rules: {voucher_source_complete: true}
+  allowed_actions: [archive_voucher]

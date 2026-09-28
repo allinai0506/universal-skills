@@ -1,0 +1,11 @@
+id: scoring_parse_policy
+name: 评分解析执行权限
+lifecycle: active
+subjects:
+  roles: [bid_user, scoring_agent]
+resources:
+  objects: [tender_project, tender_document, scoring_criterion]
+allowed_actions: [parse_scoring_criteria]
+conditions: []
+agent_execution:
+  mode: service_identity

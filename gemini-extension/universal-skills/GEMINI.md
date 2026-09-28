@@ -63,6 +63,7 @@ _mattpocock 工程技能_
 | --- | --- |
 | `code-review` | 按规范与需求双轴并行审查分支改动并对比报告 |
 | `domain-modeling` | 沉淀领域术语并记录架构决策以构建统一语言 |
+| `enterprise-ontology-as-code` | Build and continuously evolve a versioned, validated, executable ontology/ asset layer for enterprise software. Use for greenfield bootstrap on new repos, READ_ONLY brownfield discovery on existing repos, cross-system capabilities needing objects/relations/states/actions/policies contracts, fixing semantic drift across frontend/backend/database, establishing a shared semantic layer for multi-agent systems with context projections, or proposing evidence-based ontology evolution (OEP) with diff, golden tests and human review. |
 | `prototype` | 构建一次性原型验证设计方案与逻辑是否合理 |
 | `to-spec` | 把当前对话综合成规格并发布到问题跟踪器 |
 

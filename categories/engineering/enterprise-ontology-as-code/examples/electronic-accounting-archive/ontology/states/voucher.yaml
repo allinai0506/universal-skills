@@ -1,0 +1,12 @@
+id: voucher_lifecycle
+name: 凭证生命周期
+lifecycle: active
+object: accounting_voucher
+initial: ENTRY
+terminal: [ARCHIVED]
+states: [ENTRY, PARSED, MATCHED, READY_TO_ARCHIVE, ARCHIVED]
+transitions:
+  - {from: ENTRY, to: PARSED, trigger: parse_voucher, guards: []}
+  - {from: PARSED, to: MATCHED, trigger: match_source_document, guards: []}
+  - {from: MATCHED, to: READY_TO_ARCHIVE, trigger: verify_archive_readiness, guards: [voucher_source_complete]}
+  - {from: READY_TO_ARCHIVE, to: ARCHIVED, trigger: archive_voucher, guards: [voucher_source_complete]}

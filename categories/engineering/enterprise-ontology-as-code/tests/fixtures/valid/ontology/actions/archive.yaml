@@ -1,0 +1,28 @@
+id: archive_voucher
+name: 归档凭证
+lifecycle: active
+target: voucher
+inputs: []
+preconditions: [voucher_complete]
+authorization:
+  policies: [archive_policy]
+effects:
+  set:
+    status: ARCHIVED
+side_effects: []
+idempotency:
+  strategy: business_key
+  key: voucher.id
+transaction:
+  mode: atomic
+  owner: voucher_service
+audit:
+  required: true
+failure_behavior:
+  retry: safe_only
+  compensation: none
+bindings:
+  - connector: voucher_service
+    operation: archive
+verification:
+  strategy: reread_target

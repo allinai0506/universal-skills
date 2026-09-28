@@ -1,0 +1,30 @@
+version: "2.0.0"
+author: "Universal Skills"
+skillFormat: "aiss-1.0"
+
+tags: [ontology, domain-modeling, architecture, brownfield, multi-agent, governance]
+platforms: [claude, codex, gemini, opencode]
+
+triggers:
+  keywords:
+    - "enterprise-ontology-as-code"
+    - "ontology"
+    - "ontology-as-code"
+    - "本体"
+    - "本体即代码"
+    - "语义层"
+    - "业务语义"
+    - "领域建模"
+    - "语义漂移"
+    - "语义对齐"
+    - "OEP"
+    - "本体演化"
+    - "brownfield discovery"
+    - "仓库考古"
+    - "golden case"
+  contextRequired:
+    - "git"
+
+dependencies:
+  external:
+    - PyYAML

@@ -1,0 +1,13 @@
+id: archive_agent_context
+name: 归档智能体上下文
+lifecycle: active
+consumers:
+  - {role: archive_agent}
+objects:
+  accounting_voucher: {properties: [id, voucher_no, status]}
+  source_document: {properties: [id, document_type]}
+relations: [voucher_has_source_document]
+rules: [voucher_source_complete]
+actions: [archive_voucher]
+policies: [archivist_archive_policy]
+exclude_by_default: true

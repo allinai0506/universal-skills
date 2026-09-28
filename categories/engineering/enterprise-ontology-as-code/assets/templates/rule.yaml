@@ -1,0 +1,9 @@
+id: voucher_source_complete
+name: 原始凭证完整性检查
+description: "判断记账凭证要求的原始资料是否齐全"
+lifecycle: experimental
+inputs:
+  - accounting_voucher
+returns: boolean
+logic_ref: "<code-symbol/query/model>"
+evidence: []

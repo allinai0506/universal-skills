@@ -1,0 +1,8 @@
+id: voucher_service
+name: 凭证服务
+lifecycle: active
+type: internal_service
+operations:
+  - id: archive
+    method: POST
+    endpoint: /archive

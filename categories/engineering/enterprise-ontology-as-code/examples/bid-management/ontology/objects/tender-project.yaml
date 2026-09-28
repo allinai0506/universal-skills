@@ -1,0 +1,10 @@
+id: tender_project
+name: 投标项目
+description: 一次投标业务项目
+lifecycle: active
+identity: {primary_key: id}
+properties:
+  - {id: id, name: 项目ID, type: string, required: true}
+  - {id: status, name: 项目状态, type: string, required: true}
+evidence:
+  - {kind: implemented, source: domain-model, locator: tender_project, confidence: high}

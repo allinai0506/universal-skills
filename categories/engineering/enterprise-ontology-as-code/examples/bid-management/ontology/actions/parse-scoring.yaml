@@ -1,0 +1,29 @@
+id: parse_scoring_criteria
+name: 解析评分标准
+description: 从权威招标文件提取评分项并持久化
+lifecycle: active
+target: tender_document
+inputs: []
+preconditions: [tender_document_readable]
+authorization:
+  policies: [scoring_parse_policy]
+effects:
+  create: [scoring_criterion]
+side_effects:
+  - persist_source_evidence
+idempotency:
+  strategy: composite_key
+  key: tender_document.id+parser_version
+transaction:
+  mode: bounded
+  owner: scoring_service
+audit:
+  required: true
+  event: scoring_criteria_parsed
+failure_behavior:
+  retry: safe_only
+  compensation: replace_same_version
+bindings:
+  - {connector: scoring_service, operation: parseAndPersist}
+verification:
+  strategy: reread_created_objects

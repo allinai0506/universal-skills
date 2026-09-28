@@ -1,0 +1,11 @@
+id: tender_document
+name: 招标文件
+description: 与投标项目关联的权威招标文件
+lifecycle: active
+identity: {primary_key: id}
+properties:
+  - {id: id, name: 文件ID, type: string, required: true}
+  - {id: object_key, name: 对象存储键, type: string, required: true}
+  - {id: parse_status, name: 解析状态, type: string, required: true}
+evidence:
+  - {kind: implemented, source: document-model, locator: tender_document, confidence: high}

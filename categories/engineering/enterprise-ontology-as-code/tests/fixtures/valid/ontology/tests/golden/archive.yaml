@@ -1,0 +1,4 @@
+id: valid_archive_case
+name: 可归档
+action: archive_voucher
+expected: allowed

@@ -1,0 +1,14 @@
+id: scoring_agent_context
+name: 评分解析智能体上下文
+lifecycle: active
+consumers:
+  - {role: scoring_agent}
+objects:
+  tender_project: {properties: [id, status]}
+  tender_document: {properties: [id, object_key, parse_status]}
+  scoring_criterion: {properties: [id, title, score]}
+relations: [project_has_tender_document, document_defines_scoring_criterion]
+rules: [tender_document_readable]
+actions: [parse_scoring_criteria]
+policies: [scoring_parse_policy]
+exclude_by_default: true

@@ -67,6 +67,7 @@ Controller Ownership Invariant：同一时刻至多一个 Controller 持有执�
 | 备选 | `spec` | 产出物直接是 issue/ticket、要与 GitHub 流衔接时 |
 | 配套 | constitution ensure/read-only | 确认并只读现有章程/项目原则；记录所依据文档，缺失时在选定 adapter 下补足必要约束，不因每次任务重复改写章程 |
 | 配套 | `domain-modeling` | 有领域建模诉求时沉淀统一语言 |
+| 配套 | `enterprise-ontology-as-code` | 跨系统/多智能体协作或语义漂移风险高时，以可验证的 `ontology/` 资产承载业务语义（brownfield 只读发现 + OEP 持续演化 + golden 回归） |
 
 #### Spec Adapter Resolution
 

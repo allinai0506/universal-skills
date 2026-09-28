@@ -1,0 +1,12 @@
+id: archive_projection
+name: 归档上下文
+lifecycle: active
+consumers:
+  - role: archive_agent
+objects:
+  voucher:
+    properties: [id]
+rules: [voucher_complete]
+actions: [archive_voucher]
+policies: [archive_policy]
+exclude_by_default: true
