@@ -1,7 +1,7 @@
 ---
 name: enterprise-ontology-as-code
-version: "2026.09.28-1"
-synced-at: "2026-09-28T12:46:30"
+version: "2026.10.02-1"
+synced-at: "2026-10-02T08:28:36"
 description: Build and continuously evolve a versioned, validated, executable ontology/ asset layer for enterprise software. Use for greenfield bootstrap on new repos, READ_ONLY brownfield discovery on existing repos, cross-system capabilities needing objects/relations/states/actions/policies contracts, fixing semantic drift across frontend/backend/database, establishing a shared semantic layer for multi-agent systems with context projections, or proposing evidence-based ontology evolution (OEP) with diff, golden tests and human review.
 ---
 
