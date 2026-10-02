@@ -55,3 +55,14 @@
 - Palantir：Object / Property / Link / Action，Data + Logic + Action + Security，Action 一等公民，运行时绑定、权限与审计。
 
 本技能不是复刻任一产品，而是提取可在普通企业软件仓库中落地的最小工程规范。
+
+## v2 推荐用法
+
+对于已运行仓库，日常任务无需完整重建 Ontology。PR/CI 推荐执行：
+
+```bash
+python scripts/ontology_impact.py <base-ref> <head-ref> ontology
+python scripts/ontology_validate.py ontology
+```
+
+详见 `references/10-executable-knowledge.md` 与 `references/11-ontology-impact-gate.md`。

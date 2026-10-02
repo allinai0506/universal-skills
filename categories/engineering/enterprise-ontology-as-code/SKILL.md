@@ -290,6 +290,14 @@ Agent 不应直接获得完整 Ontology。
 - 权限绕过测试
 - 并发冲突测试
 
+### Phase 5.5 — Ontology Impact Gate
+
+持续开发仓库不要求每个任务修改 Ontology，但可能影响业务语义的 Git Diff 必须经过 `ontology_impact.py`。
+
+`Git Diff -> ontology_impact.py -> ontology_validate.py -> PR Review`
+
+命中风险但无 Ontology 变化时，必须提供 `.ontology-impact.yaml` 的 `impact: none + reason + evidence`，否则 REVIEW_REQUIRED。Gate 防遗漏，不替代 Human Review。详见 `references/11-ontology-impact-gate.md`。
+
 ### Phase 6 — PR Gate
 
 PR 必须包含：
@@ -442,6 +450,7 @@ Agent 禁止：
 python scripts/ontology_validate.py ontology
 python scripts/ontology_index.py ontology
 python scripts/ontology_diff.py <base-ref> <head-ref> ontology
+python scripts/ontology_impact.py <base-ref> <head-ref> ontology
 ```
 
 验证未通过时，不得进入 Merge。
