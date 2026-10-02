@@ -18,9 +18,20 @@ python scripts/ontology_validate.py tests/fixtures/invalid/ontology
 
 ```bash
 python -m unittest tests/test_validator.py
+python -m unittest tests/test_ontology_impact.py
 ```
 
-## 3. 目标仓库验收
+## 3. Impact Gate 冒烟
+
+在含 `ontology/` 的目标仓库，对一个触及敏感路径但未同步 Ontology 的提交：
+
+```bash
+python scripts/ontology_impact.py HEAD~1 HEAD ontology
+```
+
+预期：退出码 3，输出 `REVIEW_REQUIRED`；补充有效 `.ontology-impact.yaml`（`impact: none + reason + evidence`）后退出码 0。
+
+## 4. 目标仓库验收
 
 至少检查：
 

@@ -42,3 +42,7 @@ Observation
 - 单次运行中的瞬时事实。
 - 纯技术实现细节。
 - Agent 的猜测。
+
+## v2：从 OEP 到可执行知识
+
+当 OEP 涉及稳定、可重复的业务判断时，进一步判断是否属于 Executable Knowledge。若属于：指向现有权威实现或建立唯一实现；明确 UNKNOWN/failure semantics；增加 Golden Case/自动测试；明确 Agent/Workflow 消费者。Agent 可以提议，不能自我批准。
