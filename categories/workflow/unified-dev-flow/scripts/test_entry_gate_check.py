@@ -10,6 +10,7 @@ TDD: this file was written BEFORE entry-gate-check.py existed.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -150,6 +151,7 @@ def main() -> None:
     phase3_logging()
     phase_blocklog_flag()
     phase4_review()
+    phase5_guard_push_provenance()
 
     print(f"\n{len(FAILURES)} failure(s)." if FAILURES else "\nAll tests passed.")
     sys.exit(1 if FAILURES else 0)
@@ -835,6 +837,84 @@ def phase4_review() -> None:
                   "独立" in r.stderr or "independent" in r.stderr.lower() or "flow:review" in r.stderr
                   or "严禁主" in r.stderr,
                   f"stderr={r.stderr[:300]}")
+
+
+def phase5_guard_push_provenance() -> None:
+    """--guard-push: diff_hash provenance must hash the PUSHED ref, not cwd HEAD.
+
+    Regression for the S6 push gate: the gate previously hashed the diff of
+    whatever branch was checked out in cwd. Pushing branch B while branch A is
+    checked out validated A's hash — a false pass for unreviewed B, and a
+    false block for reviewed A pushed from a different checkout.
+    """
+    with tempfile.TemporaryDirectory() as bp_proj:
+        def write_review_files(proj: str, session: str,
+                               verify: str | None = None,
+                               review: str | None = None) -> None:
+            d = os.path.join(proj, ".omc")
+            os.makedirs(d, exist_ok=True)
+            with open(os.path.join(d, f"verify-{session}.md"), "w",
+                      encoding="utf-8") as f:
+                f.write(verify)
+            with open(os.path.join(d, f"review-{session}.md"), "w",
+                      encoding="utf-8") as f:
+                f.write(review)
+
+        def _git(*args: str) -> str:
+            res = subprocess.run(["git", "-C", bp_proj, *args],
+                                 capture_output=True, text=True)
+            return res.stdout.strip()
+
+        def _commit(fname: str, content: str, msg: str) -> None:
+            with open(os.path.join(bp_proj, fname), "w") as f:
+                f.write(content)
+            _git("add", ".")
+            _git("commit", "-q", "-m", msg)
+
+        _git("init", "-q")
+        _git("config", "user.email", "test@test.com")
+        _git("config", "user.name", "Test")
+        base_branch = _git("symbolic-ref", "--short", "HEAD")
+        _commit("base.txt", "base\n", "init")
+        _git("checkout", "-q", "-b", "feat-a")
+        _commit("a.txt", "aaa\n", "feat a")
+        sha_a = _git("rev-parse", "feat-a")
+        _git("checkout", "-q", base_branch)
+        _git("checkout", "-q", "-b", "feat-b")
+        _commit("b.txt", "bbb\n", "feat b")
+        sha_b = _git("rev-parse", "feat-b")
+
+        # diff_hash exactly the way an S6 review of feat-a would have stamped it
+        merge_base = _git("merge-base", base_branch, sha_a)
+        diff_a = subprocess.run(["git", "-C", bp_proj, "diff", f"{merge_base}..{sha_a}"],
+                                capture_output=True, text=True).stdout
+        hash_a = hashlib.sha256(diff_a.encode("utf-8")).hexdigest()
+
+        write_review_files(bp_proj, "gp-session",
+                           verify="## S5 验证证据\n- ai-slop-cleaner: deletion-first 完成\n- exit 0\n" + ("v" * 50),
+                           review="## S6 评审结论\nverdict: MERGE_READY\nreviewer: gemini-pro\nround: 1\n"
+                                  "google-code-review 通过。\n"
+                                  f"diff_hash: {hash_a}\n" + ("r" * 40))
+
+        zero = "0000000000000000000000000000000000000000"
+
+        # 54. pushing unreviewed feat-b while feat-a is checked out must BLOCK
+        # (defect showed a false pass: gate validated feat-a's hash from cwd)
+        _git("checkout", "-q", "feat-a")
+        r = run(["--guard-push", "--project-dir", bp_proj],
+                stdin_text=f"refs/heads/feat-b {sha_b} refs/heads/feat-b {zero}\n")
+        check("guard-push-provenance-hashes-pushed-ref-blocks",
+              r.returncode == 1 and "diff_hash" in r.stderr,
+              f"exit={r.returncode} stderr={r.stderr[:300]}")
+
+        # 55. pushing reviewed feat-a while feat-b is checked out must PASS
+        # (defect showed a false block: gate validated feat-b's hash from cwd)
+        _git("checkout", "-q", "feat-b")
+        r = run(["--guard-push", "--project-dir", bp_proj],
+                stdin_text=f"refs/heads/feat-a {sha_a} refs/heads/feat-a {zero}\n")
+        check("guard-push-provenance-hashes-pushed-ref-passes",
+              r.returncode == 0 and "门禁放行" in r.stdout,
+              f"exit={r.returncode} stdout={r.stdout[:200]} stderr={r.stderr[:300]}")
 
 
 if __name__ == "__main__":
