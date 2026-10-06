@@ -490,26 +490,26 @@ def validate_review(content: str) -> str | None:
     return None
 
 
-def compute_diff_hash(project_dir: str) -> str | None:
-    """Compute sha256 hash of git diff from origin/main (or fallback base / HEAD~1 if not found)."""
+def compute_diff_hash(project_dir: str, head_ref: str = "HEAD") -> str | None:
+    """Compute sha256 hash of git diff from origin/main (or fallback base / <head_ref>~1 if not found)."""
     try:
         candidates = ("origin/main", "gitee/main", "main", "origin/master", "gitee/master", "master")
         base = None
         for candidate in candidates:
-            res_base = subprocess.run(["git", "merge-base", candidate, "HEAD"],
+            res_base = subprocess.run(["git", "merge-base", candidate, head_ref],
                                       cwd=project_dir, capture_output=True, text=True, timeout=5)
             if res_base.returncode == 0 and res_base.stdout.strip():
                 base = res_base.stdout.strip()
                 break
         if not base:
-            res_rev = subprocess.run(["git", "rev-parse", "--verify", "HEAD~1"],
+            res_rev = subprocess.run(["git", "rev-parse", "--verify", f"{head_ref}~1"],
                                      cwd=project_dir, capture_output=True, text=True, timeout=5)
             if res_rev.returncode == 0 and res_rev.stdout.strip():
                 base = res_rev.stdout.strip()
         if not base:
             return None
 
-        res_diff = subprocess.run(["git", "diff", f"{base}..HEAD"],
+        res_diff = subprocess.run(["git", "diff", f"{base}..{head_ref}"],
                                   cwd=project_dir, capture_output=True, text=True, timeout=10)
         if res_diff.returncode == 0:
             import hashlib
@@ -519,14 +519,15 @@ def compute_diff_hash(project_dir: str) -> str | None:
     return None
 
 
-def validate_review_provenance(project_dir: str, review_content: str) -> str | None:
-    """Validate that review provenance matches current git state.
-    If diff_hash is present in the review, it must match current repository diff.
+def validate_review_provenance(project_dir: str, review_content: str,
+                               head_ref: str = "HEAD") -> str | None:
+    """Validate that review provenance matches the git state of head_ref.
+    If diff_hash is present in the review, it must match the diff of head_ref.
     """
     m_diff = re.search(r"diff_hash\s*[：:]\s*([a-f0-9]{64})", review_content, re.IGNORECASE)
     if m_diff:
         expected_diff_hash = m_diff.group(1).strip()
-        current_diff_hash = compute_diff_hash(project_dir)
+        current_diff_hash = compute_diff_hash(project_dir, head_ref)
         if current_diff_hash and current_diff_hash != expected_diff_hash:
             return (f"S6 评审凭证已失效：检测到代码在审查后发生变更（diff_hash 不匹配）！\n"
                     f"  凭据中的 hash: {expected_diff_hash[:12]}...\n"
@@ -1140,7 +1141,9 @@ def cmd_guard_pr(ns: argparse.Namespace) -> None:
         sys.exit(1)
 
     # Diff hash provenance check: if review has a diff_hash, verify it matches current state
-    prov_reason = validate_review_provenance(project_dir, review_content)
+    # In pre-push mode head_ref is the pushed object, not cwd HEAD (push ≠ checkout)
+    head_ref = getattr(ns, "head_ref", "") or "HEAD"
+    prov_reason = validate_review_provenance(project_dir, review_content, head_ref=head_ref)
     if prov_reason:
         sys.stderr.write(f"⛔ [unified-dev-flow 门禁阻断]: {prov_reason}\n")
         log_block("guard-pr-stale-review", ns.session_id or "default", project_dir, prov_reason[:200])
@@ -1200,6 +1203,9 @@ def cmd_guard_push(ns: argparse.Namespace) -> None:
             continue
         # 对开发任务分支（agent/*, feat/*, fix/*, 或其它开发分支）必须检查 S6
         ns.branch = ref_name
+        # provenance 必须哈希被推送的对象而非 cwd HEAD：git push 可推送当前未 checkout 的分支
+        if re.fullmatch(r"[0-9a-f]{6,64}", local_sha, re.IGNORECASE):
+            ns.head_ref = local_sha
         cmd_guard_pr(ns)
         return
 
