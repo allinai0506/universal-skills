@@ -9,6 +9,9 @@ import time
 import unittest
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent))
+from acceptance_gate import RECEIPT_DIGEST_FIELD, receipt_digest  # noqa: E402
+
 GATE = Path(__file__).with_name("acceptance_gate.py")
 
 
@@ -144,7 +147,9 @@ class AcceptanceGateTests(unittest.TestCase):
         self.assertIn("receipt_sha256", receipt)
 
     def test_vacuous_acceptance_check_rejected(self):
-        for argv in (["true"], ["echo", "ok"], [sys.executable, "-c", "pass"]):
+        for argv in (["true"], ["echo", "ok"], [sys.executable, "-c", "pass"],
+                     ["sh", "-c", "true"], ["/bin/sh", "-c", "echo ok"],
+                     [sys.executable, "-c", "import sys; sys.exit(0)"]):
             with self.subTest(argv=argv):
                 self.spec["checks"][0]["argv"] = argv
                 self.write_contract()
@@ -183,6 +188,36 @@ class AcceptanceGateTests(unittest.TestCase):
         verify = self.verify_gate()
         self.assertEqual(verify.returncode, 1)
         self.assertIn("digest missing", verify.stderr)
+
+    def test_malformed_timestamp_is_gate_failure_not_invalid_input(self):
+        """A broken timestamp is a failed gate (exit 1), not invalid input (exit 2)."""
+        self.assertEqual(self.run_gate().returncode, 0)
+        receipt_file = self.out / "receipt.json"
+        receipt = json.loads(receipt_file.read_text(encoding="utf-8"))
+        receipt["finished_at"] = "not-a-timestamp"
+        receipt[RECEIPT_DIGEST_FIELD] = receipt_digest(receipt)
+        receipt_file.write_text(json.dumps(receipt), encoding="utf-8")
+        verify = self.verify_gate()
+        self.assertEqual(verify.returncode, 1)
+        self.assertIn("timestamp missing or malformed", verify.stderr)
+
+    def test_recomputed_digest_still_passes(self):
+        """Documented limit: the digest is tamper-evident, not tamper-proof.
+
+        A forger who rewrites the receipt can also recompute the digest, so
+        the gate still reports PASS. This test pins that known limit so the
+        behaviour cannot silently change, and keeps the trust boundary in
+        references/verification-rules.md honest.
+        """
+        self.spec["checks"][0]["argv"] = [sys.executable, "-c", "raise SystemExit(9)"]
+        self.write_contract()
+        self.assertEqual(self.run_gate().returncode, 1)
+        receipt_file = self.out / "receipt.json"
+        receipt = json.loads(receipt_file.read_text(encoding="utf-8"))
+        receipt["checks"][0]["exit_code"] = 0
+        receipt[RECEIPT_DIGEST_FIELD] = receipt_digest(receipt)
+        receipt_file.write_text(json.dumps(receipt), encoding="utf-8")
+        self.assertEqual(self.verify_gate().returncode, 0)
 
 
 if __name__ == "__main__":

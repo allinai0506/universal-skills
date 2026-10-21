@@ -20,16 +20,18 @@ Use `assets/contract.template.json` and customize it **outside the target reposi
 
 ## Trust boundaries
 
-- The receipt carries a `receipt_sha256` digest over its own body, and `verify` recomputes it. This binds the recorded exit codes, log digests and contract digest together, so editing `exit_code` in a failing receipt to `0` is detected and the gate reports `BLOCKED`. It is tamper-**evident**, not tamper-proof: a party that can rewrite the receipt can also recompute the digest. No cryptographic signatures or secure attestation are provided.
+- The receipt carries a `receipt_sha256` digest over its own body, and `verify` recomputes it. This binds the recorded exit codes, log digests and contract digest together, so **accidental or naive post-run edits** — flipping `exit_code` to `0` in a failing receipt — are detected and the gate reports `BLOCKED`.
+- **This gate does not defend against deliberate forgery.** A party that can rewrite the receipt can also recompute the digest, and can fabricate a whole receipt (including its log files and digests) for a check that never ran. The digest is tamper-**evident**, not tamper-proof: no cryptographic signatures, no key the Agent cannot access, and no external attestation are provided. **In this repository the adversary is the very Agent being gated**, so treat the receipt as a self-consistency check, not as proof of execution.
+- To make a completion claim adversarially strong, bind the receipt to an anchor the claiming Agent cannot write — for example a CI-side attestation, a read-only receipt store, or a reviewer-verified artifact — and cite that anchor in the completion report. Within `unified-dev-flow`, the S6 review artifact (`.omc/review-<session>.md`, stamped with `diff_hash` by an independent reviewer) is the intended such anchor.
 - The gate deliberately executes `checks[].argv` in the selected repo. It does **not** sandbox commands. Explicitly inspect the contract before running it; avoid untrusted PR-supplied commands.
 - The gate proves only observed command exit status and log integrity, **not** complete test coverage, test independence, or absence of all defects.
-- `kind: "acceptance"` checks that can never fail (`true`, `echo`, `python -c pass`, …) are rejected at contract-load time, because such a command cannot produce acceptance evidence. The rule applies to `acceptance` kind only; other kinds may legitimately be no-op smoke checks.
+- `kind: "acceptance"` checks that are **obviously** vacuous (`true`, `false`, `echo`, `python -c pass`, …) are rejected at contract-load time. This is a **heuristic blacklist, not a proof of non-vacuity**: an equivalent always-succeeding command expressed differently (`sh -c true`, `python -c "sys.exit(0)"`, a test that asserts nothing) is not detected mechanically. The Agent's semantic review remains the real guarantee.
 - Some acceptance checks intentionally contact services, mutate files, write DB records or need secrets. Those commands require separate authorization and safe environment setup.
 - Do not put output into the worktree. Logs may contain sensitive information; store privately and review before distributing.
 - The repo must be clean, so tests that intentionally generate untracked artifacts must be configured to use external temporary directories, or this gate will block.
 - A matching HEAD does not prove external dependencies have not changed. Note nondeterminism and external version/config dependencies in report.
 - Changes only to ignored files are not detected by Git cleanliness. If ignored configuration/assets affect the test, pin and document them separately.
-- A timed-out check is terminated together with its whole process group, so orphaned child processes (a test runner that spawns servers) do not survive the gate.
+- A timed-out check is terminated together with its process group, so ordinary child processes (a test runner that spawns servers) do not survive the gate. A child that deliberately escapes the group on its own (`setsid`, daemonize) is outside this guarantee.
 
 ## Agent's semantic review questions
 

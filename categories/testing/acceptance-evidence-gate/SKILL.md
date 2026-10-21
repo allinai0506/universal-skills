@@ -1,7 +1,7 @@
 ---
 name: acceptance-evidence-gate
-version: "1.0.0"
-synced-at: "2026-10-21"
+version: "2026.10.21-1"
+synced-at: "2026-10-21T11:00:43"
 description: "Gate a Coding Agent's 'done' or PR-ready claim on source-linked acceptance criteria, executed tests, current Git HEAD, and tamper-evident receipts. Use immediately before declaring a code change complete, fixed, or ready to merge - when the requirements are known but it is unclear whether they were actually proven at the current commit. Do not use for general code advice, exploratory analysis, or tasks with no identified acceptance criteria."
 ---
 
@@ -75,6 +75,7 @@ Read `references/verification-rules.md` when constructing the acceptance contrac
 - Run configured commands **without shell expansion**. Review them before execution; the script does not sandbox or guarantee safety of the commands.
 - No automatic installation, cleanup, committing, pushing, or use of remote services.
 - `PASS` from the script is a **necessary** completion gate, not sufficient proof of business correctness.
+- The receipt digest detects **accidental** post-run edits; it does not stop a determined forger, because the claiming Agent can rewrite the receipt and recompute the digest. Anchor a strong completion claim to an artifact the Agent cannot write (CI attestation, or the `unified-dev-flow` S6 review artifact). See the trust boundaries in `references/verification-rules.md`.
 
 # Verification
 

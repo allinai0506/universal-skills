@@ -24,9 +24,12 @@ RECEIPT_DIGEST_FIELD = "receipt_sha256"
 
 # Acceptance evidence must actually exercise behaviour. These commands exit 0
 # unconditionally, so accepting them as acceptance checks would manufacture
-# evidence out of nothing.
+# evidence out of nothing. This is a heuristic blacklist, not a proof of
+# non-vacuity: see the trust boundaries in references/verification-rules.md.
 VACUOUS_COMMANDS = {"true", "false", ":", "echo", "yes", "/bin/true", "/bin/false"}
-VACUOUS_SNIPPETS = {"pass", "", "true", "false", "exit 0"}
+VACUOUS_SNIPPETS = {"pass", "", "true", "false", "exit 0", "exit 0;", "sys.exit(0)",
+                    "sys.exit(0);", "raise SystemExit(0)", "os._exit(0)"}
+SHELL_PROGRAMS = {"sh", "bash", "zsh", "dash", "ksh"}
 
 
 class GateError(Exception):
@@ -48,12 +51,12 @@ def sha256_file(path):
 def receipt_digest(receipt):
     """Digest over the receipt body, excluding the digest field itself.
 
-    Without this, anyone can flip ``exit_code`` to 0 in a failing receipt and
-    the gate reports PASS. The digest binds the recorded exit codes to the
-    contract digest and the log digests, so a receipt edited after the run no
-    longer validates. It is tamper-*evident*, not tamper-proof: an attacker who
-    can rewrite the receipt can also recompute the digest. See the trust
-    boundary section in references/verification-rules.md.
+    This binds the recorded exit codes to the contract digest and the log
+    digests, so a receipt edited after the run — flipping ``exit_code`` to 0
+    in a failing receipt — no longer validates. It is tamper-*evident*, not
+    tamper-proof: a party that can rewrite the receipt can also recompute the
+    digest, and can fabricate a whole receipt for a check that never ran. See
+    the trust boundary section in references/verification-rules.md.
     """
     body = {k: v for k, v in receipt.items() if k != RECEIPT_DIGEST_FIELD}
     canonical = json.dumps(body, ensure_ascii=False, sort_keys=True,
@@ -64,6 +67,7 @@ def receipt_digest(receipt):
 def seal_receipt(receipt):
     receipt[RECEIPT_DIGEST_FIELD] = receipt_digest(receipt)
     return receipt
+
 
 def utc_now():
     return dt.datetime.now(dt.timezone.utc)
@@ -103,8 +107,10 @@ def nonempty(value):
 def is_vacuous(argv):
     """True when a command cannot fail, i.e. it can never be acceptance evidence.
 
-    Detects ``true``/``false``/``echo``-style commands and inline snippets such
-    as ``python -c "pass"`` that exit 0 unconditionally.
+    Detects ``true``/``false``/``echo``-style commands, inline snippets such
+    as ``python -c "pass"``, and shell wrappers around them (``sh -c true``).
+    A heuristic blacklist: it cannot prove a command is meaningful, only that
+    it is trivially not.
     """
     if not argv:
         return True
@@ -113,7 +119,20 @@ def is_vacuous(argv):
         return True
     # `sh -c true`, `python -c pass`, `bash -c "exit 0"`, ...
     for index, arg in enumerate(argv[:-1]):
-        if arg in ("-c", "--command") and argv[index + 1].strip().lower() in VACUOUS_SNIPPETS:
+        if arg not in ("-c", "--command"):
+            continue
+        snippet = argv[index + 1].strip().lower()
+        if snippet in VACUOUS_SNIPPETS:
+            return True
+        # `sh -c "true"` hides the no-op one level deeper.
+        if os.path.basename(program) in SHELL_PROGRAMS:
+            head = snippet.split()[0] if snippet.split() else ""
+            if os.path.basename(head) in VACUOUS_COMMANDS:
+                return True
+        # A snippet that only reaches an unconditional exit (`import sys; sys.exit(0)`).
+        if snippet.replace(" ", "") in VACUOUS_SNIPPETS:
+            return True
+        if re.search(r"sys\.exit\(0\)|raise SystemExit\(0\)|os\._exit\(0\)", snippet):
             return True
     return False
 
@@ -260,14 +279,20 @@ def do_run(args):
 
 
 def parse_utc(value):
+    """Parse a receipt timestamp, returning None when it is unusable.
+
+    A malformed timestamp is evidence of a broken or edited receipt, not an
+    invalid invocation, so it is reported as a gate failure (exit 1) rather
+    than as invalid input (exit 2).
+    """
     if not isinstance(value, str):
-        raise GateError("receipt missing timestamp")
+        return None
     try:
         parsed = dt.datetime.fromisoformat(value)
-    except ValueError as exc:
-        raise GateError(f"invalid timestamp: {value}") from exc
+    except ValueError:
+        return None
     if parsed.tzinfo is None:
-        raise GateError("timestamp must include time zone")
+        return None
     return parsed.astimezone(dt.timezone.utc)
 
 
@@ -302,9 +327,12 @@ def do_verify(args):
         problems.append("HEAD/state mismatch since testing")
     start = parse_utc(receipt.get("started_at"))
     finish = parse_utc(receipt.get("finished_at"))
-    age = (utc_now() - finish).total_seconds()
-    if finish < start or age < -60 or age > args.max_age_hours * 3600:
-        problems.append("receipt time invalid/expired")
+    if start is None or finish is None:
+        problems.append("receipt timestamp missing or malformed")
+    else:
+        age = (utc_now() - finish).total_seconds()
+        if finish < start or age < -60 or age > args.max_age_hours * 3600:
+            problems.append("receipt time invalid/expired")
     results = receipt.get("checks")
     if not isinstance(results, list):
         raise GateError("receipt.checks must be list")

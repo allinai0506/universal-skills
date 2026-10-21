@@ -1,5 +1,6 @@
 version: "1.0.0"
-author: "The Clean Coder (Robert C. Martin) 衍生"
+author: "Universal Skills"
+upstream: "The Clean Coder (Robert C. Martin, 2011) — Chapter 4 'Coding', Define \"Done\""
 skillFormat: "aiss-1.0"
 
 tags: [testing, acceptance, verification, gate, evidence, git]
