@@ -39,3 +39,4 @@ ts	phase	decision	why	evidence	result
 2026-10-21T13:30:00Z	review	S6 第 2 轮评审判 NEEDS_FIXES，13/14 关闭，残留 N1	anchor 对「完整伪造」（摘要已重算）的回执仍盖章成功，可信方拿不到任何伪造信号 —— 根因是回执 exit_code 属自述数据	独立 Reviewer 子代理三透镜 + 变异测试 7/7	1 项阻断待修
 2026-10-21T13:50:00Z	fix	关闭 N1：anchor 强制 --contract 并复用 verify 完整判定，且读日志找失败痕迹	让可信方拿到真实信号而非橡皮图章；日志是命令实际做了什么的独立痕迹	log_shows_failure 落地, 完整伪造回执被拒 exit 2, 38/38 单测全绿	N1 关闭
 2026-10-21T14:00:00Z	cleanup	自查发现日志裸子串匹配会误杀合法回执，改为行首匹配；并补 P3/P4 收尾	正常通过的输出常在行内提及失败词，裸匹配会拒绝诚实回执	行首匹配后 3 个散文场景不误判、5 个真实失败仍全捕获, 40/40 单测全绿, max-age-hours 校验扩到 anchor, 补 --contract 空串单测	误杀消除
+2026-10-21T13:40:00Z	finish	PR #54 合并后收尾：切回 main、拉取合并结果、清理本地与远端任务分支、跑最终 sync.sh	完成开发生命周期闭环并把锚定能力同步到全宿主入口	git branch -d + git fetch --prune, sync.sh 全量同步, 7 处入口 diff -rq 逐字节一致, 40+184 单测全绿	分支清理完成
