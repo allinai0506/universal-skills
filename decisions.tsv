@@ -30,3 +30,7 @@ ts	phase	decision	why	evidence	result
 2026-10-21T11:40:00Z	fix	按评审意见收敛安全承诺边界并扩大拦截面	堵死未重算摘要的朴素篡改；重算摘要与整体伪造仍可通过（对手方即被卡 Agent），已在信任边界与文档措辞中如实声明并要求锚定 S6 评审工件	措辞统一为可复验/可查出误改, 新增 shell 包装与无条件退出片段拦截, parse_utc 改 exit 1, 18/18 与 184/184 全绿	评审意见已逐条落实
 2026-10-21T11:50:00Z	review	S6 第 2 轮独立评审仍判 NEEDS_FIXES	指出 B1 raise SystemExit(0) 因大小写不匹配空转却宣称已覆盖、B2 文档称未检测但实测已检测、B3 有意义的 shell 链式命令被误杀（本轮回退）	独立 Reviewer 第 2 轮三透镜 + 16 项验证命令实测	3 项必改 + 2 项建议待修
 2026-10-21T12:00:00Z	fix	重构 is_vacuous（拆出 is_vacuous_snippet / is_single_noop），修 B1 大小写空转、B3 误杀，并落实 B4 结构损坏归 exit 1	声明与实现再次对齐，且不得误杀有意义的验收命令	21/21 单测全绿, is_vacuous 14 组用例实测符合预期, 既有 184 项门禁无回归	三条硬阻塞全部关闭
+2026-10-21T12:20:00Z	recon	推进上一轮两个遗留选项前做设计 recon	确认本仓库无 CI（无 .gitee/.github workflows），故不能假装有 CI 存证；实证 PreToolUse 钩子只拦 Edit|Write 拦不住 Bash 重定向；实测 chmod a-w 对属主确实阻止写入	git ls-remote 目录检查, entry-gate-check.py 源码审读, chmod 写权限实测	锚点设计不依赖新信任根，防护强度由锚点位置决定
+2026-10-21T12:35:00Z	impl	新增 anchor 子命令与 verify --anchor，锚点绑定 work item/HEAD/回执摘要且写一次	让上一轮明确记录为「不防」的整体伪造路径变为可检出	7 项新增单测, 3 场景对抗性实证符合预期, 伪造回执被 anchor does not commit to this receipt 检出	遗留项2推进完成
+2026-10-21T12:40:00Z	impl	仓库内新增 scripts/gitee-pr-helper.sh（默认 general-skills）与 README	上一轮建 PR 需临时从其他项目复制且必须显式传 GITEE_REPO，本仓库副本默认即对	bash -n 通过, --guard-pr 物理拦截保留	遗留项1推进完成
+2026-10-21T12:45:00Z	cleanup	S4 ai-slop-cleaner 模式 B：删 anchor_digest 死代码、内联 anchor_payload 薄层	AST 扫描发现定义后从未调用的死函数与单点调用的无谓间接	清理后死代码 0, 28/28 仍全绿	无 slop 残留

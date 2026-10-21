@@ -63,6 +63,28 @@ Read `references/verification-rules.md` when constructing the acceptance contrac
      --receipt /tmp/acceptance-evidence-unique-run/receipt.json
    ```
 
+   When the claim must survive an adversarial reader, **anchor** the receipt —
+   register its digest in a file the claiming Agent cannot write, and verify
+   against it:
+
+   ```bash
+   python3 scripts/acceptance_gate.py anchor \
+     --repo /path/to/repo \
+     --receipt /tmp/acceptance-evidence-unique-run/receipt.json \
+     --anchor <protected-location>/evidence.json
+
+   python3 scripts/acceptance_gate.py verify \
+     --repo /path/to/repo \
+     --contract /path/to/contract.json \
+     --receipt /tmp/acceptance-evidence-unique-run/receipt.json \
+     --anchor <protected-location>/evidence.json
+   ```
+
+   The anchor is write-once and binds the work item, the HEAD and the receipt
+   digest. Without an anchor, a forger who can rewrite the receipt can also
+   recompute its digest; with one, forging requires an anchor the Agent cannot
+   write. See `references/verification-rules.md` for where an anchor belongs.
+
 6. **Review semantic coverage manually:** confirm the acceptance commands genuinely test each agreed criterion, including negative/boundary behavior when relevant. Mechanical receipt validation does not prove that test assertions are adequate or that the specification is correct.
 7. **Report** using `assets/completion-report.template.md` with exact HEAD, acceptance IDs, commands, results, receipt path, and unresolved risks. State `VERIFIED` **only** if both the automated gate and the semantic coverage check pass. Otherwise report `UNVERIFIED` or `BLOCKED`, with reasons.
 
@@ -75,11 +97,11 @@ Read `references/verification-rules.md` when constructing the acceptance contrac
 - Run configured commands **without shell expansion**. Review them before execution; the script does not sandbox or guarantee safety of the commands.
 - No automatic installation, cleanup, committing, pushing, or use of remote services.
 - `PASS` from the script is a **necessary** completion gate, not sufficient proof of business correctness.
-- The receipt digest detects **accidental** post-run edits; it does not stop a determined forger, because the claiming Agent can rewrite the receipt and recompute the digest. Anchor a strong completion claim to an artifact the Agent cannot write (CI attestation, or the `unified-dev-flow` S6 review artifact). See the trust boundaries in `references/verification-rules.md`.
+- The receipt digest detects **accidental** post-run edits; it does not stop a determined forger, because the claiming Agent can rewrite the receipt and recompute the digest. For claims that must survive an adversarial reader, use `anchor` to commit the receipt digest in a file the Agent cannot write, and verify with `--anchor`. See `references/verification-rules.md` for where an anchor belongs and what still remains outside its reach.
 
 # Verification
 
-- The `verify` CLI exits with `0` only if: contract digest matches, receipt digest matches (no post-run edit), current repository is clean and at the captured HEAD, receipt age is within allowed limit, each expected check has a zero exit, and all log digests match.
+- The `verify` CLI exits with `0` only if: contract digest matches, receipt digest matches (no post-run edit), current repository is clean and at the captured HEAD, receipt age is within allowed limit, each expected check has a zero exit, and all log digests match. With `--anchor`, the anchor must additionally commit to this receipt's digest, the work item and the current HEAD.
 - Each acceptance criterion has one or more mapped passing check IDs; mapping and actual behavioral coverage must still be inspected by the Agent.
 - The package self-tests with:
 
@@ -87,7 +109,7 @@ Read `references/verification-rules.md` when constructing the acceptance contrac
   python3 -m unittest discover -s scripts -p 'test_*.py' -v
   ```
 
-- See `references/verification-rules.md` for pass/fail semantics and trust boundaries.
+- See `references/verification-rules.md` for pass/fail semantics, anchoring, and trust boundaries.
 
 # Failure / Escalation
 

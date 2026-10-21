@@ -18,11 +18,58 @@ Use `assets/contract.template.json` and customize it **outside the target reposi
 - `verify exit 1`: failed acceptance gate. **No verified completion**. A receipt that is malformed, structurally broken, or edited after the run is reported here too — not as invalid input — so the reason for the failure is never masked.
 - `exit 2`: invalid input or environment (e.g. dirty worktree before run, missing Git, invalid contract, unreadable receipt path). **No verified completion**.
 
+## Anchoring a receipt (optional, defeats forged receipts)
+
+The receipt digest detects **accidental** edits. It does not stop a determined
+forger, because the claiming Agent can rewrite the receipt and recompute the
+digest. An **anchor** closes that gap: the anchor is a small file that commits
+to one receipt's digest, and it must live somewhere the claiming Agent cannot
+write.
+
+```bash
+# 1. run the checks and produce a receipt
+python3 scripts/acceptance_gate.py run --repo <repo> --contract <c.json> --out <out>
+
+# 2. register the receipt's digest in an anchor, in a protected location
+python3 scripts/acceptance_gate.py anchor \
+  --repo <repo> --receipt <out>/receipt.json --anchor <protected>/evidence.json
+
+# 3. verify against the anchor
+python3 scripts/acceptance_gate.py verify \
+  --repo <repo> --contract <c.json> \
+  --receipt <out>/receipt.json --anchor <protected>/evidence.json
+```
+
+The anchor binds three things: the work item, the repository HEAD, and the
+receipt digest. With `--anchor` in place, forging a passing receipt is no
+longer enough — the forger must also produce an anchor committing to it, and
+the anchor is write-once (`anchor` refuses to overwrite an existing file).
+
+### Where the anchor must live
+
+The protection comes from **the anchor's location**, not from the command:
+
+- **Good** — a path only CI, a reviewer, or another principal can write; a
+  read-only mount; a repository the claiming Agent has no push access to; a
+  directory whose write bits are removed (`chmod a-w`) and whose removal
+  requires an explicit, auditable `chmod`.
+- **Weak** — a path inside the Agent's own workspace. The Agent can rewrite
+  the anchor just as it can rewrite the receipt; the anchor then only proves
+  self-consistency.
+- **Note** — the `PreToolUse` hook in this repository intercepts `Edit` and
+  `Write`, but **not** shell redirection. A path rule alone does not stop a
+  `Bash` write; use OS-level write protection or an external principal.
+
+Anchoring is **optional**. Without `--anchor`, `verify` behaves exactly as
+before. Use it when the claim is adversarial: a security fix, a money or
+permission path, a release, or any completion claim an independent party
+must be able to trust.
+
 ## Trust boundaries
 
 - The receipt carries a `receipt_sha256` digest over its own body, and `verify` recomputes it. This binds the recorded exit codes, log digests and contract digest together, so **accidental or naive post-run edits** — flipping `exit_code` to `0` in a failing receipt — are detected and the gate reports `BLOCKED`.
-- **This gate does not defend against deliberate forgery.** A party that can rewrite the receipt can also recompute the digest, and can fabricate a whole receipt (including its log files and digests) for a check that never ran. The digest is tamper-**evident**, not tamper-proof: no cryptographic signatures, no key the Agent cannot access, and no external attestation are provided. **In this repository the adversary is the very Agent being gated**, so treat the receipt as a self-consistency check, not as proof of execution.
-- To make a completion claim adversarially strong, bind the receipt to an anchor the claiming Agent cannot write — for example a CI-side attestation, a read-only receipt store, or a reviewer-verified artifact — and cite that anchor in the completion report. Within `unified-dev-flow`, the S6 review artifact (`.omc/review-<session>.md`, stamped with `diff_hash` by an independent reviewer) is the intended such anchor.
+- **This gate does not defend against deliberate forgery on its own.** A party that can rewrite the receipt can also recompute the digest, and can fabricate a whole receipt (including its log files and digests) for a check that never ran. The digest is tamper-**evident**, not tamper-proof: no cryptographic signatures and no key the Agent cannot access are provided. **In this repository the adversary is the very Agent being gated**, so treat an unanchored receipt as a self-consistency check, not as proof of execution.
+- An **anchor** (see above) changes that: once the receipt digest is committed in a location the Agent cannot write, forging requires rewriting that anchor too. The anchor's strength is exactly the strength of its location — an anchor inside the Agent's own workspace proves nothing beyond self-consistency.
 - The gate deliberately executes `checks[].argv` in the selected repo. It does **not** sandbox commands. Explicitly inspect the contract before running it; avoid untrusted PR-supplied commands.
 - The gate proves only observed command exit status and log integrity, **not** complete test coverage, test independence, or absence of all defects.
 - `kind: "acceptance"` checks that are **obviously** vacuous are rejected at contract-load time: no-op commands (`true`, `false`, `echo`, `yes`), inline snippets that can only succeed (`pass`, `exit 0`, `sys.exit(0)`, `raise SystemExit(0)`, `os._exit(0)`), and a shell wrapper around a **single** no-op (`sh -c true`). This is a **heuristic blacklist, not a proof of non-vacuity**: an equivalent always-succeeding command expressed some other way (a test that asserts nothing, a wrapper the blacklist does not know) is not detected mechanically, and a shell snippet that chains several commands (`sh -c "echo x; pytest"`) is deliberately never treated as vacuous. The Agent's semantic review remains the real guarantee.

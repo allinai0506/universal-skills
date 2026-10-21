@@ -73,6 +73,57 @@ def seal_receipt(receipt):
     return receipt
 
 
+ANCHOR_SCHEMA = "acceptance-evidence-anchor/1"
+
+
+def write_anchor(anchor_path, receipt, repo_head):
+    """Write an anchor committing to this receipt's digest.
+
+    The anchor is the trust anchor: it must live somewhere the claiming Agent
+    cannot write (see references/verification-rules.md). Writing it here is
+    only half the mechanism — the protection comes from the file location,
+    which is why the receipt digest is what gets committed rather than the
+    receipt body.
+
+    An existing anchor is never overwritten: re-anchoring would let the
+    Agent replace a commitment it no longer wants to honour. Use a fresh
+    path for a fresh receipt.
+    """
+    if anchor_path.exists():
+        raise GateError(f"anchor already exists: {anchor_path} (anchors are write-once)")
+    payload = {
+        "schema": ANCHOR_SCHEMA,
+        "work_item": receipt.get("work_item"),
+        "repo_head": repo_head,
+        "receipt_sha256": receipt[RECEIPT_DIGEST_FIELD],
+        "anchored_at": iso(utc_now()),
+    }
+    anchor_path.parent.mkdir(parents=True, exist_ok=True)
+    anchor_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+                           encoding="utf-8")
+    return payload
+
+
+def check_anchor(anchor_path, receipt, repo_head):
+    """Validate the anchor against this receipt. Returns a list of problems."""
+    problems = []
+    try:
+        payload = json.loads(anchor_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        return [f"anchor unreadable: {exc}"]
+    if not isinstance(payload, dict):
+        return ["anchor must be a JSON object"]
+    if payload.get("schema") != ANCHOR_SCHEMA:
+        problems.append("anchor schema mismatch")
+    if payload.get("work_item") != receipt.get("work_item"):
+        problems.append("anchor work_item mismatch")
+    if payload.get("repo_head") != repo_head:
+        problems.append("anchor HEAD mismatch (repo moved since anchoring)")
+    if payload.get("receipt_sha256") != receipt.get(RECEIPT_DIGEST_FIELD):
+        problems.append("anchor does not commit to this receipt")
+    return problems
+
+
 def utc_now():
     return dt.datetime.now(dt.timezone.utc)
 
@@ -407,6 +458,8 @@ def do_verify(args):
         failed = [cid for cid in criterion["check_ids"] if cid not in passed_ids]
         if failed:
             problems.append(f"{criterion['id']}: missing passing evidence for {failed}")
+    if getattr(args, "anchor", None):
+        problems.extend(check_anchor(Path(args.anchor), receipt, current["head"]))
     if problems:
         for problem in problems:
             print("FAIL: " + problem, file=sys.stderr)
@@ -415,6 +468,32 @@ def do_verify(args):
     print("GATE: PASS - checks passed for current clean HEAD; Agent must still review semantic coverage")
     print(f"HEAD: {current['head']}")
     print(f"Criteria: {len(contract['criteria'])}; checks: {len(expected_ids)}; receipt: {path}")
+    return 0
+
+
+def do_anchor(args):
+    """Register the receipt's digest in an anchor file.
+
+    The anchor must be written to a location the claiming Agent cannot write
+    (for example a path only a CI job or an independent reviewer can reach).
+    The protection comes from that location, not from this command.
+    """
+    repo = Path(args.repo).resolve()
+    path = Path(args.receipt).resolve()
+    anchor_path = Path(args.anchor).resolve()
+    try:
+        receipt = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise GateError(f"invalid receipt: {exc}") from exc
+    ensure_object(receipt, "receipt")
+    digest = receipt.get(RECEIPT_DIGEST_FIELD)
+    if not isinstance(digest, str) or not digest:
+        raise GateError("receipt has no digest; re-run `run` to produce one")
+    head = repo_state(repo)["head"]
+    payload = write_anchor(anchor_path, receipt, head)
+    print(f"ANCHORED: {anchor_path}")
+    print(f"HEAD: {head}")
+    print(f"receipt_sha256: {payload['receipt_sha256']}")
     return 0
 
 
@@ -430,11 +509,20 @@ def main():
     verify.add_argument("--contract", required=True)
     verify.add_argument("--receipt", required=True)
     verify.add_argument("--max-age-hours", type=float, default=24)
+    verify.add_argument("--anchor", help="anchor file committing to this receipt (optional)")
+    anchor = sub.add_parser("anchor", help="register the receipt digest in an anchor file")
+    anchor.add_argument("--repo", required=True)
+    anchor.add_argument("--receipt", required=True)
+    anchor.add_argument("--anchor", required=True, help="anchor file path the Agent cannot write")
     args = parser.parse_args()
     try:
         if args.command == "verify" and not (0 < args.max_age_hours <= 8760):
             raise GateError("--max-age-hours must be within (0, 8760]")
-        return do_run(args) if args.command == "run" else do_verify(args)
+        if args.command == "run":
+            return do_run(args)
+        if args.command == "anchor":
+            return do_anchor(args)
+        return do_verify(args)
     except GateError as exc:
         print("GATE ERROR: " + str(exc), file=sys.stderr)
         return 2

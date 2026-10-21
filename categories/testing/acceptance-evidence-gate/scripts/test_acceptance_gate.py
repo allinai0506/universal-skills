@@ -62,10 +62,18 @@ class AcceptanceGateTests(unittest.TestCase):
                                "--contract", str(self.contract), "--out", str(out or self.out)],
                               text=True, capture_output=True, check=False)
 
-    def verify_gate(self):
-        return subprocess.run([sys.executable, str(GATE), "verify", "--repo", str(self.repo),
-                               "--contract", str(self.contract),
-                               "--receipt", str(self.out / "receipt.json")],
+    def verify_gate(self, anchor=None):
+        cmd = [sys.executable, str(GATE), "verify", "--repo", str(self.repo),
+               "--contract", str(self.contract),
+               "--receipt", str(self.out / "receipt.json")]
+        if anchor is not None:
+            cmd += ["--anchor", str(anchor)]
+        return subprocess.run(cmd, text=True, capture_output=True, check=False)
+
+    def anchor_gate(self, anchor):
+        return subprocess.run([sys.executable, str(GATE), "anchor", "--repo", str(self.repo),
+                               "--receipt", str(self.out / "receipt.json"),
+                               "--anchor", str(anchor)],
                               text=True, capture_output=True, check=False)
 
     def test_success_and_criterion_mapping(self):
@@ -195,6 +203,95 @@ class AcceptanceGateTests(unittest.TestCase):
         verify = self.verify_gate()
         self.assertEqual(verify.returncode, 1)
         self.assertIn("receipt.checks must be a list", verify.stderr)
+
+    def test_anchor_validates_receipt(self):
+        """A matching anchor lets verify pass; the anchor commits to the receipt."""
+        self.assertEqual(self.run_gate().returncode, 0)
+        anchor = self.root / "anchor" / "evidence.json"
+        anchored = self.anchor_gate(anchor)
+        self.assertEqual(anchored.returncode, 0, anchored.stderr + anchored.stdout)
+        verify = self.verify_gate(anchor=anchor)
+        self.assertEqual(verify.returncode, 0, verify.stderr + verify.stdout)
+
+    def test_anchor_detects_forged_receipt(self):
+        """Forge a failing receipt into a passing one, keep the honest anchor.
+
+        The receipt must start from a *failing* run, otherwise there is no
+        exit_code to flip and the digest would not change.
+        """
+        self.spec["checks"][0]["argv"] = [sys.executable, "-c", "raise SystemExit(9)"]
+        self.write_contract()
+        self.assertEqual(self.run_gate().returncode, 1)
+        anchor = self.root / "anchor" / "evidence.json"
+        self.assertEqual(self.anchor_gate(anchor).returncode, 0)
+        receipt_file = self.out / "receipt.json"
+        receipt = json.loads(receipt_file.read_text(encoding="utf-8"))
+        receipt["checks"][0]["exit_code"] = 0
+        receipt[RECEIPT_DIGEST_FIELD] = receipt_digest(receipt)
+        receipt_file.write_text(json.dumps(receipt), encoding="utf-8")
+        verify = self.verify_gate(anchor=anchor)
+        self.assertEqual(verify.returncode, 1)
+        self.assertIn("anchor does not commit to this receipt", verify.stderr)
+
+    def test_anchor_detects_moved_head(self):
+        """The anchor binds the receipt to a HEAD; a later commit invalidates it."""
+        self.assertEqual(self.run_gate().returncode, 0)
+        anchor = self.root / "anchor" / "evidence.json"
+        self.assertEqual(self.anchor_gate(anchor).returncode, 0)
+        (self.repo / "readme.txt").write_text("moved", encoding="utf-8")
+        self.git("add", ".")
+        self.git("commit", "-qm", "after anchoring")
+        verify = self.verify_gate(anchor=anchor)
+        self.assertEqual(verify.returncode, 1)
+        self.assertIn("anchor HEAD mismatch", verify.stderr)
+
+    def test_anchor_missing_is_a_failure(self):
+        self.assertEqual(self.run_gate().returncode, 0)
+        verify = self.verify_gate(anchor=self.root / "nope" / "missing.json")
+        self.assertEqual(verify.returncode, 1)
+        self.assertIn("anchor unreadable", verify.stderr)
+
+    def test_anchor_rejects_receipt_without_digest(self):
+        self.assertEqual(self.run_gate().returncode, 0)
+        receipt_file = self.out / "receipt.json"
+        receipt = json.loads(receipt_file.read_text(encoding="utf-8"))
+        receipt.pop(RECEIPT_DIGEST_FIELD, None)
+        receipt_file.write_text(json.dumps(receipt), encoding="utf-8")
+        anchored = self.anchor_gate(self.root / "anchor" / "evidence.json")
+        self.assertEqual(anchored.returncode, 2)
+        self.assertIn("receipt has no digest", anchored.stderr)
+
+    def test_anchor_is_write_once(self):
+        """An existing anchor is never overwritten: a commitment cannot be replaced."""
+        self.assertEqual(self.run_gate().returncode, 0)
+        anchor = self.root / "anchor" / "evidence.json"
+        self.assertEqual(self.anchor_gate(anchor).returncode, 0)
+        first = json.loads(anchor.read_text(encoding="utf-8"))
+        again = self.anchor_gate(anchor)
+        self.assertEqual(again.returncode, 2)
+        self.assertIn("anchor already exists", again.stderr)
+        self.assertEqual(json.loads(anchor.read_text(encoding="utf-8")), first)
+
+    def test_anchor_detects_a_swapped_anchor(self):
+        """An anchor issued for a different receipt must not validate this one."""
+        self.assertEqual(self.run_gate().returncode, 0)
+        other = self.root / "other"
+        other.mkdir()
+        (other / "f.txt").write_text("other", encoding="utf-8")
+        subprocess.run(["git", "-C", str(other), "init", "-q"], check=False)
+        subprocess.run(["git", "-C", str(other), "config", "user.email", "a@b.c"], check=False)
+        subprocess.run(["git", "-C", str(other), "config", "user.name", "t"], check=False)
+        subprocess.run(["git", "-C", str(other), "add", "."], check=False)
+        subprocess.run(["git", "-C", str(other), "commit", "-qm", "other"], check=False)
+        anchor = self.root / "anchor" / "swapped.json"
+        anchored = subprocess.run(
+            [sys.executable, str(GATE), "anchor", "--repo", str(other),
+             "--receipt", str(self.out / "receipt.json"), "--anchor", str(anchor)],
+            text=True, capture_output=True, check=False)
+        self.assertEqual(anchored.returncode, 0, anchored.stderr)
+        verify = self.verify_gate(anchor=anchor)
+        self.assertEqual(verify.returncode, 1)
+        self.assertIn("anchor HEAD mismatch", verify.stderr)
 
     def test_vacuous_non_acceptance_check_allowed(self):
         """A build-kind smoke check may legitimately be a no-op."""
