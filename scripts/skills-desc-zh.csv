@@ -176,6 +176,7 @@ pstack,why,解释为何这样设计并查询证据得出结论
 refactoring,entropy-reduction,设计边界清晰且低复杂度的模块化代码
 coding,clean-code-behavior-preserving-refactoring,行为保持重构：删减优先、合并重复并证明行为未变（含原极简重构策略）
 testing,e2e-testing,Playwright 端到端测试与页面对象模型实践
+testing,acceptance-evidence-gate,按来源可溯的验收标准卡住「已完成」声明：绑定当前 Git HEAD、执行真实验收检查、生成内容可复验且可查出误改的证据回执
 testing,eval-harness,实现评估驱动开发的正式评估框架
 tools,doc,用 python-docx 读取、创建与编辑 docx 文档
 tools,pdf,读取、创建与审查 PDF 并做视觉校验

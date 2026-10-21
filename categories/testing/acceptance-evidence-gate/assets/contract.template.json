@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "work_item": "REPLACE-WITH-APPROVED-ISSUE-ID",
+  "criteria": [
+    {
+      "id": "AC-01",
+      "description": "REPLACE with one observable requirement from an approved task or issue",
+      "source": "issue",
+      "source_ref": "REPLACE with issue URL or exact approved document section",
+      "check_ids": ["acceptance-core"]
+    }
+  ],
+  "checks": [
+    {
+      "id": "acceptance-core",
+      "kind": "acceptance",
+      "argv": ["python3", "-m", "unittest", "discover", "-s", "tests", "-p", "test_acceptance_*.py"],
+      "timeout_seconds": 180
+    }
+  ]
+}

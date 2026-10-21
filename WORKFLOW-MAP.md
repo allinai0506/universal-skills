@@ -113,6 +113,7 @@ Spec Kit 的可裁剪序列由 policy-model 定义：ensure/read-only constituti
 | adversarial | `self-verifying-tests` 与领域反例 | 授权违规、边界、跨层一致性、攻击复现和状态转换；高风险至少达到此级别 |
 | mutation | 合适核心逻辑的真实 mutation runner | 按选定 assurance 判定；reviewer 反例不是 mutation，不强加于 CSS/layout、生成代码、配置或迁移胶水 |
 | 测试专项 | `e2e-testing` | Playwright 端到端测试与页面对象模型 |
+| 机械化证据门禁 | `acceptance-evidence-gate` | 有已批准验收标准时，用「契约 + 当前 HEAD + 真实执行 + 证据回执」产出可复验的完成证据；回执自摘要可查出**误改**，但不防蓄意伪造（对手方就是被卡的 Agent），强主张须再锚定到 S6 评审工件；是 `verification-before-completion` 的机械执行版，不替代语义覆盖审查 |
 | 验证与修复 | 已选 Controller 管理 | 验证发现问题回 S4 修改，再取得新证据；不另启嵌套主循环 |
 
 ### S6 审查质检（挑毛病）
