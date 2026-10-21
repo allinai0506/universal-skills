@@ -1,7 +1,7 @@
 ---
 name: acceptance-evidence-gate
-version: "2026.10.21-4"
-synced-at: "2026-10-21T12:52:41"
+version: "2026.10.21-5"
+synced-at: "2026-10-21T13:12:13"
 description: "Gate a Coding Agent's 'done' or PR-ready claim on source-linked acceptance criteria, executed tests, current Git HEAD, and tamper-evident receipts. Use immediately before declaring a code change complete, fixed, or ready to merge - when the requirements are known but it is unclear whether they were actually proven at the current commit. Do not use for general code advice, exploratory analysis, or tasks with no identified acceptance criteria."
 ---
 

@@ -56,6 +56,15 @@ are self-reported and can be rewritten; the log is the independent trace of
 what the command actually did, so a trusted party gets a real signal rather
 than a rubber stamp.
 
+The log check is a **heuristic, not a parser**: a failure marker must start a
+line (`FAILED (`, `FAIL:`, `ERROR:`, `Traceback (most recent call last)`,
+`AssertionError`, `Segmentation fault`, `panic:`). Test output routinely
+mentions these words in passing prose ("previous AssertionError fixed",
+"status: FAIL: none found"), and a bare substring match would refuse honest
+receipts. It also only sees what the command printed — a check that fails
+silently leaves no trace in its log, so the log check cannot be the sole
+judgement. The exit codes and the contract checks remain the primary signal.
+
 With `--anchor` in place, forging a passing receipt is no longer enough — the
 forger must also produce an anchor committing to it, and the anchor is
 write-once (`anchor` refuses to overwrite an existing file).
@@ -72,7 +81,7 @@ Measured against an Agent that controls the whole workspace:
 | Edit the anchor file directly (leaving its `receipt_sha256` alone) | **blocked** — the committed digest no longer matches the receipt |
 | Edit the anchor file directly **and** update its `receipt_sha256` to the forged receipt's | **NOT blocked** — equivalent to writing a new anchor |
 | **Write a brand-new anchor that commits to the forged receipt** | **NOT blocked** — the Agent can do this itself |
-| Hand a fully forged receipt to `anchor` (digest recomputed) | **blocked** — `anchor` re-checks the contract, the exit codes and the logs, and refuses a receipt whose log still records a failure |
+| Hand a fully forged receipt to `anchor` (digest recomputed) | **blocked** — `anchor` re-checks the contract, the exit codes and the logs, and refuses a receipt whose log still records a failure. A check that fails *silently* leaves no trace in its log, so the log check is a heuristic, not a proof |
 
 The last two rows are the important ones. `verify --anchor` checks that the
 anchor commits to the receipt, and **the Agent can produce such an anchor by

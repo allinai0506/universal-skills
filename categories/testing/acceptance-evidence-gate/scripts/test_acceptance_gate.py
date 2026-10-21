@@ -399,6 +399,32 @@ class AcceptanceGateTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 2)
         self.assertIn("--contract", proc.stderr)
 
+    def test_anchor_accepts_a_passing_log_mentioning_failure_words(self):
+        """Passing output that merely mentions failure words must not be rejected.
+
+        Test output routinely says things like "previous AssertionError fixed"
+        or "status: FAIL: none found". A bare substring match would refuse
+        honest receipts, so the markers are matched at the start of a line.
+        """
+        self.spec["checks"][0]["argv"] = [sys.executable, "-c",
+                                          "print('previous AssertionError fixed'); "
+                                          "print('status: FAIL: none found'); "
+                                          "print('processing ERROR: retrying')"]
+        self.write_contract()
+        self.assertEqual(self.run_gate().returncode, 0)
+        anchored = self.anchor_gate(self.root / "anchor" / "evidence.json")
+        self.assertEqual(anchored.returncode, 0, anchored.stderr + anchored.stdout)
+
+    def test_anchor_rejects_a_log_whose_line_starts_with_a_failure_marker(self):
+        """A log line that *starts* with a failure marker is a real failure."""
+        self.spec["checks"][0]["argv"] = [sys.executable, "-c",
+                                          "print('FAIL: forged'); import sys; sys.exit(9)"]
+        self.write_contract()
+        self.assertEqual(self.run_gate().returncode, 1)
+        anchored = self.anchor_gate(self.root / "anchor" / "evidence.json")
+        self.assertEqual(anchored.returncode, 2)
+        self.assertIn("log still records a failure", anchored.stderr)
+
     def test_verify_rejects_empty_anchor(self):
         """An empty --anchor must be rejected, not silently ignored."""
         self.assertEqual(self.run_gate().returncode, 0)

@@ -88,13 +88,24 @@ def log_shows_failure(log_path):
     The gate trusts exit codes; a forger can rewrite one. The log is the
     independent trace of what the command actually did, so a trusted party
     stamping an anchor should not accept a receipt whose log still shows a
-    failure. This is a heuristic, not a parser — it errs toward suspicion.
+    failure.
+
+    The markers are matched at the **start of a line**, because test output
+    routinely mentions them in passing prose ("previous AssertionError fixed",
+    "status: FAIL: none found"). A bare substring match would reject honest
+    receipts; this stays a heuristic, not a parser, and errs toward suspicion.
     """
     try:
         text = log_path.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return False
-    return any(marker in text for marker in FAILURE_MARKERS)
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if any(stripped.startswith(marker) for marker in FAILURE_MARKERS):
+            return True
+    return False
 
 
 def write_anchor(anchor_path, receipt, repo_head):
