@@ -1,7 +1,7 @@
 ---
 name: unified-dev-flow
-version: "2026.10.21-1"
-synced-at: "2026-10-21T11:00:43"
+version: "2026.10.21-2"
+synced-at: "2026-10-21T12:16:44"
 description: 当开始非简单的功能开发、修 bug、重构或迁移，需要决定走哪些阶段、调用哪些技能、走多深时使用。当用户问该用什么流程或技能时使用。触发词：统一流程 / 标准流程 / 开发流程 / 完整流程 / 走流程 / 端到端开发 / 该用什么技能 / 帮我选流程 / 怎么推进这个需求 / 规范流程。Use when deciding which dev workflow/skills to use for a non-trivial coding task.
 ---
 
@@ -184,7 +184,7 @@ procedures. Alternatives live in [alternatives.md](references/alternatives.md)
 | S2 Spec | Selected Spec Adapter and its eligible local/publishing path | Spec and governing principles named; ambiguity resolved |
 | S3 Plan | `writing-plans`; architecture: `architect`; large: `plan-eng-review`; design: `prototype` | Plan at required depth with verification, rejected alternatives, and principles check |
 | S4 Implement | Chosen controller and its delegated workers; bugs/features: `test-driven-development`; DB: `create-migration`; S4 Exit cleanup: `ai-slop-cleaner` (Mode B write mode: deletion-first slop cleanup) | Planned change implemented AND ai-slop-cleaner deletion-first cleanup completed |
-| S5 Verify | `verification-before-completion`, `principle-prove-it-works`; E2E: `e2e-testing`; cross-layer: `self-verifying-tests`; contract-bound change with approved acceptance criteria: `acceptance-evidence-gate` (mechanised receipt for the completion claim) | Fresh command evidence proves post-cleanup code satisfies all requirements |
+| S5 Verify | `verification-before-completion`, `principle-prove-it-works`; E2E: `e2e-testing`; cross-layer: `self-verifying-tests`; contract-bound change with approved acceptance criteria: `acceptance-evidence-gate` (mechanised receipt for the completion claim; use its `anchor` subcommand when the claim must survive an adversarial reader) | Fresh command evidence proves post-cleanup code satisfies all requirements |
 | S6 Review | `health` + `google-code-review`; spec-bearing: `code-review`; per policy Review Selection (no-baseline edits exempt from `health`, waiver in §3); every S6 declares via `.omc/review-<session>.md` | MERGE_READY or explicit waiver within authorization |
 | S7 Deliver | Project finish script when one exists (xiyu: `agent-finish-task.sh` six-step finish: 知识沉淀 → wiki checkpoint → merge confirmation → anchor sync → branch check → hygiene check); otherwise `six-step-finish` / `ship` within target; unattended: `ai-release-engineer`; deployment: `deployment-patterns`, `canary` | Fulfill delivery target |
 | S8 Capture | `knowledge-capture`; `show-me-your-work` where selected by policy Capture Selection | Findings and required decision trail filed |

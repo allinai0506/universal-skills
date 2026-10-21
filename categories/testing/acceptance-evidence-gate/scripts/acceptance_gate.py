@@ -73,6 +73,89 @@ def seal_receipt(receipt):
     return receipt
 
 
+ANCHOR_SCHEMA = "acceptance-evidence-anchor/1"
+
+
+FAILURE_MARKERS = (
+    "FAILED (", "FAIL:", "ERROR:", "Traceback (most recent call last)",
+    "AssertionError", "Segmentation fault", "panic:",
+)
+
+
+def log_shows_failure(log_path):
+    """True when a log records an outright failure.
+
+    The gate trusts exit codes; a forger can rewrite one. The log is the
+    independent trace of what the command actually did, so a trusted party
+    stamping an anchor should not accept a receipt whose log still shows a
+    failure.
+
+    The markers are matched at the **start of a line**, because test output
+    routinely mentions them in passing prose ("previous AssertionError fixed",
+    "status: FAIL: none found"). A bare substring match would reject honest
+    receipts; this stays a heuristic, not a parser, and errs toward suspicion.
+    """
+    try:
+        text = log_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if any(stripped.startswith(marker) for marker in FAILURE_MARKERS):
+            return True
+    return False
+
+
+def write_anchor(anchor_path, receipt, repo_head):
+    """Write an anchor committing to this receipt's digest.
+
+    The anchor is the trust anchor: it must live somewhere the claiming Agent
+    cannot write (see references/verification-rules.md). Writing it here is
+    only half the mechanism — the protection comes from the file location,
+    which is why the receipt digest is what gets committed rather than the
+    receipt body.
+
+    An existing anchor is never overwritten: re-anchoring would let the
+    Agent replace a commitment it no longer wants to honour. Use a fresh
+    path for a fresh receipt.
+    """
+    if anchor_path.exists():
+        raise GateError(f"anchor already exists: {anchor_path} (anchors are write-once)")
+    payload = {
+        "schema": ANCHOR_SCHEMA,
+        "work_item": receipt.get("work_item"),
+        "repo_head": repo_head,
+        "receipt_sha256": receipt[RECEIPT_DIGEST_FIELD],
+        "anchored_at": iso(utc_now()),
+    }
+    anchor_path.parent.mkdir(parents=True, exist_ok=True)
+    anchor_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+                           encoding="utf-8")
+    return payload
+
+
+def check_anchor(anchor_path, receipt, repo_head):
+    """Validate the anchor against this receipt. Returns a list of problems."""
+    problems = []
+    try:
+        payload = json.loads(anchor_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        return [f"anchor unreadable: {exc}"]
+    if not isinstance(payload, dict):
+        return ["anchor must be a JSON object"]
+    if payload.get("schema") != ANCHOR_SCHEMA:
+        problems.append("anchor schema mismatch")
+    if payload.get("work_item") != receipt.get("work_item"):
+        problems.append("anchor work_item mismatch")
+    if payload.get("repo_head") != repo_head:
+        problems.append("anchor HEAD mismatch (repo moved since anchoring)")
+    if payload.get("receipt_sha256") != receipt.get(RECEIPT_DIGEST_FIELD):
+        problems.append("anchor does not commit to this receipt")
+    return problems
+
+
 def utc_now():
     return dt.datetime.now(dt.timezone.utc)
 
@@ -320,26 +403,12 @@ def parse_utc(value):
     return parsed.astimezone(dt.timezone.utc)
 
 
-def do_verify(args):
-    repo = Path(args.repo).resolve()
-    contract, digest = load_contract(Path(args.contract).resolve())
-    path = Path(args.receipt).resolve()
-    try:
-        raw = path.read_text(encoding="utf-8")
-    except OSError as exc:
-        raise GateError(f"invalid receipt: {exc}") from exc
-    try:
-        receipt = json.loads(raw)
-    except ValueError as exc:
-        # An unreadable receipt is broken or edited evidence, not an invalid
-        # invocation: report it as a gate failure so the reason is not masked.
-        print(f"FAIL: receipt is not valid JSON ({exc})", file=sys.stderr)
-        print("GATE: BLOCKED - do not claim verified completion")
-        return 1
-    if not isinstance(receipt, dict):
-        print("FAIL: receipt must be a JSON object", file=sys.stderr)
-        print("GATE: BLOCKED - do not claim verified completion")
-        return 1
+def receipt_problems(receipt, contract, digest, repo, path, max_age_hours):
+    """Every way this receipt fails to prove what it claims.
+
+    Shared by `verify` and `anchor` so that a trusted party stamping an anchor
+    applies exactly the same judgement the gate would.
+    """
     problems = []
     if receipt.get("schema_version") != 1 or receipt.get("work_item") != contract["work_item"]:
         problems.append("receipt identity mismatch")
@@ -366,7 +435,7 @@ def do_verify(args):
         problems.append("receipt timestamp missing or malformed")
     else:
         age = (utc_now() - finish).total_seconds()
-        if finish < start or age < -60 or age > args.max_age_hours * 3600:
+        if finish < start or age < -60 or age > max_age_hours * 3600:
             problems.append("receipt time invalid/expired")
     results = receipt.get("checks")
     if not isinstance(results, list):
@@ -407,6 +476,36 @@ def do_verify(args):
         failed = [cid for cid in criterion["check_ids"] if cid not in passed_ids]
         if failed:
             problems.append(f"{criterion['id']}: missing passing evidence for {failed}")
+    return problems, current
+
+
+def do_verify(args):
+    repo = Path(args.repo).resolve()
+    contract, digest = load_contract(Path(args.contract).resolve())
+    path = Path(args.receipt).resolve()
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise GateError(f"invalid receipt: {exc}") from exc
+    try:
+        receipt = json.loads(raw)
+    except ValueError as exc:
+        # An unreadable receipt is broken or edited evidence, not an invalid
+        # invocation: report it as a gate failure so the reason is not masked.
+        print(f"FAIL: receipt is not valid JSON ({exc})", file=sys.stderr)
+        print("GATE: BLOCKED - do not claim verified completion")
+        return 1
+    if not isinstance(receipt, dict):
+        print("FAIL: receipt must be a JSON object", file=sys.stderr)
+        print("GATE: BLOCKED - do not claim verified completion")
+        return 1
+    problems, current = receipt_problems(receipt, contract, digest, repo, path,
+                                         args.max_age_hours)
+    expected_ids = {c["id"] for c in contract["checks"]}
+    if getattr(args, "anchor", None) is not None:
+        if not str(args.anchor).strip():
+            raise GateError("--anchor must not be empty")
+        problems.extend(check_anchor(Path(args.anchor), receipt, current["head"]))
     if problems:
         for problem in problems:
             print("FAIL: " + problem, file=sys.stderr)
@@ -415,6 +514,66 @@ def do_verify(args):
     print("GATE: PASS - checks passed for current clean HEAD; Agent must still review semantic coverage")
     print(f"HEAD: {current['head']}")
     print(f"Criteria: {len(contract['criteria'])}; checks: {len(expected_ids)}; receipt: {path}")
+    return 0
+
+
+def do_anchor(args):
+    """Register the receipt's digest in an anchor file.
+
+    The anchor must be written to a location the claiming Agent cannot write
+    (for example a path only a CI job or an independent reviewer can reach).
+    The protection comes from that location, not from this command.
+
+    The receipt is fully validated before it is stamped — the same judgement
+    `verify` applies. An anchor that commits to a receipt whose checks did
+    not pass, or whose logs do not match, would give a trusted party no
+    signal at all; refusing to stamp it is the whole point of the anchor.
+    """
+    repo = Path(args.repo).resolve()
+    path = Path(args.receipt).resolve()
+    anchor_path = Path(args.anchor).resolve()
+    if not str(args.anchor).strip():
+        raise GateError("--anchor must not be empty")
+    # An anchor inside the repository would dirty the worktree and make every
+    # later verify fail; it would also risk being committed by accident.
+    assert_outside_repo(repo, anchor_path)
+    try:
+        receipt = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise GateError(f"invalid receipt: {exc}") from exc
+    ensure_object(receipt, "receipt")
+    digest = receipt.get(RECEIPT_DIGEST_FIELD)
+    if not isinstance(digest, str) or not digest:
+        raise GateError("receipt has no digest; re-run `run` to produce one")
+    if digest != receipt_digest(receipt):
+        raise GateError("receipt digest mismatch (receipt was modified after the run)")
+    if not args.contract or not str(args.contract).strip():
+        raise GateError("--contract is required: an anchor must commit to a receipt "
+                        "that has been checked against its acceptance contract")
+    contract, contract_digest = load_contract(Path(args.contract).resolve())
+    problems, _ = receipt_problems(receipt, contract, contract_digest, repo, path,
+                                   args.max_age_hours)
+    # The receipt's exit codes are self-reported and can be rewritten. The log
+    # is the independent trace of what the command actually did, so a trusted
+    # party must not stamp an anchor whose log still shows a failure.
+    for entry in receipt.get("checks") or []:
+        if not isinstance(entry, dict) or not nonempty(entry.get("id")):
+            continue
+        log = path.parent / str(entry.get("log_file") or "")
+        if log.is_file() and log_shows_failure(log):
+            problems.append(f"{entry['id']}: log still records a failure")
+    if problems:
+        for problem in problems:
+            print("FAIL: " + problem, file=sys.stderr)
+        raise GateError("receipt does not prove the acceptance contract; refusing to anchor it")
+    head = receipt.get("repo_head_after")
+    try:
+        payload = write_anchor(anchor_path, receipt, head)
+    except OSError as exc:
+        raise GateError(f"cannot write anchor {anchor_path}: {exc}") from exc
+    print(f"ANCHORED: {anchor_path}")
+    print(f"HEAD: {head}")
+    print(f"receipt_sha256: {payload['receipt_sha256']}")
     return 0
 
 
@@ -430,11 +589,25 @@ def main():
     verify.add_argument("--contract", required=True)
     verify.add_argument("--receipt", required=True)
     verify.add_argument("--max-age-hours", type=float, default=24)
+    verify.add_argument("--anchor",
+                        help="anchor file committing to this receipt (optional, "
+                             "but an empty value is rejected rather than ignored)")
+    anchor = sub.add_parser("anchor", help="register the receipt digest in an anchor file")
+    anchor.add_argument("--repo", required=True)
+    anchor.add_argument("--receipt", required=True)
+    anchor.add_argument("--contract", required=True,
+                         help="the acceptance contract the receipt must prove")
+    anchor.add_argument("--anchor", required=True, help="anchor file path the Agent cannot write")
+    anchor.add_argument("--max-age-hours", type=float, default=24)
     args = parser.parse_args()
     try:
-        if args.command == "verify" and not (0 < args.max_age_hours <= 8760):
+        if args.command in ("verify", "anchor") and not (0 < args.max_age_hours <= 8760):
             raise GateError("--max-age-hours must be within (0, 8760]")
-        return do_run(args) if args.command == "run" else do_verify(args)
+        if args.command == "run":
+            return do_run(args)
+        if args.command == "anchor":
+            return do_anchor(args)
+        return do_verify(args)
     except GateError as exc:
         print("GATE ERROR: " + str(exc), file=sys.stderr)
         return 2
