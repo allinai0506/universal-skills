@@ -15,8 +15,8 @@ Use `assets/contract.template.json` and customize it **outside the target reposi
 - `run exit 0`: configured commands exited 0 and repository HEAD and cleanliness stayed stable; a receipt was generated. It does **not** mean all requirements are really exercised.
 - `run exit 1`: at least one configured command failed/timed out, or HEAD/worktree drifted during tests; inspect logs and fix before claiming completion.
 - `verify exit 0`: receipt is intact, matches the exact contract and currently clean HEAD, contains all expected successful command executions, and is within freshness bound (default 24 hours).
-- `verify exit 1`: failed acceptance gate. **No verified completion**.
-- `exit 2`: invalid input or environment (e.g. dirty worktree before run, missing Git, invalid contract). **No verified completion**.
+- `verify exit 1`: failed acceptance gate. **No verified completion**. A receipt that is malformed, structurally broken, or edited after the run is reported here too — not as invalid input — so the reason for the failure is never masked.
+- `exit 2`: invalid input or environment (e.g. dirty worktree before run, missing Git, invalid contract, unreadable receipt path). **No verified completion**.
 
 ## Trust boundaries
 
@@ -25,7 +25,7 @@ Use `assets/contract.template.json` and customize it **outside the target reposi
 - To make a completion claim adversarially strong, bind the receipt to an anchor the claiming Agent cannot write — for example a CI-side attestation, a read-only receipt store, or a reviewer-verified artifact — and cite that anchor in the completion report. Within `unified-dev-flow`, the S6 review artifact (`.omc/review-<session>.md`, stamped with `diff_hash` by an independent reviewer) is the intended such anchor.
 - The gate deliberately executes `checks[].argv` in the selected repo. It does **not** sandbox commands. Explicitly inspect the contract before running it; avoid untrusted PR-supplied commands.
 - The gate proves only observed command exit status and log integrity, **not** complete test coverage, test independence, or absence of all defects.
-- `kind: "acceptance"` checks that are **obviously** vacuous (`true`, `false`, `echo`, `python -c pass`, …) are rejected at contract-load time. This is a **heuristic blacklist, not a proof of non-vacuity**: an equivalent always-succeeding command expressed differently (`sh -c true`, `python -c "sys.exit(0)"`, a test that asserts nothing) is not detected mechanically. The Agent's semantic review remains the real guarantee.
+- `kind: "acceptance"` checks that are **obviously** vacuous are rejected at contract-load time: no-op commands (`true`, `false`, `echo`, `yes`), inline snippets that can only succeed (`pass`, `exit 0`, `sys.exit(0)`, `raise SystemExit(0)`, `os._exit(0)`), and a shell wrapper around a **single** no-op (`sh -c true`). This is a **heuristic blacklist, not a proof of non-vacuity**: an equivalent always-succeeding command expressed some other way (a test that asserts nothing, a wrapper the blacklist does not know) is not detected mechanically, and a shell snippet that chains several commands (`sh -c "echo x; pytest"`) is deliberately never treated as vacuous. The Agent's semantic review remains the real guarantee.
 - Some acceptance checks intentionally contact services, mutate files, write DB records or need secrets. Those commands require separate authorization and safe environment setup.
 - Do not put output into the worktree. Logs may contain sensitive information; store privately and review before distributing.
 - The repo must be clean, so tests that intentionally generate untracked artifacts must be configured to use external temporary directories, or this gate will block.

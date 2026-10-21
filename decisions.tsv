@@ -28,3 +28,5 @@ ts	phase	decision	why	evidence	result
 2026-10-21T11:12:00Z	cleanup	S4 ai-slop-cleaner 模式 B deletion-first 瘦身	删除冗余拦截项与冗余异常类型	VACUOUS_SNIPPETS 收窄, except OSError 去重, 16/16 仍全绿	无 slop 残留
 2026-10-21T11:30:00Z	review	S6 第 1 轮独立评审判定 NEEDS_FIXES	指出文档承诺超出实现能力（防篡改/堵死/never fail/do not survive）、S5 工件与 decisions.tsv 存在事实性错误、空洞检查拦截面过窄、verify 错误优先级掩盖篡改线索	独立 Reviewer 子代理三透镜审查 + 12 项验证命令实测	5 项必改 + 6 项建议待修
 2026-10-21T11:40:00Z	fix	按评审意见收敛安全承诺边界并扩大拦截面	堵死未重算摘要的朴素篡改；重算摘要与整体伪造仍可通过（对手方即被卡 Agent），已在信任边界与文档措辞中如实声明并要求锚定 S6 评审工件	措辞统一为可复验/可查出误改, 新增 shell 包装与无条件退出片段拦截, parse_utc 改 exit 1, 18/18 与 184/184 全绿	评审意见已逐条落实
+2026-10-21T11:50:00Z	review	S6 第 2 轮独立评审仍判 NEEDS_FIXES	指出 B1 raise SystemExit(0) 因大小写不匹配空转却宣称已覆盖、B2 文档称未检测但实测已检测、B3 有意义的 shell 链式命令被误杀（本轮回退）	独立 Reviewer 第 2 轮三透镜 + 16 项验证命令实测	3 项必改 + 2 项建议待修
+2026-10-21T12:00:00Z	fix	重构 is_vacuous（拆出 is_vacuous_snippet / is_single_noop），修 B1 大小写空转、B3 误杀，并落实 B4 结构损坏归 exit 1	声明与实现再次对齐，且不得误杀有意义的验收命令	21/21 单测全绿, is_vacuous 14 组用例实测符合预期, 既有 184 项门禁无回归	三条硬阻塞全部关闭

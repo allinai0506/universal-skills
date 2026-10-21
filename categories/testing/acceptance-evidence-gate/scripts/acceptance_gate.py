@@ -27,8 +27,12 @@ RECEIPT_DIGEST_FIELD = "receipt_sha256"
 # evidence out of nothing. This is a heuristic blacklist, not a proof of
 # non-vacuity: see the trust boundaries in references/verification-rules.md.
 VACUOUS_COMMANDS = {"true", "false", ":", "echo", "yes", "/bin/true", "/bin/false"}
-VACUOUS_SNIPPETS = {"pass", "", "true", "false", "exit 0", "exit 0;", "sys.exit(0)",
-                    "sys.exit(0);", "raise SystemExit(0)", "os._exit(0)"}
+# Lowercase: snippets are lowercased before comparison.
+VACUOUS_SNIPPETS = {"pass", "", "true", "false", "exit 0", "exit 0;",
+                    "sys.exit(0)", "sys.exit(0);", "raisesystemexit(0)",
+                    "raisesystemexit(0);", "os._exit(0)"}
+UNCONDITIONAL_EXIT_RE = re.compile(
+    r"sys\.exit\(0\)|raise\s+systemexit\(0\)|os\._exit\(0\)")
 SHELL_PROGRAMS = {"sh", "bash", "zsh", "dash", "ksh"}
 
 
@@ -108,33 +112,53 @@ def is_vacuous(argv):
     """True when a command cannot fail, i.e. it can never be acceptance evidence.
 
     Detects ``true``/``false``/``echo``-style commands, inline snippets such
-    as ``python -c "pass"``, and shell wrappers around them (``sh -c true``).
+    as ``python -c "pass"``, unconditional-exit snippets (``sys.exit(0)``), and
+    shell wrappers around a *single* no-op (``sh -c true``).
+
     A heuristic blacklist: it cannot prove a command is meaningful, only that
-    it is trivially not.
+    it is trivially not. It must also not reject meaningful commands, so a
+    shell snippet that chains several commands (``sh -c "echo x; pytest"``)
+    is never treated as vacuous.
     """
     if not argv:
         return True
     program = os.path.basename(argv[0]).lower()
     if program in VACUOUS_COMMANDS:
         return True
-    # `sh -c true`, `python -c pass`, `bash -c "exit 0"`, ...
+    is_shell = program in SHELL_PROGRAMS
     for index, arg in enumerate(argv[:-1]):
         if arg not in ("-c", "--command"):
             continue
-        snippet = argv[index + 1].strip().lower()
-        if snippet in VACUOUS_SNIPPETS:
+        snippet = argv[index + 1].strip()
+        if is_vacuous_snippet(snippet):
             return True
-        # `sh -c "true"` hides the no-op one level deeper.
-        if os.path.basename(program) in SHELL_PROGRAMS:
-            head = snippet.split()[0] if snippet.split() else ""
-            if os.path.basename(head) in VACUOUS_COMMANDS:
-                return True
-        # A snippet that only reaches an unconditional exit (`import sys; sys.exit(0)`).
-        if snippet.replace(" ", "") in VACUOUS_SNIPPETS:
-            return True
-        if re.search(r"sys\.exit\(0\)|raise SystemExit\(0\)|os\._exit\(0\)", snippet):
+        if is_shell and is_single_noop(snippet):
             return True
     return False
+
+
+def is_vacuous_snippet(snippet):
+    """True when an inline snippet can only succeed, whatever the interpreter."""
+    lowered = snippet.strip().lower()
+    if lowered in VACUOUS_SNIPPETS:
+        return True
+    if lowered.replace(" ", "") in VACUOUS_SNIPPETS:
+        return True
+    # An unconditional exit, possibly behind an import: `import sys; sys.exit(0)`.
+    return bool(UNCONDITIONAL_EXIT_RE.search(lowered))
+
+
+def is_single_noop(snippet):
+    """True when a shell snippet is exactly one no-op command.
+
+    ``sh -c "true"`` is vacuous; ``sh -c "echo x; pytest"`` is not, because it
+    runs a real command. Chained snippets are therefore never vacuous.
+    """
+    parts = [p for p in re.split(r"[;&|]+", snippet.strip()) if p.strip()]
+    if len(parts) != 1:
+        return False
+    head = parts[0].strip().split()[0] if parts[0].strip().split() else ""
+    return os.path.basename(head) in VACUOUS_COMMANDS
 
 
 def load_contract(path):
@@ -301,10 +325,21 @@ def do_verify(args):
     contract, digest = load_contract(Path(args.contract).resolve())
     path = Path(args.receipt).resolve()
     try:
-        receipt = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
+        raw = path.read_text(encoding="utf-8")
+    except OSError as exc:
         raise GateError(f"invalid receipt: {exc}") from exc
-    ensure_object(receipt, "receipt")
+    try:
+        receipt = json.loads(raw)
+    except ValueError as exc:
+        # An unreadable receipt is broken or edited evidence, not an invalid
+        # invocation: report it as a gate failure so the reason is not masked.
+        print(f"FAIL: receipt is not valid JSON ({exc})", file=sys.stderr)
+        print("GATE: BLOCKED - do not claim verified completion")
+        return 1
+    if not isinstance(receipt, dict):
+        print("FAIL: receipt must be a JSON object", file=sys.stderr)
+        print("GATE: BLOCKED - do not claim verified completion")
+        return 1
     problems = []
     if receipt.get("schema_version") != 1 or receipt.get("work_item") != contract["work_item"]:
         problems.append("receipt identity mismatch")
@@ -335,7 +370,8 @@ def do_verify(args):
             problems.append("receipt time invalid/expired")
     results = receipt.get("checks")
     if not isinstance(results, list):
-        raise GateError("receipt.checks must be list")
+        problems.append("receipt.checks must be a list")
+        results = []
     result_map = {}
     for entry in results:
         if not isinstance(entry, dict) or not nonempty(entry.get("id")):

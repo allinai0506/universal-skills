@@ -55,9 +55,11 @@ class AcceptanceGateTests(unittest.TestCase):
     def write_contract(self):
         self.contract.write_text(json.dumps(self.spec), encoding="utf-8")
 
-    def run_gate(self):
+    def run_gate(self, out=None):
+        """Run the gate. Each call needs a fresh output directory, otherwise the
+        second run is rejected with "output directory is not empty"."""
         return subprocess.run([sys.executable, str(GATE), "run", "--repo", str(self.repo),
-                               "--contract", str(self.contract), "--out", str(self.out)],
+                               "--contract", str(self.contract), "--out", str(out or self.out)],
                               text=True, capture_output=True, check=False)
 
     def verify_gate(self):
@@ -149,11 +151,50 @@ class AcceptanceGateTests(unittest.TestCase):
     def test_vacuous_acceptance_check_rejected(self):
         for argv in (["true"], ["echo", "ok"], [sys.executable, "-c", "pass"],
                      ["sh", "-c", "true"], ["/bin/sh", "-c", "echo ok"],
-                     [sys.executable, "-c", "import sys; sys.exit(0)"]):
+                     [sys.executable, "-c", "import sys; sys.exit(0)"],
+                     [sys.executable, "-c", "raise SystemExit(0)"],
+                     [sys.executable, "-c", "Raise SystemExit(0)"],
+                     [sys.executable, "-c", "import os; os._exit(0)"]):
             with self.subTest(argv=argv):
                 self.spec["checks"][0]["argv"] = argv
                 self.write_contract()
                 self.assertEqual(self.run_gate().returncode, 2)
+
+    def test_meaningful_shell_snippet_not_rejected(self):
+        """A chained shell snippet runs a real command and must not be rejected.
+
+        The point of the check is that the *contract loads* (no vacuous
+        rejection); the command then runs and must pass.
+        """
+        for index, argv in enumerate(
+                (["sh", "-c", "echo banner; " + sys.executable + " -m unittest test_acceptance_case.py"],
+                 ["sh", "-c", "echo x && " + sys.executable + " -m unittest test_acceptance_case.py"],
+                 ["sh", "-c", sys.executable + " -m unittest test_acceptance_case.py"])):
+            with self.subTest(argv=argv):
+                self.spec["checks"][0]["argv"] = argv
+                self.write_contract()
+                out = self.root / f"evidence-shell-{index}"
+                self.assertEqual(self.run_gate(out=out).returncode, 0)
+
+    def test_broken_receipt_is_gate_failure_not_invalid_input(self):
+        """A structurally broken receipt is a failed gate (exit 1), not exit 2."""
+        self.assertEqual(self.run_gate().returncode, 0)
+        receipt_file = self.out / "receipt.json"
+        receipt_file.write_text("{not json", encoding="utf-8")
+        verify = self.verify_gate()
+        self.assertEqual(verify.returncode, 1)
+        self.assertIn("not valid JSON", verify.stderr)
+
+    def test_receipt_with_non_list_checks_is_gate_failure(self):
+        self.assertEqual(self.run_gate().returncode, 0)
+        receipt_file = self.out / "receipt.json"
+        receipt = json.loads(receipt_file.read_text(encoding="utf-8"))
+        receipt["checks"] = {"a1": {}}
+        receipt[RECEIPT_DIGEST_FIELD] = receipt_digest(receipt)
+        receipt_file.write_text(json.dumps(receipt), encoding="utf-8")
+        verify = self.verify_gate()
+        self.assertEqual(verify.returncode, 1)
+        self.assertIn("receipt.checks must be a list", verify.stderr)
 
     def test_vacuous_non_acceptance_check_allowed(self):
         """A build-kind smoke check may legitimately be a no-op."""
