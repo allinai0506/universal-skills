@@ -51,8 +51,26 @@ GIT_PR_TITLE="feat: ..." GIT_PR_BODY="$(cat /tmp/body.md)" ./scripts/gitee-pr-he
 就无法建 PR** —— 这不是脚本的软检查，而是 `entry-gate-check.py` 的硬拦截，绕过它
 没有意义。逃生阀 `UNIFIED_DEV_FLOW_SKIP_REVIEW=1` 仅限生产抢修，且会留审计记录。
 
-另注意：脚本用 `origin` 作为默认远端名，而本仓库的远端名为 `gitee`。首次使用请先
-设置 upstream：
+**生效条件（须知）**：该拦截仅在分支名匹配 `agent/` / `feat/` / `fix/` 前缀时触发，
+且门禁脚本需可被找到 —— 优先 `~/.claude/scripts/entry-gate-check.py`，缺失时回退到
+仓库内 `categories/workflow/unified-dev-flow/scripts/entry-gate-check.py`。若两者都
+不存在，拦截会被跳过（此时请自行确认已完成 S6）。
+
+## Token 解析
+
+`GITEE_TOKEN` 未显式注入时，`scripts/gitee-token.sh` 按以下顺序自动解析：
+
+1. `$GITEE_TOKEN` 环境变量
+2. `~/.config/xiyu/credentials.env`（推荐，chmod 600）
+3. `~/.zshenv` 中的 export 行
+4. `git credential fill`（最后手段）
+
+申请令牌：https://gitee.com/profile/personal_access_tokens
+
+## 远端名注意
+
+脚本用 `origin` 作为默认远端名，而本仓库的远端名为 `gitee`。首次使用请先设置
+upstream：
 
 ```bash
 git push -u gitee <branch>

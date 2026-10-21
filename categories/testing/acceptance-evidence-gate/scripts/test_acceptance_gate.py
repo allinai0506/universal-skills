@@ -273,7 +273,11 @@ class AcceptanceGateTests(unittest.TestCase):
         self.assertEqual(json.loads(anchor.read_text(encoding="utf-8")), first)
 
     def test_anchor_detects_a_swapped_anchor(self):
-        """An anchor issued for a different receipt must not validate this one."""
+        """An anchor issued for a different receipt must not validate this one.
+
+        `anchor` now refuses a receipt whose HEAD is no longer current, so the
+        swap is caught at stamping time rather than at verify time.
+        """
         self.assertEqual(self.run_gate().returncode, 0)
         other = self.root / "other"
         other.mkdir()
@@ -288,10 +292,78 @@ class AcceptanceGateTests(unittest.TestCase):
             [sys.executable, str(GATE), "anchor", "--repo", str(other),
              "--receipt", str(self.out / "receipt.json"), "--anchor", str(anchor)],
             text=True, capture_output=True, check=False)
-        self.assertEqual(anchored.returncode, 0, anchored.stderr)
-        verify = self.verify_gate(anchor=anchor)
-        self.assertEqual(verify.returncode, 1)
-        self.assertIn("anchor HEAD mismatch", verify.stderr)
+        self.assertEqual(anchored.returncode, 2)
+        self.assertIn("belongs to HEAD", anchored.stderr)
+
+    def test_agent_can_forge_its_own_anchor(self):
+        """Documented limit: the Agent can write an anchor that commits to a forged
+        receipt.
+
+        `verify --anchor` therefore adds no protection on its own — the whole
+        value comes from the anchor living somewhere the Agent cannot write.
+        This test pins that limit so it cannot be silently "fixed" by someone
+        who believes the anchor is self-authenticating.
+        """
+        self.spec["checks"][0]["argv"] = [sys.executable, "-c", "raise SystemExit(9)"]
+        self.write_contract()
+        self.assertEqual(self.run_gate().returncode, 1)
+        receipt_file = self.out / "receipt.json"
+        receipt = json.loads(receipt_file.read_text(encoding="utf-8"))
+        receipt["checks"][0]["exit_code"] = 0
+        receipt[RECEIPT_DIGEST_FIELD] = receipt_digest(receipt)
+        receipt_file.write_text(json.dumps(receipt), encoding="utf-8")
+        # The Agent forges an anchor that commits to its forged receipt.
+        head = subprocess.run(["git", "-C", str(self.repo), "rev-parse", "HEAD"],
+                               capture_output=True, text=True, check=False).stdout.strip()
+        forged = self.root / "agent-written-anchor.json"
+        forged.write_text(json.dumps({
+            "schema": "acceptance-evidence-anchor/1",
+            "work_item": receipt.get("work_item"),
+            "repo_head": head,
+            "receipt_sha256": receipt[RECEIPT_DIGEST_FIELD],
+            "anchored_at": "2026-01-01T00:00:00+00:00",
+        }), encoding="utf-8")
+        verify = self.verify_gate(anchor=forged)
+        self.assertEqual(verify.returncode, 0)
+        self.assertIn("GATE: PASS", verify.stdout)
+
+    def test_anchor_refuses_a_forged_receipt(self):
+        """`anchor` must not stamp a receipt whose digest does not match its body."""
+        # Start from a failing run so there is an exit_code to flip.
+        self.spec["checks"][0]["argv"] = [sys.executable, "-c", "raise SystemExit(9)"]
+        self.write_contract()
+        self.assertEqual(self.run_gate().returncode, 1)
+        receipt_file = self.out / "receipt.json"
+        receipt = json.loads(receipt_file.read_text(encoding="utf-8"))
+        receipt["checks"][0]["exit_code"] = 0  # body edited, digest not recomputed
+        receipt_file.write_text(json.dumps(receipt), encoding="utf-8")
+        anchored = self.anchor_gate(self.root / "anchor" / "evidence.json")
+        self.assertEqual(anchored.returncode, 2)
+        self.assertIn("receipt digest mismatch", anchored.stderr)
+
+    def test_anchor_refuses_receipt_from_another_head(self):
+        """The anchor records the receipt's own HEAD; a moved repo is refused."""
+        self.assertEqual(self.run_gate().returncode, 0)
+        (self.repo / "readme.txt").write_text("moved", encoding="utf-8")
+        self.git("add", ".")
+        self.git("commit", "-qm", "after run")
+        anchored = self.anchor_gate(self.root / "anchor" / "evidence.json")
+        self.assertEqual(anchored.returncode, 2)
+        self.assertIn("belongs to HEAD", anchored.stderr)
+
+    def test_verify_rejects_empty_anchor(self):
+        """An empty --anchor must be rejected, not silently ignored."""
+        self.assertEqual(self.run_gate().returncode, 0)
+        verify = self.verify_gate(anchor="")
+        self.assertEqual(verify.returncode, 2)
+        self.assertIn("--anchor must not be empty", verify.stderr)
+
+    def test_anchor_refuses_path_inside_repository(self):
+        """An anchor in the worktree would dirty it and break later verifies."""
+        self.assertEqual(self.run_gate().returncode, 0)
+        anchored = self.anchor_gate(self.repo / ".anchor" / "evidence.json")
+        self.assertEqual(anchored.returncode, 2)
+        self.assertIn("outside repository", anchored.stderr)
 
     def test_vacuous_non_acceptance_check_allowed(self):
         """A build-kind smoke check may legitimately be a no-op."""

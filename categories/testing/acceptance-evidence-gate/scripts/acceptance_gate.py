@@ -458,7 +458,9 @@ def do_verify(args):
         failed = [cid for cid in criterion["check_ids"] if cid not in passed_ids]
         if failed:
             problems.append(f"{criterion['id']}: missing passing evidence for {failed}")
-    if getattr(args, "anchor", None):
+    if getattr(args, "anchor", None) is not None:
+        if not str(args.anchor).strip():
+            raise GateError("--anchor must not be empty")
         problems.extend(check_anchor(Path(args.anchor), receipt, current["head"]))
     if problems:
         for problem in problems:
@@ -477,10 +479,19 @@ def do_anchor(args):
     The anchor must be written to a location the claiming Agent cannot write
     (for example a path only a CI job or an independent reviewer can reach).
     The protection comes from that location, not from this command.
+
+    The receipt is validated before it is stamped: an anchor that commits to a
+    broken receipt is worthless, and silently stamping one would give a
+    trusted party no signal that anything is wrong.
     """
     repo = Path(args.repo).resolve()
     path = Path(args.receipt).resolve()
     anchor_path = Path(args.anchor).resolve()
+    if not str(args.anchor).strip():
+        raise GateError("--anchor must not be empty")
+    # An anchor inside the repository would dirty the worktree and make every
+    # later verify fail; it would also risk being committed by accident.
+    assert_outside_repo(repo, anchor_path)
     try:
         receipt = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
@@ -489,8 +500,18 @@ def do_anchor(args):
     digest = receipt.get(RECEIPT_DIGEST_FIELD)
     if not isinstance(digest, str) or not digest:
         raise GateError("receipt has no digest; re-run `run` to produce one")
-    head = repo_state(repo)["head"]
-    payload = write_anchor(anchor_path, receipt, head)
+    if digest != receipt_digest(receipt):
+        raise GateError("receipt digest mismatch (receipt was modified after the run)")
+    head = receipt.get("repo_head_after")
+    if not isinstance(head, str) or not head:
+        raise GateError("receipt has no repo_head_after; re-run `run` to produce one")
+    if head != repo_state(repo)["head"]:
+        raise GateError(f"receipt belongs to HEAD {head[:12]}..., "
+                        f"but the repository is now at {repo_state(repo)['head'][:12]}...")
+    try:
+        payload = write_anchor(anchor_path, receipt, head)
+    except OSError as exc:
+        raise GateError(f"cannot write anchor {anchor_path}: {exc}") from exc
     print(f"ANCHORED: {anchor_path}")
     print(f"HEAD: {head}")
     print(f"receipt_sha256: {payload['receipt_sha256']}")
@@ -509,7 +530,9 @@ def main():
     verify.add_argument("--contract", required=True)
     verify.add_argument("--receipt", required=True)
     verify.add_argument("--max-age-hours", type=float, default=24)
-    verify.add_argument("--anchor", help="anchor file committing to this receipt (optional)")
+    verify.add_argument("--anchor",
+                        help="anchor file committing to this receipt (optional, "
+                             "but an empty value is rejected rather than ignored)")
     anchor = sub.add_parser("anchor", help="register the receipt digest in an anchor file")
     anchor.add_argument("--repo", required=True)
     anchor.add_argument("--receipt", required=True)

@@ -16,6 +16,8 @@ Use `assets/contract.template.json` and customize it **outside the target reposi
 - `run exit 1`: at least one configured command failed/timed out, or HEAD/worktree drifted during tests; inspect logs and fix before claiming completion.
 - `verify exit 0`: receipt is intact, matches the exact contract and currently clean HEAD, contains all expected successful command executions, and is within freshness bound (default 24 hours).
 - `verify exit 1`: failed acceptance gate. **No verified completion**. A receipt that is malformed, structurally broken, or edited after the run is reported here too — not as invalid input — so the reason for the failure is never masked.
+- `anchor exit 0`: the receipt was validated (its digest recomputed, its HEAD still current) and committed to the anchor file. **This is not a judgement of the receipt's honesty** — see the anchoring section: the protection comes from the anchor's location.
+- `anchor exit 2`: invalid input or environment (unreadable receipt, missing or mismatched digest, receipt belonging to a different HEAD, empty `--anchor`, an anchor path inside the repository, an unwritable anchor location, or an anchor that already exists).
 - `exit 2`: invalid input or environment (e.g. dirty worktree before run, missing Git, invalid contract, unreadable receipt path). **No verified completion**.
 
 ## Anchoring a receipt (optional, defeats forged receipts)
@@ -41,24 +43,52 @@ python3 scripts/acceptance_gate.py verify \
 ```
 
 The anchor binds three things: the work item, the repository HEAD, and the
-receipt digest. With `--anchor` in place, forging a passing receipt is no
-longer enough — the forger must also produce an anchor committing to it, and
-the anchor is write-once (`anchor` refuses to overwrite an existing file).
+receipt digest. The HEAD it records is the one the receipt was produced at
+(`repo_head_after`), not the HEAD at anchoring time — `anchor` refuses to
+stamp a receipt whose HEAD is no longer current. With `--anchor` in place,
+forging a passing receipt is no longer enough — the forger must also produce
+an anchor committing to it, and the anchor is write-once (`anchor` refuses to
+overwrite an existing file).
 
 ### Where the anchor must live
 
-The protection comes from **the anchor's location**, not from the command:
+The protection comes from **the anchor's location**, not from the command.
+Measured against an Agent that controls the whole workspace:
+
+| Attack | Result |
+| --- | --- |
+| Forge the receipt (flip `exit_code`, recompute `receipt_sha256`) | **blocked** — `anchor does not commit to this receipt` |
+| Overwrite an existing anchor via `anchor` | **blocked** — anchors are write-once |
+| Edit the anchor file directly (leaving its `receipt_sha256` alone) | **blocked** — the committed digest no longer matches the receipt |
+| Edit the anchor file directly **and** update its `receipt_sha256` to the forged receipt's | **NOT blocked** — equivalent to writing a new anchor |
+| **Write a brand-new anchor that commits to the forged receipt** | **NOT blocked** — the Agent can do this itself |
+
+The last two rows are the important ones: `verify --anchor` checks that the
+anchor commits to the receipt, and **the Agent can produce such an anchor by
+itself**. The command therefore adds no protection on its own. It becomes
+meaningful only when the anchor is written by a party the Agent does not
+control:
 
 - **Good** — a path only CI, a reviewer, or another principal can write; a
   read-only mount; a repository the claiming Agent has no push access to; a
-  directory whose write bits are removed (`chmod a-w`) and whose removal
-  requires an explicit, auditable `chmod`.
+  directory whose write bits are removed (`chmod a-w`) **and** whose anchor
+  file is itself `chmod 0444`. Note that the owner can always `chmod` the
+  permissions back, so this is *auditable*, not a hard block; and that
+  removing the directory's write bit alone is **not** enough — the anchor
+  file keeps its own `0644` mode and can still be rewritten in place.
 - **Weak** — a path inside the Agent's own workspace. The Agent can rewrite
   the anchor just as it can rewrite the receipt; the anchor then only proves
-  self-consistency.
+  self-consistency, and `verify --anchor` gives a false sense of assurance.
 - **Note** — the `PreToolUse` hook in this repository intercepts `Edit` and
   `Write`, but **not** shell redirection. A path rule alone does not stop a
   `Bash` write; use OS-level write protection or an external principal.
+- The anchor must live **outside** the repository: `anchor` refuses a path
+  inside it, because that would dirty the worktree and make every later
+  `verify` fail.
+
+**Operational rule:** treat `verify --anchor` as meaningful only when the
+anchor's path is *not* writable by the Agent. If the Agent chose the path and
+wrote the file, the result proves nothing about execution.
 
 Anchoring is **optional**. Without `--anchor`, `verify` behaves exactly as
 before. Use it when the claim is adversarial: a security fix, a money or

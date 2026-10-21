@@ -1,7 +1,7 @@
 ---
 name: acceptance-evidence-gate
-version: "2026.10.21-2"
-synced-at: "2026-10-21T11:26:09"
+version: "2026.10.21-3"
+synced-at: "2026-10-21T12:16:44"
 description: "Gate a Coding Agent's 'done' or PR-ready claim on source-linked acceptance criteria, executed tests, current Git HEAD, and tamper-evident receipts. Use immediately before declaring a code change complete, fixed, or ready to merge - when the requirements are known but it is unclear whether they were actually proven at the current commit. Do not use for general code advice, exploratory analysis, or tasks with no identified acceptance criteria."
 ---
 
@@ -81,9 +81,11 @@ Read `references/verification-rules.md` when constructing the acceptance contrac
    ```
 
    The anchor is write-once and binds the work item, the HEAD and the receipt
-   digest. Without an anchor, a forger who can rewrite the receipt can also
-   recompute its digest; with one, forging requires an anchor the Agent cannot
-   write. See `references/verification-rules.md` for where an anchor belongs.
+   digest. **The protection is the anchor's location, not the command**: an
+   Agent that can write the anchor can also forge one, so `--anchor` adds
+   nothing on its own. Use it only when the anchor lives somewhere the
+   claiming Agent cannot write (CI, a reviewer, a read-only mount, an
+   OS-protected directory). See `references/verification-rules.md`.
 
 6. **Review semantic coverage manually:** confirm the acceptance commands genuinely test each agreed criterion, including negative/boundary behavior when relevant. Mechanical receipt validation does not prove that test assertions are adequate or that the specification is correct.
 7. **Report** using `assets/completion-report.template.md` with exact HEAD, acceptance IDs, commands, results, receipt path, and unresolved risks. State `VERIFIED` **only** if both the automated gate and the semantic coverage check pass. Otherwise report `UNVERIFIED` or `BLOCKED`, with reasons.
@@ -97,7 +99,7 @@ Read `references/verification-rules.md` when constructing the acceptance contrac
 - Run configured commands **without shell expansion**. Review them before execution; the script does not sandbox or guarantee safety of the commands.
 - No automatic installation, cleanup, committing, pushing, or use of remote services.
 - `PASS` from the script is a **necessary** completion gate, not sufficient proof of business correctness.
-- The receipt digest detects **accidental** post-run edits; it does not stop a determined forger, because the claiming Agent can rewrite the receipt and recompute the digest. For claims that must survive an adversarial reader, use `anchor` to commit the receipt digest in a file the Agent cannot write, and verify with `--anchor`. See `references/verification-rules.md` for where an anchor belongs and what still remains outside its reach.
+- The receipt digest detects **accidental** post-run edits; it does not stop a determined forger, because the claiming Agent can rewrite the receipt and recompute the digest. For claims that must survive an adversarial reader, use `anchor` to commit the receipt digest in a file **the Agent cannot write** — an Agent-writable anchor is worthless, because the Agent can forge one. See `references/verification-rules.md`.
 
 # Verification
 

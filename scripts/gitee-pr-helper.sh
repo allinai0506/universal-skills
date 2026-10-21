@@ -3,7 +3,8 @@
 # Output: PR info or merge result
 # Pos: scripts/ — Gitee PR 操作辅助工具
 # 维护声明: 依赖 curl + GITEE_TOKEN 环境变量。Gitee API v5。
-#           契约测试: scripts/test/gitee-pr-helper-contract.sh（mock API，无需真实 token）
+#           契约测试: 位于上游 ~/bid-product/scripts/test/gitee-pr-helper-contract.sh
+#                      （mock API，无需真实 token；本仓库未随迁该测试件）
 #
 # 用法:
 #   GITEE_TOKEN=xxx ./scripts/gitee-pr-helper.sh list          # 列出当前分支的 PR
@@ -189,7 +190,12 @@ create_pr() {
 
   # ── Unified Dev Flow S6 Code Review 物理硬卡点 ─────────────────────
   if [[ "$branch" =~ ^(agent/|feat/|fix/) ]]; then
+    # 优先用已安装到 ~/.claude/scripts 的门禁；缺失时回退到仓库内副本，
+    # 避免"脚本在但门禁没装"导致的静默放行。
     local checker="${HOME}/.claude/scripts/entry-gate-check.py"
+    if [[ ! -f "$checker" ]]; then
+      checker="$repo_root/categories/workflow/unified-dev-flow/scripts/entry-gate-check.py"
+    fi
     if [[ -f "$checker" ]]; then
       echo "[gitee-pr] 🔍 检查 S5 验证与 S6 Code Review 交付凭证..."
       if ! python3 "$checker" --project-dir "$repo_root" --guard-pr; then
@@ -253,7 +259,7 @@ create_pr() {
   #   修复内容：...
   # 可用环境变量 GIT_PR_TITLE / GIT_PR_BODY 覆盖（与 scripts/pr-create.sh 命名对齐）
   # 最后一个 commit 是 docs/wiki 类辅助 commit 时尤其有用
-  local commit_subject commit_body
+  local commit_subject commit_body pr_title
   commit_subject=$(git log -1 --format='%s' 2>/dev/null || echo "")
   commit_body=$(git log -1 --format='%b' 2>/dev/null || echo "")
 
