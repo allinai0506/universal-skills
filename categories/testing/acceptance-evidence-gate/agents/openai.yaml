@@ -1,0 +1,3 @@
+interface:
+  display_name: "Acceptance Evidence Gate"
+  short_description: "Gate a done-claim on source-linked acceptance criteria, executed checks, and a tamper-evident receipt"

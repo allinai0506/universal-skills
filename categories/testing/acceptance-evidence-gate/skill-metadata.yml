@@ -1,0 +1,31 @@
+version: "1.0.0"
+author: "The Clean Coder (Robert C. Martin) 衍生"
+skillFormat: "aiss-1.0"
+
+tags: [testing, acceptance, verification, gate, evidence, git]
+
+platforms: [claude, codex, copilot, gemini, trae]
+
+requires:
+  tools: [python3, git]
+  runtime: "Python 3.9+ standard library only"
+
+triggers:
+  keywords:
+    - "acceptance evidence"
+    - "验收证据"
+    - "acceptance contract"
+    - "验收契约"
+    - "acceptance gate"
+    - "验收门禁"
+    - "evidence receipt"
+    - "证据回执"
+    - "verify before done"
+    - "完成前证据"
+    - "prove it works"
+    - "证据先行"
+    - "gate on acceptance criteria"
+    - "按验收标准卡门禁"
+  filePatterns:
+    - "**/contract.json"
+    - "**/receipt.json"
