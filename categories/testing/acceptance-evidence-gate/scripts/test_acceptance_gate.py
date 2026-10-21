@@ -70,9 +70,10 @@ class AcceptanceGateTests(unittest.TestCase):
             cmd += ["--anchor", str(anchor)]
         return subprocess.run(cmd, text=True, capture_output=True, check=False)
 
-    def anchor_gate(self, anchor):
+    def anchor_gate(self, anchor, contract=None):
         return subprocess.run([sys.executable, str(GATE), "anchor", "--repo", str(self.repo),
                                "--receipt", str(self.out / "receipt.json"),
+                               "--contract", str(contract or self.contract),
                                "--anchor", str(anchor)],
                               text=True, capture_output=True, check=False)
 
@@ -214,19 +215,18 @@ class AcceptanceGateTests(unittest.TestCase):
         self.assertEqual(verify.returncode, 0, verify.stderr + verify.stdout)
 
     def test_anchor_detects_forged_receipt(self):
-        """Forge a failing receipt into a passing one, keep the honest anchor.
+        """Forge a receipt after an honest anchor, keep the honest anchor.
 
-        The receipt must start from a *failing* run, otherwise there is no
-        exit_code to flip and the digest would not change.
+        The anchor is created for a *passing* receipt; afterwards the receipt
+        is edited (and its digest recomputed), so the anchor no longer
+        commits to it.
         """
-        self.spec["checks"][0]["argv"] = [sys.executable, "-c", "raise SystemExit(9)"]
-        self.write_contract()
-        self.assertEqual(self.run_gate().returncode, 1)
+        self.assertEqual(self.run_gate().returncode, 0)
         anchor = self.root / "anchor" / "evidence.json"
         self.assertEqual(self.anchor_gate(anchor).returncode, 0)
         receipt_file = self.out / "receipt.json"
         receipt = json.loads(receipt_file.read_text(encoding="utf-8"))
-        receipt["checks"][0]["exit_code"] = 0
+        receipt["checks"][0]["exit_code"] = 7
         receipt[RECEIPT_DIGEST_FIELD] = receipt_digest(receipt)
         receipt_file.write_text(json.dumps(receipt), encoding="utf-8")
         verify = self.verify_gate(anchor=anchor)
@@ -290,10 +290,12 @@ class AcceptanceGateTests(unittest.TestCase):
         anchor = self.root / "anchor" / "swapped.json"
         anchored = subprocess.run(
             [sys.executable, str(GATE), "anchor", "--repo", str(other),
-             "--receipt", str(self.out / "receipt.json"), "--anchor", str(anchor)],
+             "--receipt", str(self.out / "receipt.json"),
+             "--contract", str(self.contract),
+             "--anchor", str(anchor)],
             text=True, capture_output=True, check=False)
         self.assertEqual(anchored.returncode, 2)
-        self.assertIn("belongs to HEAD", anchored.stderr)
+        self.assertIn("HEAD/state mismatch", anchored.stderr)
 
     def test_agent_can_forge_its_own_anchor(self):
         """Documented limit: the Agent can write an anchor that commits to a forged
@@ -349,7 +351,53 @@ class AcceptanceGateTests(unittest.TestCase):
         self.git("commit", "-qm", "after run")
         anchored = self.anchor_gate(self.root / "anchor" / "evidence.json")
         self.assertEqual(anchored.returncode, 2)
-        self.assertIn("belongs to HEAD", anchored.stderr)
+        self.assertIn("HEAD/state mismatch", anchored.stderr)
+
+    def test_anchor_refuses_a_fully_forged_receipt(self):
+        """A receipt forged end-to-end (digest recomputed) must not be anchored.
+
+        This is the case the first S6 round called a "rubber stamp": the
+        forger rewrites the receipt *and* recomputes its digest, so a summary
+        check alone cannot tell. `anchor` therefore applies the same judgement
+        `verify` applies, and additionally reads the log — the independent
+        trace of what the command actually did. The forged receipt claims
+        exit 0 while the log still records the failure, so the log check
+        catches it.
+        """
+        # A failing check that writes to its log, so the log carries the trace.
+        self.spec["checks"][0]["argv"] = [sys.executable, "-c",
+                                          "import sys; print('FAIL: forged'); sys.exit(9)"]
+        self.write_contract()
+        self.assertEqual(self.run_gate().returncode, 1)
+        receipt_file = self.out / "receipt.json"
+        receipt = json.loads(receipt_file.read_text(encoding="utf-8"))
+        receipt["checks"][0]["exit_code"] = 0
+        receipt[RECEIPT_DIGEST_FIELD] = receipt_digest(receipt)
+        receipt_file.write_text(json.dumps(receipt), encoding="utf-8")
+        anchored = self.anchor_gate(self.root / "anchor" / "evidence.json")
+        self.assertEqual(anchored.returncode, 2)
+        self.assertIn("refusing to anchor", anchored.stderr)
+        self.assertIn("log still records a failure", anchored.stderr)
+
+    def test_anchor_refuses_a_receipt_with_a_tampered_log(self):
+        """A receipt whose log no longer matches its digest must not be anchored."""
+        self.assertEqual(self.run_gate().returncode, 0)
+        with (self.out / "logs" / "acceptance-case.log").open("a") as f:
+            f.write("tamper\n")
+        anchored = self.anchor_gate(self.root / "anchor" / "evidence.json")
+        self.assertEqual(anchored.returncode, 2)
+        self.assertIn("refusing to anchor", anchored.stderr)
+
+    def test_anchor_requires_a_contract(self):
+        """An anchor must be bound to a contract, not stamped blindly."""
+        self.assertEqual(self.run_gate().returncode, 0)
+        proc = subprocess.run(
+            [sys.executable, str(GATE), "anchor", "--repo", str(self.repo),
+             "--receipt", str(self.out / "receipt.json"),
+             "--anchor", str(self.root / "anchor" / "evidence.json")],
+            text=True, capture_output=True, check=False)
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("--contract", proc.stderr)
 
     def test_verify_rejects_empty_anchor(self):
         """An empty --anchor must be rejected, not silently ignored."""

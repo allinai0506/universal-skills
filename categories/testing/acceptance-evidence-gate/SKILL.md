@@ -1,7 +1,7 @@
 ---
 name: acceptance-evidence-gate
-version: "2026.10.21-3"
-synced-at: "2026-10-21T12:16:44"
+version: "2026.10.21-4"
+synced-at: "2026-10-21T12:52:41"
 description: "Gate a Coding Agent's 'done' or PR-ready claim on source-linked acceptance criteria, executed tests, current Git HEAD, and tamper-evident receipts. Use immediately before declaring a code change complete, fixed, or ready to merge - when the requirements are known but it is unclear whether they were actually proven at the current commit. Do not use for general code advice, exploratory analysis, or tasks with no identified acceptance criteria."
 ---
 
@@ -70,6 +70,7 @@ Read `references/verification-rules.md` when constructing the acceptance contrac
    ```bash
    python3 scripts/acceptance_gate.py anchor \
      --repo /path/to/repo \
+     --contract /path/to/contract.json \
      --receipt /tmp/acceptance-evidence-unique-run/receipt.json \
      --anchor <protected-location>/evidence.json
 

@@ -3,7 +3,8 @@
 # Output: Gitee Personal Access Token to stdout（并可通过 source 导出 GITEE_TOKEN）
 # Pos: scripts/ — Gitee PAT 统一解析器（所有 Gitee API 脚本的唯一 token 入口）
 # 维护声明: 仅维护 Gitee Personal Access Token 解析逻辑；调整优先级或新增来源时
-#           同步更新 scripts/test/gitee-token-contract.sh。
+#           同步更新 scripts/test/gitee-token-contract.sh
+#                      （位于上游 ~/bid-product/scripts/test/；本仓库未随迁该测试件）。
 #
 # 解析优先级（高 → 低）:
 #   1. $GITEE_TOKEN 环境变量          — 显式注入永远最优先（GITEE_TOKEN=xxx ./script 用法兼容）

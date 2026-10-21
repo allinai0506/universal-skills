@@ -16,8 +16,8 @@ Use `assets/contract.template.json` and customize it **outside the target reposi
 - `run exit 1`: at least one configured command failed/timed out, or HEAD/worktree drifted during tests; inspect logs and fix before claiming completion.
 - `verify exit 0`: receipt is intact, matches the exact contract and currently clean HEAD, contains all expected successful command executions, and is within freshness bound (default 24 hours).
 - `verify exit 1`: failed acceptance gate. **No verified completion**. A receipt that is malformed, structurally broken, or edited after the run is reported here too — not as invalid input — so the reason for the failure is never masked.
-- `anchor exit 0`: the receipt was validated (its digest recomputed, its HEAD still current) and committed to the anchor file. **This is not a judgement of the receipt's honesty** — see the anchoring section: the protection comes from the anchor's location.
-- `anchor exit 2`: invalid input or environment (unreadable receipt, missing or mismatched digest, receipt belonging to a different HEAD, empty `--anchor`, an anchor path inside the repository, an unwritable anchor location, or an anchor that already exists).
+- `anchor exit 0`: the receipt was validated against its acceptance contract (digest, check set, exit codes and log digests re-checked, and the logs read for failure markers) and committed to the anchor file. **This is not a judgement of the receipt's honesty** — see the anchoring section: the protection comes from the anchor's location.
+- `anchor exit 2`: invalid input or environment (unreadable receipt, missing or mismatched digest, a receipt that does not prove its contract, empty `--anchor`, an anchor path inside the repository, an unwritable anchor location, or an anchor that already exists).
 - `exit 2`: invalid input or environment (e.g. dirty worktree before run, missing Git, invalid contract, unreadable receipt path). **No verified completion**.
 
 ## Anchoring a receipt (optional, defeats forged receipts)
@@ -34,7 +34,8 @@ python3 scripts/acceptance_gate.py run --repo <repo> --contract <c.json> --out <
 
 # 2. register the receipt's digest in an anchor, in a protected location
 python3 scripts/acceptance_gate.py anchor \
-  --repo <repo> --receipt <out>/receipt.json --anchor <protected>/evidence.json
+  --repo <repo> --contract <c.json> \
+  --receipt <out>/receipt.json --anchor <protected>/evidence.json
 
 # 3. verify against the anchor
 python3 scripts/acceptance_gate.py verify \
@@ -44,11 +45,20 @@ python3 scripts/acceptance_gate.py verify \
 
 The anchor binds three things: the work item, the repository HEAD, and the
 receipt digest. The HEAD it records is the one the receipt was produced at
-(`repo_head_after`), not the HEAD at anchoring time — `anchor` refuses to
-stamp a receipt whose HEAD is no longer current. With `--anchor` in place,
-forging a passing receipt is no longer enough — the forger must also produce
-an anchor committing to it, and the anchor is write-once (`anchor` refuses to
-overwrite an existing file).
+(`repo_head_after`), not the HEAD at anchoring time.
+
+**`anchor` validates the receipt before stamping it** — it applies the same
+judgement `verify` does (contract digest, check set, exit codes, log
+digests) and additionally reads the logs for failure markers. A receipt whose
+checks failed, or whose log still records a failure, is refused
+(`refusing to anchor it`). This matters because the exit codes in a receipt
+are self-reported and can be rewritten; the log is the independent trace of
+what the command actually did, so a trusted party gets a real signal rather
+than a rubber stamp.
+
+With `--anchor` in place, forging a passing receipt is no longer enough — the
+forger must also produce an anchor committing to it, and the anchor is
+write-once (`anchor` refuses to overwrite an existing file).
 
 ### Where the anchor must live
 
@@ -57,17 +67,20 @@ Measured against an Agent that controls the whole workspace:
 
 | Attack | Result |
 | --- | --- |
-| Forge the receipt (flip `exit_code`, recompute `receipt_sha256`) | **blocked** — `anchor does not commit to this receipt` |
+| Forge the receipt (flip `exit_code`, recompute `receipt_sha256`) | **blocked at `verify --anchor`** — `anchor does not commit to this receipt` |
 | Overwrite an existing anchor via `anchor` | **blocked** — anchors are write-once |
 | Edit the anchor file directly (leaving its `receipt_sha256` alone) | **blocked** — the committed digest no longer matches the receipt |
 | Edit the anchor file directly **and** update its `receipt_sha256` to the forged receipt's | **NOT blocked** — equivalent to writing a new anchor |
 | **Write a brand-new anchor that commits to the forged receipt** | **NOT blocked** — the Agent can do this itself |
+| Hand a fully forged receipt to `anchor` (digest recomputed) | **blocked** — `anchor` re-checks the contract, the exit codes and the logs, and refuses a receipt whose log still records a failure |
 
-The last two rows are the important ones: `verify --anchor` checks that the
+The last two rows are the important ones. `verify --anchor` checks that the
 anchor commits to the receipt, and **the Agent can produce such an anchor by
-itself**. The command therefore adds no protection on its own. It becomes
+itself** — so the command adds no protection on its own. It becomes
 meaningful only when the anchor is written by a party the Agent does not
-control:
+control. `anchor` does refuse to stamp a receipt that does not hold up
+(the sixth row), which is what gives a trusted party a real signal, but that
+is a check on the receipt, not a proof of execution.
 
 - **Good** — a path only CI, a reviewer, or another principal can write; a
   read-only mount; a repository the claiming Agent has no push access to; a
