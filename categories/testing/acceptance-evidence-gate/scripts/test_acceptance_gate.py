@@ -71,9 +71,12 @@ class AcceptanceGateTests(unittest.TestCase):
         return subprocess.run(cmd, text=True, capture_output=True, check=False)
 
     def anchor_gate(self, anchor, contract=None):
+        # `contract` may legitimately be an empty string (a negative test), so
+        # use an explicit None check rather than `or`.
+        chosen = self.contract if contract is None else contract
         return subprocess.run([sys.executable, str(GATE), "anchor", "--repo", str(self.repo),
                                "--receipt", str(self.out / "receipt.json"),
-                               "--contract", str(contract or self.contract),
+                               "--contract", str(chosen),
                                "--anchor", str(anchor)],
                               text=True, capture_output=True, check=False)
 
@@ -424,6 +427,26 @@ class AcceptanceGateTests(unittest.TestCase):
         anchored = self.anchor_gate(self.root / "anchor" / "evidence.json")
         self.assertEqual(anchored.returncode, 2)
         self.assertIn("log still records a failure", anchored.stderr)
+
+    def test_anchor_rejects_an_empty_contract_path(self):
+        """An empty --contract must be rejected, not silently skipped."""
+        self.assertEqual(self.run_gate().returncode, 0)
+        anchored = self.anchor_gate(self.root / "anchor" / "evidence.json", contract="")
+        self.assertEqual(anchored.returncode, 2)
+        self.assertIn("--contract is required", anchored.stderr)
+
+    def test_anchor_rejects_an_out_of_range_max_age(self):
+        """anchor --max-age-hours is bounded like verify's."""
+        self.assertEqual(self.run_gate().returncode, 0)
+        proc = subprocess.run(
+            [sys.executable, str(GATE), "anchor", "--repo", str(self.repo),
+             "--receipt", str(self.out / "receipt.json"),
+             "--contract", str(self.contract),
+             "--anchor", str(self.root / "anchor" / "evidence.json"),
+             "--max-age-hours", "999999"],
+            text=True, capture_output=True, check=False)
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("--max-age-hours must be within", proc.stderr)
 
     def test_verify_rejects_empty_anchor(self):
         """An empty --anchor must be rejected, not silently ignored."""

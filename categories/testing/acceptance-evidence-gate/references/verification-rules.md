@@ -61,9 +61,16 @@ line (`FAILED (`, `FAIL:`, `ERROR:`, `Traceback (most recent call last)`,
 `AssertionError`, `Segmentation fault`, `panic:`). Test output routinely
 mentions these words in passing prose ("previous AssertionError fixed",
 "status: FAIL: none found"), and a bare substring match would refuse honest
-receipts. It also only sees what the command printed — a check that fails
-silently leaves no trace in its log, so the log check cannot be the sole
-judgement. The exit codes and the contract checks remain the primary signal.
+receipts. The trade-off is the opposite edge: a check whose *passing* output
+starts a line with `ERROR:` or `FAIL:` is still treated as failed. Such a
+receipt can be `verify`-ed normally (exit 0) and then stamped by a trusted
+party who has read the log. It also only sees what the command printed — a
+check that fails silently leaves no trace in its log, so the log check cannot
+be the sole judgement. The exit codes and the contract checks remain the
+primary signal.
+
+`--max-age-hours` (default 24, allowed range `(0, 8760]`) bounds how old a
+receipt may be for both `verify` and `anchor`.
 
 With `--anchor` in place, forging a passing receipt is no longer enough — the
 forger must also produce an anchor committing to it, and the anchor is

@@ -547,7 +547,7 @@ def do_anchor(args):
         raise GateError("receipt has no digest; re-run `run` to produce one")
     if digest != receipt_digest(receipt):
         raise GateError("receipt digest mismatch (receipt was modified after the run)")
-    if not args.contract:
+    if not args.contract or not str(args.contract).strip():
         raise GateError("--contract is required: an anchor must commit to a receipt "
                         "that has been checked against its acceptance contract")
     contract, contract_digest = load_contract(Path(args.contract).resolve())
@@ -601,7 +601,7 @@ def main():
     anchor.add_argument("--max-age-hours", type=float, default=24)
     args = parser.parse_args()
     try:
-        if args.command == "verify" and not (0 < args.max_age_hours <= 8760):
+        if args.command in ("verify", "anchor") and not (0 < args.max_age_hours <= 8760):
             raise GateError("--max-age-hours must be within (0, 8760]")
         if args.command == "run":
             return do_run(args)

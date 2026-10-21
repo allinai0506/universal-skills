@@ -36,3 +36,6 @@ ts	phase	decision	why	evidence	result
 2026-10-21T12:45:00Z	cleanup	S4 ai-slop-cleaner 模式 B：删 anchor_digest 死代码、内联 anchor_payload 薄层	AST 扫描发现定义后从未调用的死函数与单点调用的无谓间接	清理后死代码 0, 28/28 仍全绿	无 slop 残留
 2026-10-21T13:10:00Z	review	S6 首轮独立评审判定 NEEDS_FIXES	指出 B1 攻击矩阵第3行不准确、B2 anchor 对回执零校验（橡皮图章）、B3 --anchor 空串 fail-open、B4/B5 helper 的 guard-pr 生效条件与 token 依赖、B6 宿主副本陈旧，及 B7-B14 建议项	独立 Reviewer 子代理三透镜 + 12 项验证命令实测	5 项阻断 + 8 项建议待修
 2026-10-21T13:25:00Z	fix	关闭 B1-B14 全部阻断与建议	补 anchor 落盘前回执校验（重算摘要+HEAD 一致）、空串 anchor 拒绝、OSError 转 exit 2、anchor 禁写工作区、锚点记录回执所属 HEAD、helper 补 repo-relative 门禁兜底与 gitee-token.sh、修正文档攻击矩阵与 chmod 配方、补 anchor 退出码文档	33/33 单测全绿, 184/184 既有门禁无回归, 4 条绕过路径逐条复测符合预期	全部阻断关闭
+2026-10-21T13:30:00Z	review	S6 第 2 轮评审判 NEEDS_FIXES，13/14 关闭，残留 N1	anchor 对「完整伪造」（摘要已重算）的回执仍盖章成功，可信方拿不到任何伪造信号 —— 根因是回执 exit_code 属自述数据	独立 Reviewer 子代理三透镜 + 变异测试 7/7	1 项阻断待修
+2026-10-21T13:50:00Z	fix	关闭 N1：anchor 强制 --contract 并复用 verify 完整判定，且读日志找失败痕迹	让可信方拿到真实信号而非橡皮图章；日志是命令实际做了什么的独立痕迹	log_shows_failure 落地, 完整伪造回执被拒 exit 2, 38/38 单测全绿	N1 关闭
+2026-10-21T14:00:00Z	cleanup	自查发现日志裸子串匹配会误杀合法回执，改为行首匹配；并补 P3/P4 收尾	正常通过的输出常在行内提及失败词，裸匹配会拒绝诚实回执	行首匹配后 3 个散文场景不误判、5 个真实失败仍全捕获, 40/40 单测全绿, max-age-hours 校验扩到 anchor, 补 --contract 空串单测	误杀消除
