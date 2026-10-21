@@ -137,7 +137,7 @@ _测试_
 
 | 技能 | 用途 |
 | --- | --- |
-| `acceptance-evidence-gate` | 按来源可溯的验收标准卡住"已完成"声明：绑定当前 Git HEAD、执行真实验收检查、生成防篡改证据回执 |
+| `acceptance-evidence-gate` | 按来源可溯的验收标准卡住「已完成」声明：绑定当前 Git HEAD、执行真实验收检查、生成内容可复验且可查出误改的证据回执 |
 | `e2e-testing` | Playwright 端到端测试与页面对象模型实践 |
 
 ### 🎨 ui-ux
