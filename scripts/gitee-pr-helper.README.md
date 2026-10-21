@@ -33,10 +33,15 @@ GIT_PR_TITLE="feat: ..." GIT_PR_BODY="$(cat /tmp/body.md)" ./scripts/gitee-pr-he
 | --- | --- | --- |
 | `GITEE_TOKEN` | 自动解析链 | Gitee 个人访问令牌 |
 | `GITEE_OWNER` | `allinai888` | 仓库属主 |
-| `GITEE_REPO` | `general-skills` | 仓库名（**本仓库默认**） |
+| `GIT_PR_REPO` | 从 git remote 推导 | 仓库名（**显式覆盖用这个**） |
 | `GITEE_BASE_BRANCH` | `main` | 目标分支 |
 | `GIT_PR_TITLE` | 从 commit message 提取 | PR 标题 |
 | `GIT_PR_BODY` | 从 commit body 提取 | PR 描述 |
+
+> **为什么不用 `GITEE_REPO`**：该变量名在其他项目里被用作环境变量，本机实测存在
+> `GITEE_REPO=bid-xiyu` 的遗留值 —— 直接采用会把 API 请求打到**错误的仓库**，
+> 表现为「源分支 ... 不存在」。因此本副本改用 `GIT_PR_REPO` 作显式覆盖，
+> 默认从 `remote.gitee.url` 推导仓库名，推导失败才回落到 `general-skills`。
 
 ## 与 S6 门禁的关系（重要）
 
