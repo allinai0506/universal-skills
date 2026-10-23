@@ -166,7 +166,7 @@ import sys, json
 data = json.load(sys.stdin)
 pr = data[0] if data else None
 if not pr: print("none"); sys.exit()
-if pr.get("merged"): print("merged", pr.get("number", ""))
+if pr.get("merged") or pr.get("state") == "merged": print("merged", pr.get("number", ""))
 elif pr.get("state") == "open": print("open", pr.get("number", ""), str(pr.get("mergeable")).lower())
 else: print("none")
 ' <<< "$resp" 2>/dev/null || echo "skip"
