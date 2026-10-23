@@ -1,7 +1,7 @@
 ---
 name: "speckit-checklist"
 version: "2026.10.23-1"
-synced-at: "2026-10-23T14:26:03"
+synced-at: "2026-10-23T14:34:41"
 description: "Generate a custom checklist for the current feature based on user requirements."
 argument-hint: "Domain or focus area for the checklist"
 compatibility: "Requires spec-kit project structure with .specify/ directory"
@@ -147,9 +147,7 @@ You **MUST** consider the user input before proceeding (if not empty).
 6. **Generate checklist** - Use TEMPLATE_CONTENT as the structural template and create "Unit Tests for Requirements":
    - Create `FEATURE_DIR/checklists/` directory if it doesn't exist
    - Generate unique checklist filename:
-     -
-version: "2026.10.23-1"
-synced-at: "2026-10-23T14:26:03" Use short, descriptive name based on domain (e.g., `ux.md`, `api.md`, `security.md`)
+     - Use short, descriptive name based on domain (e.g., `ux.md`, `api.md`, `security.md`)
      - Format: `[domain].md`
    - File handling behavior:
      - If file does NOT exist: Create new file and number items starting from CHK001

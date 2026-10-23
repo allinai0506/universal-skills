@@ -56,8 +56,16 @@ path = sys.argv[1]
 with open(path, 'r', encoding='utf-8') as f:
     content = f.read()
 
+# 仅在 YAML frontmatter 区域内操作；正文中的 version:/synced-at: 字面量
+# （如模板示例文本）必须保持原样，否则 re.sub 会污染正文。
+fm = re.match(r'^---\n.*?\n---\n', content, re.DOTALL)
+if not fm:
+    print(f"  ⚠️  {path}: 无 frontmatter，跳过戳记更新")
+    sys.exit(0)
+frontmatter, body = content[:fm.end()], content[fm.end():]
+
 today = datetime.datetime.now().strftime("%Y.%m.%d")
-existing_ver = re.search(r'version:\s*"([^"]+)"', content)
+existing_ver = re.search(r'version:\s*"([^"]+)"', frontmatter)
 if existing_ver:
     existing = existing_ver.group(1)
     if existing.startswith(today):
@@ -72,17 +80,17 @@ else:
 synced_at = datetime.datetime.now().isoformat(timespec='seconds')
 
 if existing_ver:
-    content = re.sub(r'version:\s*"[^"]*"', f'version: "{new_version}"', content)
+    frontmatter = re.sub(r'version:\s*"[^"]*"', f'version: "{new_version}"', frontmatter, count=1)
 else:
-    content = re.sub(r'(name:\s*\S+)', r'\1\nversion: "' + new_version + '"', content)
+    frontmatter = re.sub(r'(name:\s*\S+)', r'\1\nversion: "' + new_version + '"', frontmatter, count=1)
 
-if 'synced-at:' in content:
-    content = re.sub(r'synced-at:\s*"[^"]*"', f'synced-at: "{synced_at}"', content)
+if 'synced-at:' in frontmatter:
+    frontmatter = re.sub(r'synced-at:\s*"[^"]*"', f'synced-at: "{synced_at}"', frontmatter, count=1)
 else:
-    content = re.sub(r'(version:\s*"[^"]*")', r'\1\nsynced-at: "' + synced_at + '"', content)
+    frontmatter = re.sub(r'(version:\s*"[^"]*")', r'\1\nsynced-at: "' + synced_at + '"', frontmatter, count=1)
 
 with open(path, 'w', encoding='utf-8') as f:
-    f.write(content)
+    f.write(frontmatter + body)
 print(f"  📌 {path}: version={new_version}, synced-at={synced_at}")
 PYEOF
     fi

@@ -1,7 +1,7 @@
 ---
 name: "speckit-git-validate"
 version: "2026.10.23-1"
-synced-at: "2026-10-23T14:26:03"
+synced-at: "2026-10-23T14:34:41"
 description: "Validate current branch follows feature branch naming conventions"
 compatibility: "Requires spec-kit project structure with .specify/ directory"
 metadata:
@@ -30,8 +30,6 @@ Validate that the current Git branch follows the expected feature branch naming 
 Get the current branch name:
 
 ```bash
-version: "2026.10.23-1"
-synced-at: "2026-10-23T14:26:03"
 git rev-parse --abbrev-ref HEAD
 ```
 
