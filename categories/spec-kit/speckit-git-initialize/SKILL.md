@@ -1,7 +1,5 @@
 ---
 name: "speckit-git-initialize"
-version: "2026.09.14-1"
-synced-at: "2026-09-14T07:43:17"
 description: "Initialize a Git repository with an initial commit"
 compatibility: "Requires spec-kit project structure with .specify/ directory"
 metadata:

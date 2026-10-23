@@ -1,6 +1,6 @@
 # SKILLS-INDEX
 
-> 技能来源速查表 · 自动生成于 2026-10-21 14:23 · 共 83 个一级技能。
+> 技能来源速查表 · 自动生成于 2026-10-23 14:24 · 共 89 个一级技能。
 > 按「来源」检索：公开技能包（外部大神编写的成套技能） / 自建・单个技能。
 > 技能由 AI 按 description 自动触发，无需记住名字。
 
@@ -17,16 +17,22 @@ _需求→架构规范→任务清单的标准化开发套件_
 
 | 技能 | 用途 |
 | --- | --- |
+| `speckit-agent-context-update` | Refresh the managed Spec Kit section in coding agent context file(s) |
 | `speckit-analyze` | Perform a non-destructive cross-artifact consistency and quality analysis across spec.md, plan.md, and tasks.md after task generation. |
-| `speckit-chain` | 一键串行执行 spec-kit 完整开发工作流：constitution → specify → [clarify] → plan → [validate] → tasks → [analyze] → implement。 严格按照官方 spec-kit 方法论串联 5 个核心命令 + 3 个官方推荐的质量门禁。 触发词：全流程开发、全程开发、speckit 全流程、串行执行 speckit、用 spec kit 走完整套流程、帮我实现一个功能并用 speckit。 非单步调试场景——如果用户只想执行其中某一步，应使用对应的独立技能而非本 chain skill。 |
+| `speckit-checklist` | Generate a custom checklist for the current feature based on user requirements. |
 | `speckit-clarify` | Identify underspecified areas in the current feature spec by asking up to 5 highly targeted clarification questions and encoding answers back into the spec. |
 | `speckit-constitution` | Create or update the project constitution from interactive or provided principle inputs. |
+| `speckit-converge` | Assess the current codebase against the feature's spec, plan, and tasks, then append any remaining unbuilt work as new tasks to tasks.md so implement can complete it. |
+| `speckit-git-commit` | Auto-commit changes after a Spec Kit command completes |
 | `speckit-git-feature` | Create a feature branch with sequential or timestamp numbering |
 | `speckit-git-initialize` | Initialize a Git repository with an initial commit |
+| `speckit-git-remote` | Detect Git remote URL for GitHub integration |
+| `speckit-git-validate` | Validate current branch follows feature branch naming conventions |
 | `speckit-implement` | Execute the implementation plan by processing and executing all tasks defined in tasks.md |
 | `speckit-plan` | Execute the implementation planning workflow using the plan template to generate design artifacts. |
 | `speckit-specify` | Create or update the feature specification from a natural language feature description. |
 | `speckit-tasks` | Generate an actionable, dependency-ordered tasks.md for the feature based on available design artifacts. |
+| `speckit-taskstoissues` | Deprecated: Convert existing tasks into actionable, dependency-ordered GitHub issues for the feature based on available design artifacts. |
 
 ### anthropics 官方工具
 _安装能力 / 文档 / PDF / 浏览器工具_
