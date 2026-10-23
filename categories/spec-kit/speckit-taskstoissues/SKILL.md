@@ -1,5 +1,7 @@
 ---
 name: "speckit-taskstoissues"
+version: "2026.10.23-1"
+synced-at: "2026-10-23T14:26:03"
 description: "Deprecated: Convert existing tasks into actionable, dependency-ordered GitHub issues for the feature based on available design artifacts."
 argument-hint: "Optional filter or label for GitHub issues"
 compatibility: "Requires spec-kit project structure with .specify/ directory"

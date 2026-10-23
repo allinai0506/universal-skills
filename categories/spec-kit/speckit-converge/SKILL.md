@@ -1,5 +1,7 @@
 ---
 name: "speckit-converge"
+version: "2026.10.23-1"
+synced-at: "2026-10-23T14:26:03"
 description: "Assess the current codebase against the feature's spec, plan, and tasks, then append any remaining unbuilt work as new tasks to tasks.md so implement can complete it."
 argument-hint: "Optional convergence guidance or task filter"
 compatibility: "Requires spec-kit project structure with .specify/ directory"

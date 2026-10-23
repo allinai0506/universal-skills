@@ -1,5 +1,7 @@
 ---
 name: "speckit-tasks"
+version: "2026.10.23-1"
+synced-at: "2026-10-23T14:26:03"
 description: "Generate an actionable, dependency-ordered tasks.md for the feature based on available design artifacts."
 argument-hint: "Optional task generation constraints"
 compatibility: "Requires spec-kit project structure with .specify/ directory"

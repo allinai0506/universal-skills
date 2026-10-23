@@ -1,5 +1,7 @@
 ---
 name: "speckit-plan"
+version: "2026.10.23-1"
+synced-at: "2026-10-23T14:26:03"
 description: "Execute the implementation planning workflow using the plan template to generate design artifacts."
 argument-hint: "Optional guidance for the planning phase"
 compatibility: "Requires spec-kit project structure with .specify/ directory"

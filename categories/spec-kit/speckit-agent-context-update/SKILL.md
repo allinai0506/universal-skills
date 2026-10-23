@@ -1,5 +1,7 @@
 ---
 name: "speckit-agent-context-update"
+version: "2026.10.23-1"
+synced-at: "2026-10-23T14:26:03"
 description: "Refresh the managed Spec Kit section in coding agent context file(s)"
 compatibility: "Requires spec-kit project structure with .specify/ directory"
 metadata:

@@ -1,5 +1,7 @@
 ---
 name: "speckit-clarify"
+version: "2026.10.23-1"
+synced-at: "2026-10-23T14:26:03"
 description: "Identify underspecified areas in the current feature spec by asking up to 5 highly targeted clarification questions and encoding answers back into the spec."
 argument-hint: "Optional areas to clarify in the spec"
 compatibility: "Requires spec-kit project structure with .specify/ directory"
