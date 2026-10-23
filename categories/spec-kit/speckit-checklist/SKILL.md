@@ -1,7 +1,7 @@
 ---
 name: "speckit-checklist"
-version: "2026.10.23-1"
-synced-at: "2026-10-23T14:34:41"
+version: "2026.10.23-2"
+synced-at: "2026-10-23T14:35:39"
 description: "Generate a custom checklist for the current feature based on user requirements."
 argument-hint: "Domain or focus area for the checklist"
 compatibility: "Requires spec-kit project structure with .specify/ directory"
