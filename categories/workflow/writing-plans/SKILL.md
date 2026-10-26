@@ -149,6 +149,16 @@ If you find issues, fix them inline. No need to re-review — just fix and move 
 
 ## Execution Handoff
 
+### Orchestrator Handoff (HAFlow / Pipeline Mode)
+
+When executing inside an orchestrator (such as HAFlow `software-development-v1` plan stage):
+- The plan is delivered directly back to HAFlow;
+- Do NOT prompt the user to choose an execution sub-skill (`subagent-driven-development` or `executing-plans`);
+- Do NOT include the `REQUIRED SUB-SKILL` header demanding downstream workers run a second controller loop;
+- Save the plan to the designated location or shared notes and conclude the stage.
+
+### Interactive Execution Handoff (Standalone Mode)
+
 After saving the plan, offer execution choice:
 
 **"Plan complete and saved to `docs/superpowers/plans/<filename>.md`. Two execution options:**

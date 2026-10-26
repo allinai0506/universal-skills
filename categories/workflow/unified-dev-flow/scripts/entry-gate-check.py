@@ -786,6 +786,51 @@ def bump_counter(path: str) -> int:
     return strikes
 
 
+def check_haflow_stage_task(project_dir: str) -> dict | None:
+    """Authoritative check against HAFlow state database for active stage task identity."""
+    try:
+        import sqlite3
+        real_dir = os.path.realpath(str(project_dir))
+        db_path = os.path.expanduser("~/.herdr-controller/state.db")
+        if not os.path.isfile(db_path):
+            return None
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT t.task_id, t.workflow_id, t.node, t.stage, t.status, t.payload_json, w.config_json
+            FROM tasks t
+            JOIN workflows w ON t.workflow_id = w.workflow_id
+            WHERE t.status IN ('working', 'dispatched', 'rework', 'agent_done')
+            """
+        )
+        rows = cursor.fetchall()
+        conn.close()
+        for task_id, wf_id, node, stage, status, payload_raw, config_raw in rows:
+            try:
+                payload = json.loads(payload_raw or "{}")
+            except Exception:
+                payload = {}
+            task_clone = os.path.realpath(str(payload.get("clone_path") or ""))
+            if task_clone and task_clone == real_dir:
+                try:
+                    config = json.loads(config_raw or "{}")
+                except Exception:
+                    config = {}
+                name = str(config.get("name") or "").strip()
+                if name.startswith("software-development-v1") or config.get("staged_dev_flow"):
+                    return {
+                        "task_id": task_id,
+                        "workflow_id": wf_id,
+                        "node": node or stage,
+                        "status": status,
+                        "config": config,
+                    }
+        return None
+    except Exception:
+        return None
+
+
 def cmd_check_review(ns: argparse.Namespace) -> None:
     """Stop-hook mode: any source edit owes S5/S6 declaration artifacts.
 
@@ -816,6 +861,24 @@ def cmd_check_review(ns: argparse.Namespace) -> None:
     if entry_gate_declares_patch(project_dir, session_id):
         reset_trail_counter(counter)
         sys.exit(0)
+
+    # Stage-level delegation in HAFlow workflows:
+    # Nuclear check: implementation (S4) owes planned code and self-test, but downstream
+    # S5 (test) and S6 (review) are handled by subsequent stations.
+    haflow_stage = check_haflow_stage_task(project_dir)
+    if haflow_stage:
+        stage_node = haflow_stage.get("node")
+        if stage_node == "implementation":
+            reset_trail_counter(counter)
+            sys.exit(0)
+        elif stage_node in ("requirements", "plan"):
+            reset_trail_counter(counter)
+            sys.exit(0)
+        elif stage_node == "test":
+            v_path = verify_artifact_path(project_dir, session_id)
+            if os.path.isfile(v_path) and validate_verify(open(v_path, encoding="utf-8").read()) is None:
+                reset_trail_counter(counter)
+                sys.exit(0)
     problems: list[tuple[str, str, str]] = []
     for path, validator, kind in (
             (verify_artifact_path(project_dir, session_id), validate_verify, "verify"),
