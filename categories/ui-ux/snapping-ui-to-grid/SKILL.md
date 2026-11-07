@@ -1,5 +1,7 @@
 ---
 name: snapping-ui-to-grid
+version: "2026.11.07-1"
+synced-at: "2026-11-07T09:29:19"
 description: Use when building, modifying, or reviewing any page-level UI layout — list pages, form pages, dashboards, drawers, or modal content. Triggers include new page scaffolds, UI/UX polish passes, review comments about misaligned edges, uneven toolbar control heights, ragged number columns, misplaced primary buttons, or arbitrary spacing values.
 ---
 
