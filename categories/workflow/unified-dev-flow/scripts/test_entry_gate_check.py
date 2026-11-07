@@ -10,6 +10,7 @@ TDD: this file was written BEFORE entry-gate-check.py existed.
 """
 from __future__ import annotations
 
+import datetime
 import hashlib
 import json
 import os
@@ -478,10 +479,11 @@ def phase3_logging() -> None:
     # 27. weekly report renders counts from a fixture log
     with tempfile.TemporaryDirectory() as proj:
         logf = os.path.join(proj, "blocks.jsonl")
+        today = datetime.date.today().isoformat()
         with open(logf, "w") as f:
-            f.write('{"ts": "2026-09-01T10:00:00", "kind": "missing", "session": "a", "project": "/p/x", "reason": "r1"}\n'
-                    '{"ts": "2026-09-02T10:00:00", "kind": "scope", "session": "b", "project": "/p/x", "reason": "r2"}\n'
-                    '{"ts": "2026-09-03T10:00:00", "kind": "missing", "session": "c", "project": "/p/y", "reason": "r3"}\n')
+            f.write(f'{{"ts": "{today}T10:00:00", "kind": "missing", "session": "a", "project": "/p/x", "reason": "r1"}}\n'
+                    f'{{"ts": "{today}T10:00:01", "kind": "scope", "session": "b", "project": "/p/x", "reason": "r2"}}\n'
+                    f'{{"ts": "{today}T10:00:02", "kind": "missing", "session": "c", "project": "/p/y", "reason": "r3"}}\n')
         report = os.path.join(os.path.dirname(os.path.abspath(__file__)), "entry-gate-report.py")
         check("report-exists", os.path.isfile(report), "entry-gate-report.py missing (RED?)")
         if os.path.isfile(report):
@@ -622,6 +624,64 @@ def phase4_review() -> None:
                 extra_env=env)
         check("review-missing-google-review-blocks", r.returncode == 2,
               f"exit={r.returncode}")
+        check("review-block-names-finish-order",
+              "先对本次改动执行 ai-slop-cleaner" in r.stderr
+              and "google-code-review" in r.stderr,
+              f"stderr={r.stderr[:300]}")
+
+        def grok_line(name: str, path: str) -> str:
+            return json.dumps({
+                "type": "assistant",
+                "tool_calls": [{
+                    "name": name,
+                    "arguments": json.dumps({"file_path": path}),
+                }],
+            }) + "\n"
+
+        # 34c. Grok search_replace on source blocks; .omc writes and system prompts do not.
+        grok_src = os.path.join(proj, "t-grok-src.jsonl")
+        with open(grok_src, "w", encoding="utf-8") as f:
+            f.write(json.dumps({
+                "type": "system",
+                "content": '{"name":"search_replace"} {"name":"write"}',
+            }) + "\n")
+            f.write(grok_line("search_replace", "src/real.py"))
+        r = run(["--check-review", "--project-dir", proj,
+                 "--session-id", "r-grok", "--transcript", grok_src],
+                extra_env=env)
+        check("review-grok-search-replace-blocks", r.returncode == 2,
+              f"exit={r.returncode} stderr={r.stderr[:200]}")
+
+        grok_omc = os.path.join(proj, "t-grok-omc.jsonl")
+        with open(grok_omc, "w", encoding="utf-8") as f:
+            f.write(grok_line("write", ".omc/entry-gate-r-grok-omc.md"))
+        r = run(["--check-review", "--project-dir", proj,
+                 "--session-id", "r-grok-omc", "--transcript", grok_omc],
+                extra_env=env)
+        check("review-grok-omc-write-passes", r.returncode == 0,
+              f"exit={r.returncode} stderr={r.stderr[:200]}")
+
+        grok_prompt = os.path.join(proj, "t-grok-prompt.jsonl")
+        with open(grok_prompt, "w", encoding="utf-8") as f:
+            f.write(json.dumps({
+                "type": "system",
+                "content": '"name": "search_replace" "name": "write"',
+            }) + "\n")
+        r = run(["--check-review", "--project-dir", proj,
+                 "--session-id", "r-grok-prompt", "--transcript", grok_prompt],
+                extra_env=env)
+        check("review-grok-system-prompt-passes", r.returncode == 0,
+              f"exit={r.returncode} stderr={r.stderr[:200]}")
+
+        shutdown = json.dumps({
+            "reason": "shutdown",
+            "cwd": proj,
+            "session_id": "r-shutdown",
+            "transcript_path": grok_src,
+        })
+        r = run(["--check-review"], stdin_text=shutdown, extra_env=env)
+        check("review-shutdown-does-not-block", r.returncode == 0,
+              f"exit={r.returncode} stderr={r.stderr[:200]}")
 
         # 35. patch-declared route passes without artifacts
         patch_gate = ("## 1. 理解和假设\n只看不改；delivery_target：patch。\n\n"
@@ -687,20 +747,20 @@ def phase4_review() -> None:
         check("guard-pr-needs-fixes-blocks", r.returncode == 1 and "NEEDS_FIXES" in r.stderr,
               f"exit={r.returncode} stderr={r.stderr[:200]}")
 
-        # 41. --guard-pr passes when review is valid with MERGE_READY
+        # 41. Legacy MERGE_READY prose without a bundle cannot authorize delivery
         mr_proj = tempfile.mkdtemp(prefix="gate-pr-mr-")
         write_review_files(mr_proj, "mr-session",
                            verify="## S5 验证证据\n- ai-slop-cleaner: deletion-first 完成\n- exit 0\n" + ("v" * 50),
                            review="## S6 评审结论\nverdict: MERGE_READY\nreviewer: claude\nround: 1\n"
                                   "xiyu-code-review 三透镜审查全绿通过。\n" + ("r" * 40))
         r = run(["--guard-pr", "--project-dir", mr_proj, "--branch", "agent/gemini/task3"])
-        check("guard-pr-merge-ready-passes", r.returncode == 0 and "门禁放行" in r.stdout,
+        check("guard-pr-legacy-declaration-blocked", r.returncode == 1,
               f"exit={r.returncode} stdout={r.stdout[:200]}")
 
-        # 42. --guard-pr bypass with escape hatch UNIFIED_DEV_FLOW_SKIP_REVIEW=1
+        # 42. Skip environment is rejected for delivery
         r = run(["--guard-pr", "--project-dir", empty_proj, "--branch", "agent/gemini/task4"],
                 extra_env={"UNIFIED_DEV_FLOW_SKIP_REVIEW": "1"})
-        check("guard-pr-escape-hatch-passes", r.returncode == 0 and "UNIFIED_DEV_FLOW_SKIP_REVIEW=1" in r.stderr,
+        check("guard-pr-skip-env-blocked", r.returncode == 1,
               f"exit={r.returncode}")
 
         # 43. --guard-push blocks for task branch without review
@@ -720,6 +780,80 @@ def phase4_review() -> None:
         r = run(["--guard-push", "--project-dir", empty_proj], stdin_text=main_input)
         check("guard-push-main-branch-passes", r.returncode == 0,
               f"exit={r.returncode}")
+
+        # 45b. 豁免只看本地分支名：任务分支改推 release/* 目标 ref 不被豁免（P1 修复回归）
+        rel_input = "refs/heads/agent/gemini/task1 aaaaa refs/heads/release/x bbbbb\n"
+        r = run(["--guard-push", "--project-dir", empty_proj], stdin_text=rel_input)
+        check("guard-push-task-to-release-target-blocks", r.returncode == 1,
+              f"exit={r.returncode}")
+
+        # 45c. 任务分支改推 *-init 目标 ref 同样不被豁免（锚定分支名不能当免审通道）
+        init_input = "refs/heads/agent/gemini/task1 aaaaa refs/heads/agent/gemini-init bbbbb\n"
+        r = run(["--guard-push", "--project-dir", empty_proj], stdin_text=init_input)
+        check("guard-push-task-to-init-target-blocks", r.returncode == 1,
+              f"exit={r.returncode}")
+
+        # 45d. 本地锚定分支（*-init）推送仍豁免
+        anchor_input = "refs/heads/agent/gemini-init 11111 refs/heads/agent/gemini-init 22222\n"
+        r = run(["--guard-push", "--project-dir", empty_proj], stdin_text=anchor_input)
+        check("guard-push-local-init-anchor-passes", r.returncode == 0,
+              f"exit={r.returncode}")
+
+        # 45e. 分支名含 "refs/heads/" 字面量时只剥一层前缀，不得误判为豁免（P1 回归）
+        nested_input = "refs/heads/refs/heads/main aaaaa refs/heads/feat/unreviewed bbbbb\n"
+        r = run(["--guard-push", "--project-dir", empty_proj], stdin_text=nested_input)
+        check("guard-push-nested-heads-name-blocks", r.returncode == 1,
+              f"exit={r.returncode}")
+
+        # 45f. 非分支引用（refs/tags/*）不豁免，一律受审
+        tag_input = "refs/tags/task-init aaaaa refs/tags/task-init bbbbb\n"
+        r = run(["--guard-push", "--project-dir", empty_proj], stdin_text=tag_input)
+        check("guard-push-tag-ref-blocks", r.returncode == 1,
+              f"exit={r.returncode}")
+
+        # 47. HAFlow 阶段任务匹配不得凭空 clone_path 归属当前项目（R4 P2 回归）
+        import importlib.util
+        import sqlite3
+        with tempfile.TemporaryDirectory() as haflow_home:
+            spec = importlib.util.spec_from_file_location("gate_mod", SCRIPT)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            db_dir = os.path.join(haflow_home, ".herdr-controller")
+            os.makedirs(db_dir)
+            conn = sqlite3.connect(os.path.join(db_dir, "state.db"))
+            conn.execute("CREATE TABLE workflows (workflow_id TEXT PRIMARY KEY, config_json TEXT)")
+            conn.execute("CREATE TABLE tasks (task_id TEXT PRIMARY KEY, workflow_id TEXT, "
+                         "node TEXT, stage TEXT, status TEXT, payload_json TEXT)")
+            cfg = json.dumps({"name": "software-development-v1/demo"})
+            conn.execute("INSERT INTO workflows VALUES ('wf1', ?)", (cfg,))
+            conn.execute("INSERT INTO tasks VALUES ('t1', 'wf1', 'impl', 'implementation', 'working', '{}')")
+            conn.commit()
+            conn.close()
+            haflow_proj = tempfile.mkdtemp(prefix="haflow-proj-")
+            old_home = os.environ.get("HOME")
+            old_cwd = os.getcwd()
+            os.environ["HOME"] = haflow_home
+            # 攻击面成立条件是进程 cwd 等于被检项目：chdir 进项目，
+            # 让 realpath("") == real_dir，回归对旧实现必失败。
+            os.chdir(haflow_proj)
+            try:
+                # clone_path 缺失：realpath("") 不得把任务归属到 cwd 所在项目
+                check("haflow-cloneless-task-does-not-match-cwd",
+                      mod.check_haflow_stage_task(haflow_proj) is None)
+                # 正例：clone_path 精确指向本项目才归属
+                conn = sqlite3.connect(os.path.join(db_dir, "state.db"))
+                conn.execute("UPDATE tasks SET payload_json=? WHERE task_id='t1'",
+                             (json.dumps({"clone_path": haflow_proj}),))
+                conn.commit()
+                conn.close()
+                match = mod.check_haflow_stage_task(haflow_proj)
+                check("haflow-clone-path-matches-project",
+                      bool(match) and match.get("task_id") == "t1",
+                      f"match={match}")
+            finally:
+                os.chdir(old_cwd)
+                if old_home is not None:
+                    os.environ["HOME"] = old_home
 
         # ── New: Self-attestation / review-write denial tests ──────────────────
 
@@ -766,15 +900,15 @@ def phase4_review() -> None:
             check("record-review-self-reviewer-blocks", r.returncode == 1 and "self" in r.stderr.lower(),
                   f"exit={r.returncode} stderr={r.stderr[:200]}")
 
-        # 51. --record-review: valid external reviewer succeeds and stamps diff_hash
+        # 51. An external-looking name alone cannot issue review evidence
         with tempfile.TemporaryDirectory() as rr2_proj:
             subprocess.run(["git", "init", rr2_proj], capture_output=True)
             r = run(["--record-review", "--project-dir", rr2_proj, "--session-id", "rr-s2",
                      "--reviewer", "gemini-pro-subagent", "--verdict", "MERGE_READY",
                      "--notes", "三透镜审查通过：行为正确/结构健康/交付就绪"])
             review_file = os.path.join(rr2_proj, ".omc", "review-rr-s2.md")
-            check("record-review-valid-passes",
-                  r.returncode == 0 and os.path.isfile(review_file) and "diff_hash" in open(review_file).read(),
+            check("record-review-free-name-without-evidence-blocked",
+                  r.returncode == 1 and not os.path.isfile(review_file),
                   f"exit={r.returncode} stdout={r.stdout[:200]}")
 
         # 52. diff_hash provenance: guard-pr blocks when diff changed after review
@@ -907,13 +1041,13 @@ def phase5_guard_push_provenance() -> None:
               r.returncode == 1 and "diff_hash" in r.stderr,
               f"exit={r.returncode} stderr={r.stderr[:300]}")
 
-        # 55. pushing reviewed feat-a while feat-b is checked out must PASS
+        # 55. Correct pushed-ref hash still cannot replace mandatory evidence
         # (defect showed a false block: gate validated feat-b's hash from cwd)
         _git("checkout", "-q", "feat-b")
         r = run(["--guard-push", "--project-dir", bp_proj],
                 stdin_text=f"refs/heads/feat-a {sha_a} refs/heads/feat-a {zero}\n")
-        check("guard-push-provenance-hashes-pushed-ref-passes",
-              r.returncode == 0 and "门禁放行" in r.stdout,
+        check("guard-push-hash-alone-without-bundle-blocked",
+              r.returncode == 1,
               f"exit={r.returncode} stdout={r.stdout[:200]} stderr={r.stderr[:300]}")
 
 

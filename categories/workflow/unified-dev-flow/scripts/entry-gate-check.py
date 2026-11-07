@@ -50,21 +50,31 @@ DEFAULT_BLOCKLOG = os.path.join(os.path.expanduser("~"), ".claude",
 _block_log_override = ""  # set by --block-log; never via os.environ mutation
 
 # tool_input keys that may carry the write target, across tools
-# (Claude/Trae: file_path; OpenCode: filePath; Antigravity: TargetFile; ...)
+# (Claude/Trae: file_path; OpenCode: filePath; Antigravity: TargetFile / Path; ...)
 TARGET_KEYS = ("file_path", "filePath", "path", "file", "filename",
-               "target_file", "TargetFile")
+               "target_file", "TargetFile", "Path")
 
 # Write-tool names across harnesses, for transcript edit counting.
-# Claude/Codex/Cursor/Trae/Qoder/Kimi: Edit|Write; Gemini: write_file|replace;
-# Antigravity: write_to_file|replace_file_content|multi_replace_file_content.
-# Shape matched is always JSON ("name":"<tool>"), never prose.
-EDIT_TOOL_PATTERN = (r'"name":\s*"(?:Edit|Write|write_file|replace|'
+# Claude/Codex/Cursor/Trae/Qoder/Kimi: Edit|Write|apply_patch;
+# Gemini: write_file|replace;
+# Antigravity: edit_file|write_file|write_to_file|replace_file_content|multi_replace_file_content;
+# Grok: search_replace|write (counted from assistant tool_calls, not the regex).
+# Bare "write" stays out of the regex: it is a prefix of write_file and also
+# appears inside system prompts. Shape matched is JSON ("name":"<tool>").
+EDIT_TOOL_PATTERN = (r'"name":\s*"(?:Edit|Write|apply_patch|search_replace|hashline_edit|'
+                     r'write_file|edit_file|replace|'
                      r'write_to_file|replace_file_content|'
                      r'multi_replace_file_content)"')
 
 PATH_EXTS = (".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs", ".java",
              ".md", ".json", ".yaml", ".yml", ".toml", ".sh", ".sql",
              ".vue", ".css", ".html", ".c", ".h", ".cpp")
+
+# Extensions that qualify as real source code (aligned with dev-task-finish-gate.sh SOURCE_RE).
+# Documentation (.md, .txt), static assets, and pure data are exempt from S5/S6 review requirements.
+SOURCE_EXTS = (".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".java",
+               ".go", ".rs", ".vue", ".css", ".scss", ".sql", ".sh",
+               ".c", ".h", ".cpp", ".kt", ".kts", ".html")
 
 
 def blocklog_path() -> str:
@@ -368,19 +378,129 @@ def validate(content: str) -> str | None:
     return None
 
 
-EDIT_TOOL_NAMES = {"Edit", "Write", "write_file", "replace",
+EDIT_TOOL_NAMES = {"Edit", "Write", "write", "apply_patch", "search_replace",
+                   "hashline_edit", "write_file", "edit_file", "replace",
                    "write_to_file", "replace_file_content",
                    "multi_replace_file_content"}
 
+FINISH_ORDER_HINT = (
+    "开发任务收尾顺序（缺一不可）：\n"
+    "  1. 先对本次改动执行 ai-slop-cleaner Mode B（deletion-first，不改行为）。"
+    "技能：~/universal-skills/categories/refactoring/ai-slop-cleaner/SKILL.md\n"
+    "  2. 清理若改了代码，重跑受影响测试，把命令和 exit code 写入验证工件。\n"
+    "  3. 再由独立审查者执行 google-code-review（只读）。"
+    "技能：~/universal-skills/categories/workflow/google-code-review/SKILL.md。"
+    "主 Agent 不要手写审查工件，用 entry-gate-check.py --record-review 落盘。\n"
+)
+
+NEXUSARCHIVE_FINISH_HINT = (
+    "数凭项目开发任务收尾顺序（缺一不可）：\n"
+    "  1. 先对本次改动执行 ai-slop-cleaner Mode B（deletion-first，不改行为）。"
+    "技能：~/universal-skills/categories/refactoring/ai-slop-cleaner/SKILL.md\n"
+    "  2. 清理若改了代码，重跑受影响测试，把命令和 exit code 写入验证工件（.omc/verify-*.md）。\n"
+    "  3. 由独立审查者执行 google-code-review（只读），达成 MERGE_READY。"
+    "技能：~/universal-skills/categories/workflow/google-code-review/SKILL.md。\n"
+    "  4. 执行 production-risk-review（针对已上线数凭系统的生产风险审计，九阶段反向推演，达成 PASS）。"
+    "技能：~/.gemini/config/skills/production-risk-review/SKILL.md。\n"
+    "     主 Agent 不要手写审查工件，用 entry-gate-check.py --record-review 记录落盘。\n"
+)
+
+
+def is_nexusarchive_project(project_dir: str = "") -> bool:
+    if not project_dir:
+        return False
+    if os.path.isdir(os.path.join(project_dir, "nexusarchive-java")):
+        return True
+    pkg = os.path.join(project_dir, "package.json")
+    if os.path.isfile(pkg):
+        try:
+            with open(pkg, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if data.get("name") in ("nexusarchive", "nexusarchive-website"):
+                    return True
+        except Exception:
+            pass
+    agents_md = os.path.join(project_dir, "AGENTS.md")
+    if os.path.isfile(agents_md):
+        try:
+            with open(agents_md, "r", encoding="utf-8") as f:
+                head = f.read(500)
+                if "NexusArchive" in head:
+                    return True
+        except Exception:
+            pass
+    return False
+
+
+def is_nexusarchive_commit(project_dir: str, head_ref: str = "HEAD") -> bool:
+    """Classify the delivered object's tree, not the current checkout.
+
+    cmd_guard_push may validate a ref that is not checked out; classifying by
+    the working tree would silently waive the mandatory production-risk review
+    for NexusArchive commits pushed from a different checkout.
+    """
+    if not project_dir:
+        return False
+    res = subprocess.run(["git", "ls-tree", "--name-only", head_ref],
+                         cwd=project_dir, capture_output=True, text=True, timeout=10)
+    git_ok = res.returncode == 0
+    if git_ok and "nexusarchive-java" in res.stdout.split():
+        return True
+    pkg = subprocess.run(["git", "show", f"{head_ref}:package.json"],
+                         cwd=project_dir, capture_output=True, text=True, timeout=10)
+    if pkg.returncode == 0:
+        try:
+            if json.loads(pkg.stdout).get("name") in ("nexusarchive", "nexusarchive-website"):
+                return True
+        except Exception:
+            pass
+    agents = subprocess.run(["git", "show", f"{head_ref}:AGENTS.md"],
+                            cwd=project_dir, capture_output=True, text=True, timeout=10)
+    if agents.returncode == 0 and "NexusArchive" in agents.stdout[:500]:
+        return True
+    if not git_ok:
+        # git unavailable / invalid ref: fall back to working-tree classification
+        return is_nexusarchive_project(project_dir)
+    return False
+
+
+def get_finish_order_hint(project_dir: str = "") -> str:
+    return NEXUSARCHIVE_FINISH_HINT if is_nexusarchive_project(project_dir) else FINISH_ORDER_HINT
+
+
+def _parse_tool_args(raw: object) -> dict:
+    if isinstance(raw, dict):
+        return raw
+    if not isinstance(raw, str) or not raw.strip():
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
 
 def _tool_use_blocks(obj: object):
-    """Yield (name, input_dict) for every toolUse/tool_use block in obj."""
+    """Yield (name, input_dict) for every tool call in obj.
+
+    Claude-style blocks use type toolUse/tool_use/function_call.
+    Grok assistant turns store calls in tool_calls[].arguments (a JSON string).
+    """
     if isinstance(obj, dict):
         t = obj.get("type") or obj.get("kind")
         if t in ("toolUse", "tool_use", "function_call"):
             name = obj.get("name") or ""
-            inp = obj.get("input") or obj.get("arguments") or {}
-            yield name, inp if isinstance(inp, dict) else {}
+            inp = _parse_tool_args(obj.get("input") or obj.get("arguments") or {})
+            yield name, inp
+        if (t in ("assistant", "PLANNER_RESPONSE") or "tool_calls" in obj) and isinstance(obj.get("tool_calls"), list):
+            for call in obj["tool_calls"]:
+                if not isinstance(call, dict):
+                    continue
+                name = call.get("name") or ""
+                raw_args = call.get("args") if call.get("args") is not None else call.get("arguments")
+                if raw_args is None:
+                    raw_args = call.get("input") or {}
+                yield name, _parse_tool_args(raw_args)
         for value in obj.values():
             yield from _tool_use_blocks(value)
     elif isinstance(obj, list):
@@ -399,41 +519,71 @@ def _is_omc_write(name: str, inp: dict) -> bool:
         return False
     for key in TARGET_KEYS:
         val = inp.get(key)
-        if isinstance(val, str) and ".omc" in val.replace("\\", "/").split("/"):
-            return True
+        if isinstance(val, str):
+            clean_val = val.strip().strip("\"'")
+            if ".omc" in clean_val.replace("\\", "/").split("/"):
+                return True
     cmd = inp.get("command")
     if isinstance(cmd, str) and ".omc/" in cmd:
         return True
     return False
 
 
-def count_source_edits(transcript: str) -> int:
+def count_source_edits(transcript: str, project_dir: str = "") -> int:
     """Edits to real source, excluding .omc/ artifact writes.
 
-    Parses transcript JSONL for toolUse blocks; falls back to the raw
-    regex count when no parseable tool call is found (conservative:
-    an unreadable transcript must not silently waive the gate).
+    Parses transcript JSONL for toolUse blocks and Grok assistant tool_calls.
+    System lines are ignored so a prompt that mentions tool names is not an
+    edit. Falls back to the raw regex count when no parseable tool call is
+    found (an unreadable transcript must not silently waive the gate).
+    When project_dir is provided, only edits targeting files inside project_dir
+    are counted.
     """
     parsed_any = False
     source = 0
+    fallback_lines: list[str] = []
+    project_abs = os.path.abspath(os.path.expanduser(project_dir)) if project_dir else ""
     for line in transcript.splitlines():
-        line = line.strip()
-        if not line.startswith("{"):
+        stripped = line.strip()
+        if not stripped.startswith("{"):
+            fallback_lines.append(line)
             continue
         try:
-            obj = json.loads(line)
+            obj = json.loads(stripped)
         except (json.JSONDecodeError, TypeError):
+            fallback_lines.append(line)
+            continue
+        if isinstance(obj, dict) and obj.get("type") in ("system", "session"):
             continue
         blocks = list(_tool_use_blocks(obj))
         if not blocks:
+            fallback_lines.append(line)
             continue
         parsed_any = True
         for name, inp in blocks:
             if name in EDIT_TOOL_NAMES and not _is_omc_write(name, inp):
-                source += 1
+                target = ""
+                for k in TARGET_KEYS:
+                    val = inp.get(k)
+                    if isinstance(val, str) and val.strip():
+                        target = val.strip().strip("\"'")
+                        break
+                if target:
+                    _, ext = os.path.splitext(target.lower())
+                    if ext not in SOURCE_EXTS:
+                        continue
+                if target and project_abs:
+                    target_abs = os.path.abspath(os.path.join(project_abs, os.path.expanduser(target)))
+                    try:
+                        if os.path.commonpath([target_abs, project_abs]) == project_abs:
+                            source += 1
+                    except ValueError:
+                        pass
+                elif not target:
+                    source += 1
     if parsed_any:
         return source
-    return len(re.findall(EDIT_TOOL_PATTERN, transcript))
+    return len(re.findall(EDIT_TOOL_PATTERN, "\n".join(fallback_lines)))
 
 
 def entry_gate_declares_patch(project_dir: str, session_id: str) -> bool:
@@ -468,8 +618,9 @@ def validate_verify(content: str) -> str | None:
     return None
 
 
-def validate_review(content: str) -> str | None:
-    """S6 arrival declaration: heading + verdict + reviewer + round + review framework."""
+def validate_review(content: str, project_dir: str = "", head_ref: str = "HEAD") -> str | None:
+    """S6 arrival declaration: heading + verdict + reviewer + round + review framework.
+    For NexusArchive project, additionally enforces production-risk-review PASS."""
     if not re.search(r"^##\s*.*评审结论", content, re.MULTILINE):
         return "缺少章节：评审结论（## 评审结论）。"
     if not re.search(r"\b(MERGE_READY|NEEDS_FIXES|ESCALATE)\b", content):
@@ -487,13 +638,30 @@ def validate_review(content: str) -> str | None:
         return "缺少审查记录：S6 评审必须包含 google-code-review、xiyu-code-review、code-review 或 flow:review 审查结论。"
     if len(content) < REVIEW_MIN_CHARS:
         return f"评审结论过短（{len(content)} < {REVIEW_MIN_CHARS} 字）。"
+
+    # NexusArchive 数凭项目专属：必须包含 production-risk-review 审计且裁决为 PASS
+    if is_nexusarchive_commit(project_dir, head_ref) and re.search(r"^verdict:\s*MERGE_READY\s*$", content, re.MULTILINE):
+        pattern_topic = r"(?:production[-_ ]risk[-_ ]review|生产风险(?:审计|评审))"
+        if not re.search(pattern_topic, content, re.IGNORECASE):
+            return "数凭项目收尾铁律：缺少 production-risk-review（生产风险审计）！已上线系统必须证明不存在导致线上回归的风险。"
+        pattern_pass = r"(?:production[-_ ]risk[-_ ]review|生产风险(?:审计|评审))\s*[：:]\s*(?:✅\s*)?PASS\b|###\s*最终裁决[^\n]*\n+.*?(?:✅\s*)?PASS\b|\bPASS\s*-\s*可以上线\b"
+        pattern_fail = r"(?:production[-_ ]risk[-_ ]review|生产风险(?:审计|评审))\s*[：:]\s*(?:❌\s*)?FAIL\b|###\s*最终裁决[^\n]*\n+.*?(?:❌\s*)?FAIL\b|\bFAIL\s*-\s*禁止上线\b"
+        has_pass = bool(re.search(pattern_pass, content, re.IGNORECASE))
+        has_fail = bool(re.search(pattern_fail, content, re.IGNORECASE))
+        if has_fail:
+            return "数凭生产风险审计未通过：当前 production-risk-review 结论为 FAIL（存在禁止上线的风险，禁止创建 PR / 推送）！"
+        if not has_pass:
+            return "数凭生产风险审计未出具明确 PASS 裁决：production-risk-review 必须给出 PASS（无阻断性 P0/P1）方可交付！"
+
     return None
 
 
 def compute_diff_hash(project_dir: str, head_ref: str = "HEAD") -> str | None:
     """Compute sha256 hash of git diff from origin/main (or fallback base / <head_ref>~1 if not found)."""
     try:
-        candidates = ("origin/main", "gitee/main", "main", "origin/master", "gitee/master", "master")
+        candidates = ("origin/dev", "gitee/dev", "dev",
+                      "origin/main", "gitee/main", "main",
+                      "origin/master", "gitee/master", "master")
         base = None
         for candidate in candidates:
             res_base = subprocess.run(["git", "merge-base", candidate, head_ref],
@@ -522,40 +690,269 @@ def compute_diff_hash(project_dir: str, head_ref: str = "HEAD") -> str | None:
 def validate_review_provenance(project_dir: str, review_content: str,
                                head_ref: str = "HEAD") -> str | None:
     """Validate that review provenance matches the git state of head_ref.
-    If diff_hash is present in the review, it must match the diff of head_ref.
+    The mandatory diff_hash must match the diff of head_ref.
     """
     m_diff = re.search(r"diff_hash\s*[：:]\s*([a-f0-9]{64})", review_content, re.IGNORECASE)
-    if m_diff:
-        expected_diff_hash = m_diff.group(1).strip()
-        current_diff_hash = compute_diff_hash(project_dir, head_ref)
-        if current_diff_hash and current_diff_hash != expected_diff_hash:
-            return (f"S6 评审凭证已失效：检测到代码在审查后发生变更（diff_hash 不匹配）！\n"
-                    f"  凭据中的 hash: {expected_diff_hash[:12]}...\n"
-                    f"  当前的 diff hash: {current_diff_hash[:12]}...\n"
-                    "  【铁律】任何源码修改都会导致先前的审查证据失效。必须重新执行 S6 Code Review！")
+    if not m_diff:
+        return "S6 评审缺少必需 diff_hash，不能使用无指纹历史工件。"
+    expected_diff_hash = m_diff.group(1).strip()
+    current_diff_hash = compute_diff_hash(project_dir, head_ref)
+    if not current_diff_hash:
+        return "S6 无法计算被交付提交的 diff_hash，拒绝交付。"
+    if current_diff_hash != expected_diff_hash:
+        return (f"S6 评审凭证已失效：diff_hash 不匹配，必须重新审查。\n"
+                f"  凭据: {expected_diff_hash[:12]}... 当前: {current_diff_hash[:12]}...")
     return None
 
 
-def verify_transcript_reviewer(transcript_text: str) -> tuple[bool, str]:
-    """Scan transcript for independent reviewer execution:
-    1. invoke_subagent with role matching Reviewer / code-review; or
-    2. execution of flow:review / xiyu-code-review / google-code-review.
+# Reports are evidence records, not a semantic correctness oracle. A native
+# independent reviewer must explicitly attest the exact reports and test logs.
+EVIDENCE_CHECKS = {
+    'ai-slop-cleaner': ('duplication', 'dead_code', 'abstraction', 'boundaries', 'tests'),
+    'google-code-review': ('design', 'functionality', 'complexity', 'tests', 'naming',
+                           'comments', 'style', 'documentation', 'description'),
+    'production-risk-review': ('null', 'collections', 'concurrency', 'database',
+                              'redis', 'mq', 'api', 'json', 'time', 'io', 'frontend',
+                              'legacy_data', 'tests'),
+}
+RISK_SECTIONS = ('understanding', 'dependencies', 'fault_analysis', 'classification',
+                 'business_regression', 'extremes', 'hidden_bugs', 'evidence',
+                 'verdict', 'deployment_rollback')
+
+
+def evidence_hash(path):
+    import hashlib
+    with open(path, 'rb') as stream:
+        return hashlib.sha256(stream.read()).hexdigest()
+
+
+def evidence_path(project_dir, path):
+    from pathlib import Path
+    root = Path(project_dir).resolve()
+    target = (root / path).resolve()
+    if not target.is_relative_to(root) or not target.is_file():
+        raise ValueError(f'证据文件不在项目内或缺失: {path}')
+    return str(target)
+
+
+def evidence_blob(project_dir, reference):
+    if not isinstance(reference, dict):
+        raise ValueError('证据引用必须包含 path 和 sha256')
+    path = evidence_path(project_dir, reference.get('path', ''))
+    if reference.get('sha256') != evidence_hash(path):
+        raise ValueError(f'证据摘要不匹配: {reference.get("path")}')
+    return path
+
+
+def evidence_cell(project_dir, cell):
+    if not isinstance(cell, dict) or cell.get('status') not in ('PASS', 'NA'):
+        raise ValueError('审查项必须为 PASS 或 NA；FAIL/缺项不能放行')
+    if not isinstance(cell.get('reason'), str) or not cell['reason'].strip():
+        raise ValueError('审查项缺少原因（NA 也须说明不适用依据）')
+    references = cell.get('evidence')
+    if not isinstance(references, list) or not references:
+        raise ValueError('审查项缺少源文件/日志证据引用')
+    for ref in references:
+        path = evidence_blob(project_dir, ref)
+        line = ref.get('line')
+        if isinstance(line, bool) or not isinstance(line, int) or line < 1:
+            raise ValueError('证据缺少有效行号')
+        with open(path, encoding='utf-8') as stream:
+            if line > sum(1 for _ in stream):
+                raise ValueError('证据行号超出文件范围')
+
+
+def native_review_root():
+    import pwd
+    from pathlib import Path
+    return (Path(pwd.getpwuid(os.getuid()).pw_dir) / '.codex/sessions').resolve()
+
+
+def runtime_review_receipt(attestation, expected):
+    """Read a Codex collaboration result, never prose/commands mentioning a skill.
+
+    Native session files are the local runner trust boundary. This is not a
+    defence against an OS user who can rewrite the runner or its session store.
+    Unsupported/encrypted-only runtime output fails closed, not keyword fallback.
     """
-    if not transcript_text:
-        return True, ""
+    from pathlib import Path
+    path = Path(attestation['transcript_path']).expanduser().resolve()
+    trusted = native_review_root()
+    if not path.is_relative_to(trusted) or not path.is_file():
+        raise ValueError('审查来源必须是运行器 ~/.codex/sessions 中的真实会话记录')
+    reviewer = attestation['reviewer']
+    if not isinstance(reviewer, str) or reviewer in ('/root', 'self') or not reviewer.startswith('/root/'):
+        raise ValueError('需要独立子代理的运行器身份，不能填写主代理或自由名称')
+    calls = set()
+    agents = set()
+    with path.open(encoding='utf-8') as stream:
+        for index, line in enumerate(stream):
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue  # a concurrently appended final line can be incomplete
+            if row.get('type') != 'response_item':
+                continue
+            item = row.get('payload', {})
+            if item.get('type') == 'function_call' and item.get('namespace') == 'collaboration' and item.get('name') == 'spawn_agent':
+                calls.add(item.get('call_id'))
+            if item.get('type') == 'function_call_output' and item.get('call_id') in calls:
+                try:
+                    agents.add(json.loads(item['output'])['task_name'])
+                except (KeyError, TypeError, json.JSONDecodeError):
+                    pass
+            if item.get('id') != attestation['event_id']:
+                continue
+            provenance = item.get('internal_chat_message_metadata_passthrough', {})
+            records = provenance.get('content_item_metadata', [])
+            native = any(r.get('provenance', {}).get('type') == 'tool' and
+                         r.get('provenance', {}).get('namespace') == 'collaboration' for r in records)
+            if item.get('type') != 'agent_message' or item.get('author') != reviewer or reviewer not in agents or not native:
+                raise ValueError('回执不是已登记独立子代理的原生结果事件')
+            texts = [b.get('text', '') for b in item.get('content', []) if b.get('type') in ('input_text', 'text')]
+            receipts = []
+            for text in texts:
+                for payload in text.splitlines():
+                    if payload.startswith('REVIEW_RECEIPT '):
+                        receipts.append(json.loads(payload[len('REVIEW_RECEIPT '):]))
+            if len(receipts) != 1 or receipts[0] != expected:
+                raise ValueError('独立审查回执未确认当前 HEAD、diff 和全部证据摘要')
+            stamp = provenance.get('create_time')
+            if isinstance(stamp, bool) or not isinstance(stamp, (int, float)) or not 0 < stamp <= time.time() + 60:
+                raise ValueError('审查回执缺少有效运行器时间')
+            return str(path), index, stamp
+    raise ValueError('找不到原生审查结果事件；缺失/仅加密来源不能降级为 PASS')
 
-    if re.search(r'"invoke_subagent"', transcript_text) or re.search(r'"name":\s*"invoke_subagent"', transcript_text):
-        if re.search(r'"[Rr]ole":\s*"[^"]*(?:[Rr]eview|审|audit)[^"]*"', transcript_text):
-            return True, ""
-        if re.search(r'"TypeName":\s*"[^"]*(?:[Rr]eview|code-review)[^"]*"', transcript_text):
-            return True, ""
 
-    if re.search(r'flow(?::|\s+)review|xiyu-code-review|google-code-review', transcript_text):
-        return True, ""
+def validate_delivery_evidence(project_dir, reference, expected_reviewer='', head_ref='HEAD'):
+    """Validate stage completeness, immutable references, native result and order."""
+    try:
+        path = evidence_blob(project_dir, reference)
+        with open(path, encoding='utf-8') as stream:
+            bundle = json.load(stream)
+        head = subprocess.run(['git', 'rev-parse', '--verify', f'{head_ref}^{{commit}}'],
+                              cwd=project_dir, text=True, capture_output=True, timeout=5)
+        diff = compute_diff_hash(project_dir, head_ref)
+        if head.returncode or not diff or bundle.get('version') != 1 or bundle.get('head') != head.stdout.strip() or bundle.get('diff_hash') != diff:
+            raise ValueError('证据包必须绑定当前被交付提交及完整 diff 指纹')
+        reports = {}
+        skills = ['ai-slop-cleaner', 'verification', 'google-code-review']
+        if is_nexusarchive_commit(project_dir, head_ref):
+            skills.append('production-risk-review')
+        for skill in skills:
+            ref = bundle['reports'][skill]
+            report_path = evidence_blob(project_dir, ref)
+            with open(report_path, encoding='utf-8') as stream:
+                report = json.load(stream)
+            if report.get('skill') != skill or report.get('head') != bundle['head'] or report.get('diff_hash') != diff:
+                raise ValueError(f'{skill}: 报告身份或提交指纹错误')
+            verdict = 'MERGE_READY' if skill == 'google-code-review' else 'PASS'
+            if report.get('verdict') != verdict:
+                raise ValueError(f'{skill}: 报告未通过，不能用自由 PASS 覆盖')
+            for finding in report.get('findings', []):
+                if str(finding.get('severity', '')).upper() in ('P0', 'P1', 'CRITICAL', 'HIGH') and finding.get('status') != 'resolved':
+                    raise ValueError(f'{skill}: 存在未解决阻断问题')
+            if skill in EVIDENCE_CHECKS:
+                for check in EVIDENCE_CHECKS[skill]:
+                    evidence_cell(project_dir, report['checks'][check])
+            reports[skill] = report
+        cleanup, verification = reports['ai-slop-cleaner'], reports['verification']
+        if cleanup.get('mode') != 'B':
+            raise ValueError('ai-slop-cleaner 必须为 Mode B')
+        checks = verification['checks']
+        if not isinstance(checks, list) or not checks:
+            raise ValueError('缺少验证命令及日志')
+        for check in checks:
+            argv = check.get('argv')
+            if (not isinstance(argv, list) or not argv or not all(isinstance(a, str) and a for a in argv)
+                    or os.path.basename(argv[0]) in ('echo', 'true', 'false', 'printf', ':')
+                    or type(check.get('exit_code')) is not int or check['exit_code'] != 0):
+                raise ValueError('验证命令无效、占位命令或退出码非零')
+            log = evidence_blob(project_dir, check['log'])
+            if not os.path.getsize(log):
+                raise ValueError('验证日志为空')
+        times = (cleanup['finished_at'], verification['started_at'], verification['finished_at'])
+        if any(type(t) not in (int, float) or not 0 < t <= time.time() + 60 for t in times) or not times[0] <= times[1] <= times[2]:
+            raise ValueError('清理必须先于验证，完成时间不能缺失或倒置')
+        if 'production-risk-review' in reports:
+            risk = reports['production-risk-review']
+            for section in RISK_SECTIONS:
+                evidence_cell(project_dir, risk['sections'][section])
+            chains = risk['fault_chains']
+            if len(chains) < 3 or len({c['trigger'] for c in chains}) < 3:
+                raise ValueError('生产风险审计缺少三条独立故障推演')
+            for chain in chains:
+                if not isinstance(chain['chain'], list) or len(chain['chain']) < 2:
+                    raise ValueError('故障推演未追到根因')
+                evidence_cell(project_dir, chain)
+        previous = None
+        for skill in ('google-code-review', 'production-risk-review'):
+            if skill not in reports:
+                continue
+            attestation = bundle['attestations'][skill]
+            if skill == 'google-code-review' and expected_reviewer and attestation['reviewer'] != expected_reviewer:
+                raise ValueError('声明 reviewer 与运行器回执作者不一致')
+            expected = {'skill': skill, 'head': bundle['head'], 'diff_hash': diff,
+                        'report_sha256': bundle['reports'][skill]['sha256'],
+                        'cleanup_sha256': bundle['reports']['ai-slop-cleaner']['sha256'],
+                        'verification_sha256': bundle['reports']['verification']['sha256'],
+                        'verdict': reports[skill]['verdict']}
+            if skill == 'production-risk-review':
+                expected['code_review_sha256'] = bundle['reports']['google-code-review']['sha256']
+            current = runtime_review_receipt(attestation, expected)
+            if current[2] < times[2] or (previous and (current[0] != previous[0] or current[1] <= previous[1] or current[2] < previous[2])):
+                raise ValueError('顺序必须是清理→验证→独立代码审查→生产风险审计')
+            previous = current
+        return None
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, subprocess.SubprocessError) as exc:
+        return f'交付证据不合格: {exc}'
 
-    return False, ("Transcript 审计发现：本次会话中未检测到独立 Reviewer 子代理（invoke_subagent）调用，"
-                  "亦未检测到 flow:review / xiyu-code-review 审查命令执行记录！"
-                  "严禁主 Agent 自行撰写审查结论，必须派遣独立审查者。")
+
+def validate_negative_review(project_dir, reference, reviewer, verdict):
+    """Preserve genuine NEEDS_FIXES/ESCALATE without requiring later PASS stages.
+
+    Recording a failure is not permission to deliver. The PR/push validator still
+    requires the full positive bundle, so this path cannot sign a successful gate.
+    """
+    try:
+        path = evidence_blob(project_dir, reference)
+        with open(path, encoding='utf-8') as stream:
+            bundle = json.load(stream)
+        head = subprocess.run(['git', 'rev-parse', '--verify', 'HEAD^{commit}'],
+                              cwd=project_dir, text=True, capture_output=True, timeout=5)
+        diff = compute_diff_hash(project_dir)
+        if (head.returncode or not diff or bundle.get('version') != 1
+                or bundle.get('head') != head.stdout.strip() or bundle.get('diff_hash') != diff):
+            raise ValueError('失败审查也必须绑定当前提交和 diff')
+        ref = bundle['reports']['google-code-review']
+        with open(evidence_blob(project_dir, ref), encoding='utf-8') as stream:
+            report = json.load(stream)
+        if (report.get('skill') != 'google-code-review' or report.get('head') != bundle['head']
+                or report.get('diff_hash') != diff or report.get('verdict') != verdict):
+            raise ValueError('声明的负结论必须来自相同 scope 的真实审查报告')
+        attestation = bundle['attestations']['google-code-review']
+        if attestation['reviewer'] != reviewer:
+            raise ValueError('失败审查作者不匹配')
+        # Bind the same inputs seen by that reviewer, but do not require their
+        # PASS status, nor a production audit that has not happened yet.
+        for stage in ('ai-slop-cleaner', 'verification'):
+            evidence_blob(project_dir, bundle['reports'][stage])
+        expected = {'skill':'google-code-review', 'head':bundle['head'], 'diff_hash':diff,
+                    'report_sha256':ref['sha256'], 'verdict':verdict,
+                    'cleanup_sha256':bundle['reports']['ai-slop-cleaner']['sha256'],
+                    'verification_sha256':bundle['reports']['verification']['sha256']}
+        runtime_review_receipt(attestation, expected)
+        return None
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, subprocess.SubprocessError) as exc:
+        return f'失败审查来源不合格: {exc}'
+
+
+def evidence_reference_from_review(content):
+    path = re.search(r'^evidence_bundle:\s*(.+)$', content, re.MULTILINE)
+    digest = re.search(r'^evidence_bundle_sha256:\s*([a-f0-9]{64})$', content, re.MULTILINE)
+    if not path or not digest:
+        return {}
+    return {'path': path.group(1).strip(), 'sha256': digest.group(1)}
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -568,8 +965,12 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--record-review", action="store_true")
     ap.add_argument("--reviewer", default="")
     ap.add_argument("--verdict", default="MERGE_READY")
+    ap.add_argument("--risk-verdict", default="", choices=["", "PASS", "FAIL"],
+                    help="production-risk-review verdict for NexusArchive (PASS/FAIL)")
     ap.add_argument("--notes", default="")
+    ap.add_argument("--evidence-bundle", default="", help="项目内 JSON 交付证据包（必需）")
     ap.add_argument("--branch", default="")
+    ap.add_argument("--head-ref", default="HEAD")
     ap.add_argument("--transcript", default="")
     ap.add_argument("--trail", default="")
     ap.add_argument("--min-edits", type=int, default=TRAIL_MIN_EDITS)
@@ -659,8 +1060,9 @@ def read_transcript_text(transcript_arg: str, raw: str = "") -> str:
         except OSError:
             return ""
     payload = parse_stdin_json(raw)
-    if payload.get("transcript_path"):
-        tp = os.path.expanduser(str(payload["transcript_path"]))
+    transcript_path = payload.get("transcript_path") or payload.get("transcriptPath")
+    if transcript_path:
+        tp = os.path.expanduser(str(transcript_path))
         if os.path.isfile(tp):
             try:
                 with open(tp, "r", encoding="utf-8") as f:
@@ -786,6 +1188,56 @@ def bump_counter(path: str) -> int:
     return strikes
 
 
+def check_haflow_stage_task(project_dir: str) -> dict | None:
+    """Authoritative check against HAFlow state database for active stage task identity."""
+    try:
+        import sqlite3
+        real_dir = os.path.realpath(str(project_dir))
+        db_path = os.path.expanduser("~/.herdr-controller/state.db")
+        if not os.path.isfile(db_path):
+            return None
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT t.task_id, t.workflow_id, t.node, t.stage, t.status, t.payload_json, w.config_json
+            FROM tasks t
+            JOIN workflows w ON t.workflow_id = w.workflow_id
+            WHERE t.status IN ('working', 'dispatched', 'rework', 'agent_done')
+            """
+        )
+        rows = cursor.fetchall()
+        conn.close()
+        for task_id, wf_id, node, stage, status, payload_raw, config_raw in rows:
+            try:
+                payload = json.loads(payload_raw or "{}")
+            except Exception:
+                payload = {}
+            task_clone_path = str(payload.get("clone_path") or "").strip()
+            if not task_clone_path:
+                # 缺失 clone_path 时 realpath("") 会解析为进程 cwd，把任务误归属到
+                # 任意调用方项目（P2：跨工作流任务冒认 → 静默跳过 Stop 审查）。
+                continue
+            task_clone = os.path.realpath(task_clone_path)
+            if task_clone == real_dir:
+                try:
+                    config = json.loads(config_raw or "{}")
+                except Exception:
+                    config = {}
+                name = str(config.get("name") or "").strip()
+                if name.startswith("software-development-v1") or config.get("staged_dev_flow"):
+                    return {
+                        "task_id": task_id,
+                        "workflow_id": wf_id,
+                        "node": node or stage,
+                        "status": status,
+                        "config": config,
+                    }
+        return None
+    except Exception:
+        return None
+
+
 def cmd_check_review(ns: argparse.Namespace) -> None:
     """Stop-hook mode: any source edit owes S5/S6 declaration artifacts.
 
@@ -808,18 +1260,39 @@ def cmd_check_review(ns: argparse.Namespace) -> None:
         project_dir = str(payload.get("cwd") or payload.get("project_dir") or "")
         if not project_dir:
             project_dir = os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd())
+    reason = str(payload.get("reason") or "")
+    if reason and reason != "end_turn":
+        sys.exit(0)
     counter = review_counter_path(project_dir, session_id)
     transcript = read_transcript_text(ns.transcript, raw)
-    if count_source_edits(transcript) < REVIEW_MIN_EDITS:
+    if count_source_edits(transcript, project_dir) < REVIEW_MIN_EDITS:
         reset_trail_counter(counter)
         sys.exit(0)
     if entry_gate_declares_patch(project_dir, session_id):
         reset_trail_counter(counter)
         sys.exit(0)
+
+    # Stage-level delegation in HAFlow workflows:
+    # Nuclear check: implementation (S4) owes planned code and self-test, but downstream
+    # S5 (test) and S6 (review) are handled by subsequent stations.
+    haflow_stage = check_haflow_stage_task(project_dir)
+    if haflow_stage:
+        stage_node = haflow_stage.get("node")
+        if stage_node == "implementation":
+            reset_trail_counter(counter)
+            sys.exit(0)
+        elif stage_node in ("requirements", "plan"):
+            reset_trail_counter(counter)
+            sys.exit(0)
+        elif stage_node == "test":
+            v_path = verify_artifact_path(project_dir, session_id)
+            if os.path.isfile(v_path) and validate_verify(open(v_path, encoding="utf-8").read()) is None:
+                reset_trail_counter(counter)
+                sys.exit(0)
     problems: list[tuple[str, str, str]] = []
     for path, validator, kind in (
             (verify_artifact_path(project_dir, session_id), validate_verify, "verify"),
-            (review_artifact_path(project_dir, session_id), validate_review, "review")):
+            (review_artifact_path(project_dir, session_id), lambda c: validate_review(c, project_dir), "review")):
         try:
             with open(path, "r", encoding="utf-8") as f:
                 reason = validator(f.read())
@@ -843,11 +1316,9 @@ def cmd_check_review(ns: argparse.Namespace) -> None:
     bump_counter(counter)
     kind, path, reason = problems[0]
     hint = ("S5/S6 阶段工件缺失：源码写操作完成后，必须完成验证 + 独立审查才能结束会话。\n"
-            f"  1. 验证工件: {verify_artifact_path(project_dir, session_id)}\n"
-            "     （## 验证证据 章节 + S4 ai-slop-cleaner 瘦身记录 + 命令/exit code 列表）\n"
-            f"  2. 审查工件: {review_artifact_path(project_dir, session_id)}\n"
-            "     （必须通过 flow:review / google-code-review / xiyu-code-review 独立审查工具生成，\n"
-            "      严禁主 Agent 自行手写此文件！）\n"
+            f"{get_finish_order_hint(project_dir)}"
+            f"  验证工件: {verify_artifact_path(project_dir, session_id)}\n"
+            f"  审查工件: {review_artifact_path(project_dir, session_id)}\n"
             "  【铁律】主 Agent 不能自证清白，审查者必须独立于编码者。")
     fail(f"{reason}\n当前缺失或不合格：{path}\n{hint}",
          kind=kind, session=session_id, project=project_dir)
@@ -1004,7 +1475,29 @@ def cmd_record_review(ns: argparse.Namespace) -> None:
         sys.stderr.write(f"❌ [record-review] 无效 verdict: {verdict}。必须是 MERGE_READY / NEEDS_FIXES / ESCALATE\n")
         sys.exit(1)
 
-    diff_hash = compute_diff_hash(project_dir) or "unknown"
+    bundle_path = getattr(ns, "evidence_bundle", "")
+    reference = {"path": bundle_path, "sha256": ""}
+    try:
+        reference["sha256"] = evidence_hash(evidence_path(project_dir, bundle_path))
+    except (OSError, ValueError) as exc:
+        sys.stderr.write(f"缺少交付证据包，禁止自行签发 PASS: {exc}\n")
+        sys.exit(1)
+    reason = (validate_delivery_evidence(project_dir, reference, reviewer)
+              if verdict == "MERGE_READY" else validate_negative_review(project_dir, reference, reviewer, verdict))
+    if reason:
+        sys.stderr.write(reason + "\n")
+        sys.exit(1)
+    diff_hash = compute_diff_hash(project_dir)
+    risk_verdict = (getattr(ns, "risk_verdict", "") or "").strip().upper()
+    if is_nexusarchive_commit(project_dir, getattr(ns, "head_ref", "HEAD")) and verdict == "MERGE_READY":
+        if risk_verdict not in ("", "PASS"):
+            sys.stderr.write("风险声明与已验证证据包不一致\n")
+            sys.exit(1)
+        risk_verdict = "PASS"
+    if verdict != "MERGE_READY" and risk_verdict:
+        sys.stderr.write("负结论不应附带尚未执行的风险 PASS 声明\n")
+        sys.exit(1)
+    risk_line = f"production-risk-review: {risk_verdict}\n" if risk_verdict else ""
     review_path = review_artifact_path(project_dir, session_id)
     os.makedirs(os.path.dirname(review_path), exist_ok=True)
     content = (
@@ -1013,7 +1506,10 @@ def cmd_record_review(ns: argparse.Namespace) -> None:
         f"reviewer: {reviewer}\n"
         "round: 1\n"
         f"diff_hash: {diff_hash}\n"
-        "code-review: flow:review 独立子代理审查\n\n"
+        f"evidence_bundle: {bundle_path}\n"
+        f"evidence_bundle_sha256: {reference['sha256']}\n"
+        "code-review: flow:review 独立子代理审查\n"
+        f"{risk_line}\n"
         f"{notes}\n"
     )
     try:
@@ -1031,7 +1527,7 @@ def cmd_record_review(ns: argparse.Namespace) -> None:
         sys.exit(1)
 
 
-def cmd_guard_pr(ns: argparse.Namespace) -> None:
+def cmd_guard_pr(ns: argparse.Namespace, *, exit_on_success: bool = True) -> None:
     """PR / Push Gate: Verify S6 Code Review is passed with MERGE_READY before PR or Push.
 
     Exit codes:
@@ -1042,11 +1538,9 @@ def cmd_guard_pr(ns: argparse.Namespace) -> None:
     if not project_dir:
         project_dir = os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd())
 
-    # 逃生阀 (Emergency escape hatch)
     if os.environ.get("UNIFIED_DEV_FLOW_SKIP_REVIEW") == "1" or os.environ.get("UNIFIED_DEV_FLOW_FORCE") == "1":
-        sys.stderr.write("⚠️ [unified-dev-flow] 检测到 UNIFIED_DEV_FLOW_SKIP_REVIEW=1，跳过 S6 Review 门禁（已记录逃生事件）\n")
-        log_block("review-bypass", ns.session_id or "bypass", project_dir, "UNIFIED_DEV_FLOW_SKIP_REVIEW=1")
-        sys.exit(0)
+        sys.stderr.write("交付门禁不接受环境变量跳过审查；需要完整证据包。\n")
+        sys.exit(1)
 
     branch = ns.branch or ""
     if not branch:
@@ -1071,10 +1565,11 @@ def cmd_guard_pr(ns: argparse.Namespace) -> None:
             f"  当前分支: {branch or 'unknown'}\n"
             "  【缺失工件】: .omc/review-*.md (S6 评审结论)\n\n"
             "  【立即行动指南】:\n"
-            "  1. 运行 S6 Code Review：调用 xiyu-code-review 或 google-code-review 执行三透镜独立审查；\n"
-            "  2. 生成工件：.omc/review-<session>.md（须包含 ## 评审结论、verdict: MERGE_READY、reviewer、round）与 .omc/verify-<session>.md；\n"
-            "  3. 确认评审结论为 MERGE_READY 后，方可重新提交 PR 或推送分支。\n"
-            "  （紧急逃生阀: 仅限生产抢修故障时设置 UNIFIED_DEV_FLOW_SKIP_REVIEW=1）\n"
+            f"{get_finish_order_hint(project_dir)}"
+            "  工件要求：.omc/verify-<session>.md（## 验证证据、ai-slop-cleaner、命令 exit code）"
+            "与 .omc/review-<session>.md（## 评审结论、verdict: MERGE_READY、reviewer、round）。\n"
+            "  确认评审结论为 MERGE_READY 后，方可重新提交 PR 或推送分支。\n"
+            "  （无环境变量逃生阀：交付必须携带完整 evidence bundle，见 references/enforcement.md「Delivery evidence v1」）\n"
         )
         sys.stderr.write(msg + "\n")
         log_block("guard-pr-missing", ns.session_id or "default", project_dir, "review artifact missing")
@@ -1087,7 +1582,7 @@ def cmd_guard_pr(ns: argparse.Namespace) -> None:
         sys.stderr.write(f"⛔ [unified-dev-flow 门禁阻断]: 无法读取评审工件: {review_path} ({e})\n")
         sys.exit(1)
 
-    reason = validate_review(review_content)
+    reason = validate_review(review_content, project_dir=project_dir, head_ref=ns.head_ref)
     if reason:
         msg = (
             f"⛔ [unified-dev-flow 门禁阻断]: S6 评审工件不合规！\n"
@@ -1149,33 +1644,19 @@ def cmd_guard_pr(ns: argparse.Namespace) -> None:
         log_block("guard-pr-stale-review", ns.session_id or "default", project_dir, prov_reason[:200])
         sys.exit(1)
 
-    # Transcript reviewer verification: if transcript is available, check reviewer was independent
-    transcript_text = ""
-    if ns.transcript:
-        transcript_text = read_transcript_text(ns.transcript)
-    if not transcript_text:
-        # Try AGY default path
-        conv_id = ns.session_id or ""
-        if conv_id:
-            agy_transcript = os.path.expanduser(
-                f"~/.gemini/antigravity-cli/brain/{conv_id}/.system_generated/logs/transcript.jsonl"
-            )
-            if os.path.isfile(agy_transcript):
-                transcript_text = read_transcript_text(agy_transcript)
-
-    if transcript_text:
-        ok, transcript_reason = verify_transcript_reviewer(transcript_text)
-        if not ok:
-            sys.stderr.write(f"⛔ [unified-dev-flow 门禁阻断]: {transcript_reason}\n")
-            log_block("guard-pr-no-independent-reviewer", ns.session_id or "default",
-                      project_dir, transcript_reason[:200])
-            sys.exit(1)
+    reviewer = re.search(r"^reviewer:\s*(.+)$", review_content, re.MULTILINE)
+    reason = validate_delivery_evidence(project_dir, evidence_reference_from_review(review_content),
+                                       reviewer.group(1).strip() if reviewer else "", head_ref)
+    if reason:
+        sys.stderr.write(reason + "\n")
+        sys.exit(1)
 
     sys.stdout.write(
         f"✅ [unified-dev-flow 门禁放行] S6 Code Review 验证通过: verdict=MERGE_READY\n"
         f"   评审工件: {os.path.basename(review_path)} | 验证工件: {os.path.basename(verify_path)}\n"
     )
-    sys.exit(0)
+    if exit_on_success:
+        sys.exit(0)
 
 
 def cmd_guard_push(ns: argparse.Namespace) -> None:
@@ -1189,25 +1670,40 @@ def cmd_guard_push(ns: argparse.Namespace) -> None:
         cmd_guard_pr(ns)
         return
 
+    original_session = ns.session_id
     for line in lines:
+        ns.session_id = original_session
         parts = line.split()
-        if len(parts) < 4:
-            continue
+        if len(parts) != 4:
+            sys.stderr.write("门禁阻断: 推送引用格式不完整\n")
+            sys.exit(1)
         local_ref, local_sha, remote_ref, remote_sha = parts[:4]
         # 删除远端分支操作不阻断
         if local_sha == "0000000000000000000000000000000000000000" or local_ref == "(delete)":
             continue
-        ref_name = local_ref.replace("refs/heads/", "")
-        # 如果是主干/保护分支，pre-push 本身不在此阻断（由专用保护策略处理）
-        if ref_name in ("main", "master"):
-            continue
+        # 豁免只作用于本地 refs/heads/ 分支：只剥一层前缀后精确比较分支名。
+        # 分支名可含 "refs/heads/" 字面量（refs/heads/refs/heads/main），全量
+        # replace 会把它误判成 main（P1：全局前缀替换 = 免审通道）。非
+        # refs/heads/ 引用（refs/tags/* 等）不豁免，一律受审。
+        if local_ref.startswith("refs/heads/"):
+            ref_name = local_ref[len("refs/heads/"):]
+            if (ref_name in ("main", "master", "dev")
+                    or ref_name.startswith("release/")
+                    or ref_name.endswith("-init")):
+                continue
+        else:
+            ref_name = local_ref
         # 对开发任务分支（agent/*, feat/*, fix/*, 或其它开发分支）必须检查 S6
         ns.branch = ref_name
+        if not ns.session_id:
+            safe_branch = re.sub(r"[^A-Za-z0-9_-]", "_", ref_name)
+            p_dir = ns.project_dir or os.environ.get("CLAUDE_PROJECT_DIR", os.getcwd())
+            if os.path.isfile(os.path.join(p_dir, ".omc", f"review-{safe_branch}.md")):
+                ns.session_id = safe_branch
         # provenance 必须哈希被推送的对象而非 cwd HEAD：git push 可推送当前未 checkout 的分支
         if re.fullmatch(r"[0-9a-f]{6,64}", local_sha, re.IGNORECASE):
             ns.head_ref = local_sha
-        cmd_guard_pr(ns)
-        return
+        cmd_guard_pr(ns, exit_on_success=False)
 
     # 若全是已排除 ref，直接放行
     sys.exit(0)

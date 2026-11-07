@@ -3,7 +3,8 @@
 # Intercepts 'git push' to ensure task branches have completed S6 Code Review (MERGE_READY).
 set -euo pipefail
 
-CHECKER="${HOME}/.claude/scripts/entry-gate-check.py"
+CANONICAL_USER_HOME="$(python3 -c 'import os,pwd; print(pwd.getpwuid(os.getuid()).pw_dir)')"
+CHECKER="${CANONICAL_USER_HOME}/.claude/scripts/entry-gate-check.py"
 if [[ ! -f "$CHECKER" ]]; then
   # Fallback to repo-relative path if available
   REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
@@ -14,6 +15,6 @@ if [[ -f "$CHECKER" ]]; then
   exec python3 "$CHECKER" --guard-push "$@"
 fi
 
-# If checker is completely unavailable, fail open with warning (do not deadlock git)
-echo "⚠️ [unified-dev-flow] 找不到 entry-gate-check.py，pre-push 审查门禁降级放行。" >&2
-exit 0
+# Missing security dependency must block publishing.
+echo "⚠️ [unified-dev-flow] 找不到 entry-gate-check.py，pre-push 拒绝交付，请修复安装。" >&2
+exit 1
