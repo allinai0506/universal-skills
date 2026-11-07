@@ -551,8 +551,108 @@ blocks for weeks is ceremony, not enforcement — cut it.
   tool above. Same class of gap as delivery-gate's documented limits; S5/S6
   cover it. (Deliberately NOT matching shell tools: gating `Bash` would trip
   on every test run and paralyze the session.)
-- Tools without a public hook API (ZCode, Grok, PI): prompt-level Entry Gate
+- Tools without a public hook API (ZCode, PI): prompt-level Entry Gate
   only — probabilistic, honestly labeled, S5/S6 still apply.
+- Grok and Cursor `Stop` hooks call the same `--check-review`. Grok edits are
+  counted from assistant `tool_calls` named `search_replace` or `write`, not
+  from tool names that merely appear in the system prompt. A session-end Stop
+  whose `reason` is not `end_turn` does not block.
 - Test suite: `scripts/test_entry_gate_check.py` (stdlib only, no pytest).
   Run it after any change to the checker: `python3 scripts/test_entry_gate_check.py`.
 # test
+
+## Delivery evidence v1 (2026-11-07 hardening)
+
+PR/push checks no longer accept Markdown declarations as proof of S4–S6.
+`--record-review` requires `--evidence-bundle .omc/delivery.json`; no caller-supplied
+`--risk-verdict PASS`, reviewer name, keyword in a transcript, or skip environment
+variable can replace the bundle. Legacy artifacts without a fingerprint or bundle
+are invalid; they must be re-reviewed, not upgraded by adding keywords.
+
+The bundle is JSON with `version: 1`, exact committed `head`, `diff_hash` (the
+same merge-base diff computed by `compute_diff_hash`), `reports`, and
+`attestations`. Every report/log/source reference is `{path, sha256}` relative to
+the project root, resolving inside it; source references also include a valid
+1-based `line`. Evidence changes invalidate the gate. Do not commit these local
+process records as product code.
+
+Required report keys:
+
+- `ai-slop-cleaner`: `skill`, `head`, `diff_hash`, `verdict: PASS`, `mode: B`,
+  `finished_at` (Unix seconds), and `checks` for duplication, dead_code,
+  abstraction, boundaries, tests.
+- `verification`: common identity fields, `verdict: PASS`, `started_at`,
+  `finished_at`, and a nonempty `checks` array. Each check has `argv`, integer
+  `exit_code: 0`, and a nonempty hashed `log`. Placeholder commands are rejected.
+- `google-code-review`: common identity fields, `verdict: MERGE_READY`, and
+  `checks` for design, functionality, complexity, tests, naming, comments, style,
+  documentation, description.
+- For NexusArchive, `production-risk-review`: common identity fields,
+  `verdict: PASS`; `checks` for null, collections, concurrency, database, redis,
+  mq, api, json, time, io, frontend, legacy_data, tests; `sections` for
+  understanding, dependencies, fault_analysis, classification,
+  business_regression, extremes, hidden_bugs, evidence, verdict,
+  deployment_rollback; at least three `fault_chains` with distinct `trigger`,
+  multi-step `chain` and evidence. No unresolved P0/P1/CRITICAL/HIGH finding
+  (`findings[].status` must be resolved for these severities).
+
+Each check/section/chain is `{status: PASS|NA, reason, evidence: [...]}`.
+Both PASS and NA require concrete evidence and rationale; FAIL or missing cells
+block. This structure checks completeness, not the truth of semantic judgments.
+An independent reviewer must assess applicability, evidence and conclusions.
+
+For each independent review, `attestations[skill]` contains `transcript_path`,
+`event_id`, and `reviewer`. The initial adapter supports Codex native
+`~/.codex/sessions` JSONL (home resolved via OS account, never caller `HOME`): a registered collaboration subagent's plaintext
+`agent_message` with native collaboration provenance. User messages, command
+strings containing skill names, arbitrary transcript files, missing transcripts,
+and encrypted-only output are not accepted. Other runtimes fail closed until a
+native adapter exists; do not manufacture a Codex transcript for them.
+
+The independent reviewer emits exactly one line in its result:
+
+```text
+REVIEW_RECEIPT {"skill":"google-code-review","head":"<sha>","diff_hash":"<sha256>","report_sha256":"<report digest>","cleanup_sha256":"<cleanup report digest>","verification_sha256":"<verification report digest>","verdict":"MERGE_READY"}
+```
+
+The subsequent production review emits the same fields with
+`skill: production-risk-review`, `verdict: PASS`, plus `code_review_sha256`.
+The gate reads those exact native result events and compares every value with
+files on disk. It enforces cleanup → verification → code review → production
+review ordering using report times and runtime message order/time. Reports and
+attestations must describe the pushed object, not merely the checked-out branch.
+Every pushed task ref is checked; the first successful ref cannot waive later
+refs. Missing checker/dependency or unresolved baseline blocks delivery.
+
+The agent may assemble evidence files, but cannot turn its own text into an
+independent result event through `--record-review`. Native session storage and
+the installed gate are the local runner trust boundary: this is workflow
+protection, not an OS sandbox against a user/process that can rewrite hooks,
+HOME, session storage or Git configuration. For protection against that actor,
+require a separately controlled reviewer/CI attestation on the forge. No local
+hash alone supplies that authority. Stop-hook anti-spin behavior is advisory;
+it cannot authorize PR/push or substitute for the delivery evidence check.
+
+Regression commands:
+
+```bash
+python3 scripts/test_review_evidence.py
+python3 scripts/test_entry_gate_check.py
+```
+
+Recording a negative code-review result is a separate operation from authorizing
+delivery. `--record-review --verdict NEEDS_FIXES|ESCALATE --evidence-bundle ...`
+checks the native reviewer, exact scope, report and the input digests that reviewer
+saw, and stores the failure. It does not require a later production audit or PASS
+verification that has not happened. PR/push still rejects that negative verdict;
+this preserves S6 → S4 repair and escalation without issuing an approval.
+
+### Preserve existing hook chains
+
+The sync installer only creates a missing pre-push hook, atomically and without
+replacement. Existing hooks, symlinks, mode bits and Husky trampolines remain
+unchanged. A preserved project is explicitly reported as not automatically taken
+over: its own policy must wire the review gate. Preservation is not proof that
+an unknown project's private policy already uses this evidence contract. Do not
+replace a Husky `_/pre-push` shim: it delegates to the project hook and preserves
+all existing rejection checks. Regression: `python3 scripts/test_hook_installation.py`.

@@ -1721,6 +1721,41 @@ sync_kimi_code() {
     log "  路径: ~/.kimi-code/skills/ (已注册到 config.toml extra_skill_dirs)"
 }
 
+# Existing project hooks own their policy chain. Never replace custom hooks,
+# symlinks or Husky's generated trampoline with a standalone review gate.
+install_pre_push_review_guard() {
+    local repo="$1" guard="$2" hook_dir
+    hook_dir="$(git -C "$repo" rev-parse --git-path hooks)" || return 1
+    if [[ "$hook_dir" != /* ]]; then
+        hook_dir="$repo/$hook_dir"
+    fi
+    python3 - "$hook_dir" "$guard" <<'PYINSTALL'
+from pathlib import Path
+import os, sys, tempfile
+folder, guard = map(Path, sys.argv[1:])
+if not guard.is_file():
+    raise SystemExit('缺少统一门禁脚本，拒绝安装')
+folder.mkdir(parents=True, exist_ok=True)
+target = folder / 'pre-push'
+if target.exists() or target.is_symlink():
+    print(f'保留已有 Git hook，未自动接管（项目需自有审查接线）: {target}')
+    raise SystemExit(0)
+data = guard.read_bytes()
+fd, temporary = tempfile.mkstemp(prefix='.review-hook-', dir=folder)
+try:
+    with os.fdopen(fd, 'wb') as stream:
+        stream.write(data)
+    os.chmod(temporary, 0o755)
+    try:
+        os.link(temporary, target)  # publish atomically; never replace a racing hook
+        print(f'已安装缺失的 Git pre-push 审查门禁: {target}')
+    except FileExistsError:
+        print(f'保留并发创建的 Git hook，未自动接管: {target}')
+finally:
+    os.unlink(temporary)
+PYINSTALL
+}
+
 # 同步统一开发流程 (unified-dev-flow) 物理门禁钩子到宿主环境与 Git 项目
 sync_workflow_hooks() {
     log "同步统一开发流程 (unified-dev-flow) 门禁钩子..."
@@ -1894,27 +1929,7 @@ EOF
 
     for repo in "${target_repos[@]}"; do
         if [ -d "$repo/.git" ] || [ -f "$repo/.git" ]; then
-            local hook_dir
-            hook_dir="$(git -C "$repo" rev-parse --git-path hooks 2>/dev/null || echo "")"
-            if [ -n "$hook_dir" ]; then
-                if [[ "$hook_dir" != /* ]]; then
-                    hook_dir="$repo/$hook_dir"
-                fi
-                mkdir -p "$hook_dir"
-                local pre_push="$hook_dir/pre-push"
-
-# 幂等检测：钩子已含 S6 门禁调用（entry-gate-check.py + --guard-push）则不覆写。
-# 两个标记在守卫脚本里分属两行，必须分别 grep 再求与，单串匹配永远落空。
-if [ -f "$pre_push" ] \
-   && grep -q "entry-gate-check.py" "$pre_push" \
-   && grep -q -- "--guard-push" "$pre_push"; then
-    log "Git pre-push 门禁已存在 (含 S6 调用)，跳过: $repo"
-else
-    cp -f "$claude_scripts/git-pre-push-guard.sh" "$pre_push"
-    chmod +x "$pre_push"
-    success "已安装/更新 Git pre-push 门禁: $repo -> $pre_push"
-fi
-            fi
+            install_pre_push_review_guard "$repo" "$claude_scripts/git-pre-push-guard.sh"
         fi
     done
 }

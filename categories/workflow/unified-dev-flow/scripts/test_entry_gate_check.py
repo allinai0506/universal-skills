@@ -10,6 +10,7 @@ TDD: this file was written BEFORE entry-gate-check.py existed.
 """
 from __future__ import annotations
 
+import datetime
 import hashlib
 import json
 import os
@@ -478,10 +479,11 @@ def phase3_logging() -> None:
     # 27. weekly report renders counts from a fixture log
     with tempfile.TemporaryDirectory() as proj:
         logf = os.path.join(proj, "blocks.jsonl")
+        today = datetime.date.today().isoformat()
         with open(logf, "w") as f:
-            f.write('{"ts": "2026-09-01T10:00:00", "kind": "missing", "session": "a", "project": "/p/x", "reason": "r1"}\n'
-                    '{"ts": "2026-09-02T10:00:00", "kind": "scope", "session": "b", "project": "/p/x", "reason": "r2"}\n'
-                    '{"ts": "2026-09-03T10:00:00", "kind": "missing", "session": "c", "project": "/p/y", "reason": "r3"}\n')
+            f.write(f'{{"ts": "{today}T10:00:00", "kind": "missing", "session": "a", "project": "/p/x", "reason": "r1"}}\n'
+                    f'{{"ts": "{today}T10:00:01", "kind": "scope", "session": "b", "project": "/p/x", "reason": "r2"}}\n'
+                    f'{{"ts": "{today}T10:00:02", "kind": "missing", "session": "c", "project": "/p/y", "reason": "r3"}}\n')
         report = os.path.join(os.path.dirname(os.path.abspath(__file__)), "entry-gate-report.py")
         check("report-exists", os.path.isfile(report), "entry-gate-report.py missing (RED?)")
         if os.path.isfile(report):
@@ -622,6 +624,64 @@ def phase4_review() -> None:
                 extra_env=env)
         check("review-missing-google-review-blocks", r.returncode == 2,
               f"exit={r.returncode}")
+        check("review-block-names-finish-order",
+              "先对本次改动执行 ai-slop-cleaner" in r.stderr
+              and "google-code-review" in r.stderr,
+              f"stderr={r.stderr[:300]}")
+
+        def grok_line(name: str, path: str) -> str:
+            return json.dumps({
+                "type": "assistant",
+                "tool_calls": [{
+                    "name": name,
+                    "arguments": json.dumps({"file_path": path}),
+                }],
+            }) + "\n"
+
+        # 34c. Grok search_replace on source blocks; .omc writes and system prompts do not.
+        grok_src = os.path.join(proj, "t-grok-src.jsonl")
+        with open(grok_src, "w", encoding="utf-8") as f:
+            f.write(json.dumps({
+                "type": "system",
+                "content": '{"name":"search_replace"} {"name":"write"}',
+            }) + "\n")
+            f.write(grok_line("search_replace", "src/real.py"))
+        r = run(["--check-review", "--project-dir", proj,
+                 "--session-id", "r-grok", "--transcript", grok_src],
+                extra_env=env)
+        check("review-grok-search-replace-blocks", r.returncode == 2,
+              f"exit={r.returncode} stderr={r.stderr[:200]}")
+
+        grok_omc = os.path.join(proj, "t-grok-omc.jsonl")
+        with open(grok_omc, "w", encoding="utf-8") as f:
+            f.write(grok_line("write", ".omc/entry-gate-r-grok-omc.md"))
+        r = run(["--check-review", "--project-dir", proj,
+                 "--session-id", "r-grok-omc", "--transcript", grok_omc],
+                extra_env=env)
+        check("review-grok-omc-write-passes", r.returncode == 0,
+              f"exit={r.returncode} stderr={r.stderr[:200]}")
+
+        grok_prompt = os.path.join(proj, "t-grok-prompt.jsonl")
+        with open(grok_prompt, "w", encoding="utf-8") as f:
+            f.write(json.dumps({
+                "type": "system",
+                "content": '"name": "search_replace" "name": "write"',
+            }) + "\n")
+        r = run(["--check-review", "--project-dir", proj,
+                 "--session-id", "r-grok-prompt", "--transcript", grok_prompt],
+                extra_env=env)
+        check("review-grok-system-prompt-passes", r.returncode == 0,
+              f"exit={r.returncode} stderr={r.stderr[:200]}")
+
+        shutdown = json.dumps({
+            "reason": "shutdown",
+            "cwd": proj,
+            "session_id": "r-shutdown",
+            "transcript_path": grok_src,
+        })
+        r = run(["--check-review"], stdin_text=shutdown, extra_env=env)
+        check("review-shutdown-does-not-block", r.returncode == 0,
+              f"exit={r.returncode} stderr={r.stderr[:200]}")
 
         # 35. patch-declared route passes without artifacts
         patch_gate = ("## 1. 理解和假设\n只看不改；delivery_target：patch。\n\n"
@@ -687,20 +747,20 @@ def phase4_review() -> None:
         check("guard-pr-needs-fixes-blocks", r.returncode == 1 and "NEEDS_FIXES" in r.stderr,
               f"exit={r.returncode} stderr={r.stderr[:200]}")
 
-        # 41. --guard-pr passes when review is valid with MERGE_READY
+        # 41. Legacy MERGE_READY prose without a bundle cannot authorize delivery
         mr_proj = tempfile.mkdtemp(prefix="gate-pr-mr-")
         write_review_files(mr_proj, "mr-session",
                            verify="## S5 验证证据\n- ai-slop-cleaner: deletion-first 完成\n- exit 0\n" + ("v" * 50),
                            review="## S6 评审结论\nverdict: MERGE_READY\nreviewer: claude\nround: 1\n"
                                   "xiyu-code-review 三透镜审查全绿通过。\n" + ("r" * 40))
         r = run(["--guard-pr", "--project-dir", mr_proj, "--branch", "agent/gemini/task3"])
-        check("guard-pr-merge-ready-passes", r.returncode == 0 and "门禁放行" in r.stdout,
+        check("guard-pr-legacy-declaration-blocked", r.returncode == 1,
               f"exit={r.returncode} stdout={r.stdout[:200]}")
 
-        # 42. --guard-pr bypass with escape hatch UNIFIED_DEV_FLOW_SKIP_REVIEW=1
+        # 42. Skip environment is rejected for delivery
         r = run(["--guard-pr", "--project-dir", empty_proj, "--branch", "agent/gemini/task4"],
                 extra_env={"UNIFIED_DEV_FLOW_SKIP_REVIEW": "1"})
-        check("guard-pr-escape-hatch-passes", r.returncode == 0 and "UNIFIED_DEV_FLOW_SKIP_REVIEW=1" in r.stderr,
+        check("guard-pr-skip-env-blocked", r.returncode == 1,
               f"exit={r.returncode}")
 
         # 43. --guard-push blocks for task branch without review
@@ -766,15 +826,15 @@ def phase4_review() -> None:
             check("record-review-self-reviewer-blocks", r.returncode == 1 and "self" in r.stderr.lower(),
                   f"exit={r.returncode} stderr={r.stderr[:200]}")
 
-        # 51. --record-review: valid external reviewer succeeds and stamps diff_hash
+        # 51. An external-looking name alone cannot issue review evidence
         with tempfile.TemporaryDirectory() as rr2_proj:
             subprocess.run(["git", "init", rr2_proj], capture_output=True)
             r = run(["--record-review", "--project-dir", rr2_proj, "--session-id", "rr-s2",
                      "--reviewer", "gemini-pro-subagent", "--verdict", "MERGE_READY",
                      "--notes", "三透镜审查通过：行为正确/结构健康/交付就绪"])
             review_file = os.path.join(rr2_proj, ".omc", "review-rr-s2.md")
-            check("record-review-valid-passes",
-                  r.returncode == 0 and os.path.isfile(review_file) and "diff_hash" in open(review_file).read(),
+            check("record-review-free-name-without-evidence-blocked",
+                  r.returncode == 1 and not os.path.isfile(review_file),
                   f"exit={r.returncode} stdout={r.stdout[:200]}")
 
         # 52. diff_hash provenance: guard-pr blocks when diff changed after review
@@ -907,13 +967,13 @@ def phase5_guard_push_provenance() -> None:
               r.returncode == 1 and "diff_hash" in r.stderr,
               f"exit={r.returncode} stderr={r.stderr[:300]}")
 
-        # 55. pushing reviewed feat-a while feat-b is checked out must PASS
+        # 55. Correct pushed-ref hash still cannot replace mandatory evidence
         # (defect showed a false block: gate validated feat-b's hash from cwd)
         _git("checkout", "-q", "feat-b")
         r = run(["--guard-push", "--project-dir", bp_proj],
                 stdin_text=f"refs/heads/feat-a {sha_a} refs/heads/feat-a {zero}\n")
-        check("guard-push-provenance-hashes-pushed-ref-passes",
-              r.returncode == 0 and "门禁放行" in r.stdout,
+        check("guard-push-hash-alone-without-bundle-blocked",
+              r.returncode == 1,
               f"exit={r.returncode} stdout={r.stdout[:200]} stderr={r.stderr[:300]}")
 
 
