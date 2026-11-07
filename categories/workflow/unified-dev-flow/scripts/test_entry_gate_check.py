@@ -781,6 +781,24 @@ def phase4_review() -> None:
         check("guard-push-main-branch-passes", r.returncode == 0,
               f"exit={r.returncode}")
 
+        # 45b. 豁免只看本地分支名：任务分支改推 release/* 目标 ref 不被豁免（P1 修复回归）
+        rel_input = "refs/heads/agent/gemini/task1 aaaaa refs/heads/release/x bbbbb\n"
+        r = run(["--guard-push", "--project-dir", empty_proj], stdin_text=rel_input)
+        check("guard-push-task-to-release-target-blocks", r.returncode == 1,
+              f"exit={r.returncode}")
+
+        # 45c. 任务分支改推 *-init 目标 ref 同样不被豁免（锚定分支名不能当免审通道）
+        init_input = "refs/heads/agent/gemini/task1 aaaaa refs/heads/agent/gemini-init bbbbb\n"
+        r = run(["--guard-push", "--project-dir", empty_proj], stdin_text=init_input)
+        check("guard-push-task-to-init-target-blocks", r.returncode == 1,
+              f"exit={r.returncode}")
+
+        # 45d. 本地锚定分支（*-init）推送仍豁免
+        anchor_input = "refs/heads/agent/gemini-init 11111 refs/heads/agent/gemini-init 22222\n"
+        r = run(["--guard-push", "--project-dir", empty_proj], stdin_text=anchor_input)
+        check("guard-push-local-init-anchor-passes", r.returncode == 0,
+              f"exit={r.returncode}")
+
         # ── New: Self-attestation / review-write denial tests ──────────────────
 
         # 46. Main agent writing .omc/review-*.md is DENIED by PreToolUse gate

@@ -1532,7 +1532,7 @@ def cmd_guard_pr(ns: argparse.Namespace, *, exit_on_success: bool = True) -> Non
             "  工件要求：.omc/verify-<session>.md（## 验证证据、ai-slop-cleaner、命令 exit code）"
             "与 .omc/review-<session>.md（## 评审结论、verdict: MERGE_READY、reviewer、round）。\n"
             "  确认评审结论为 MERGE_READY 后，方可重新提交 PR 或推送分支。\n"
-            "  （紧急逃生阀: 仅限生产抢修故障时设置 UNIFIED_DEV_FLOW_SKIP_REVIEW=1）\n"
+            "  （无环境变量逃生阀：交付必须携带完整 evidence bundle，见 references/enforcement.md「Delivery evidence v1」）\n"
         )
         sys.stderr.write(msg + "\n")
         log_block("guard-pr-missing", ns.session_id or "default", project_dir, "review artifact missing")
@@ -1649,10 +1649,10 @@ def cmd_guard_push(ns: argparse.Namespace) -> None:
             parts = ref_name.split("/")
             if len(parts) >= 4:
                 ref_name = "/".join(parts[3:])
-        target_name = remote_ref.replace("refs/heads/", "")
-        # 如果是主干/保护分支或锚定分支，pre-push 本身不在此阻断（由专用保护策略处理）
-        if (ref_name in ("main", "master", "dev") or ref_name.startswith("release/") or ref_name.endswith("-init")
-                or target_name in ("main", "master", "dev") or target_name.startswith("release/") or target_name.endswith("-init")):
+        # 豁免只看本地分支名：主干/保护分支与锚定分支由专用保护策略处理。
+        # 目标 ref 名不参与豁免——把任务分支改推到名为 main/dev/release/*-init
+        # 的远端 ref 不能绕过 S6 审查（P1：目标名豁免 = 免审交付通道）。
+        if ref_name in ("main", "master", "dev") or ref_name.startswith("release/") or ref_name.endswith("-init"):
             continue
         # 对开发任务分支（agent/*, feat/*, fix/*, 或其它开发分支）必须检查 S6
         ns.branch = ref_name
