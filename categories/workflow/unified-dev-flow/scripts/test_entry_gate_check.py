@@ -811,6 +811,45 @@ def phase4_review() -> None:
         check("guard-push-tag-ref-blocks", r.returncode == 1,
               f"exit={r.returncode}")
 
+        # 47. HAFlow 阶段任务匹配不得凭空 clone_path 归属当前项目（R4 P2 回归）
+        import importlib.util
+        import sqlite3
+        with tempfile.TemporaryDirectory() as haflow_home:
+            spec = importlib.util.spec_from_file_location("gate_mod", SCRIPT)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            db_dir = os.path.join(haflow_home, ".herdr-controller")
+            os.makedirs(db_dir)
+            conn = sqlite3.connect(os.path.join(db_dir, "state.db"))
+            conn.execute("CREATE TABLE workflows (workflow_id TEXT PRIMARY KEY, config_json TEXT)")
+            conn.execute("CREATE TABLE tasks (task_id TEXT PRIMARY KEY, workflow_id TEXT, "
+                         "node TEXT, stage TEXT, status TEXT, payload_json TEXT)")
+            cfg = json.dumps({"name": "software-development-v1/demo"})
+            conn.execute("INSERT INTO workflows VALUES ('wf1', ?)", (cfg,))
+            conn.execute("INSERT INTO tasks VALUES ('t1', 'wf1', 'impl', 'implementation', 'working', '{}')")
+            conn.commit()
+            conn.close()
+            haflow_proj = tempfile.mkdtemp(prefix="haflow-proj-")
+            old_home = os.environ.get("HOME")
+            os.environ["HOME"] = haflow_home
+            try:
+                # clone_path 缺失：realpath("") 不得把任务归属到 cwd 所在项目
+                check("haflow-cloneless-task-does-not-match-cwd",
+                      mod.check_haflow_stage_task(haflow_proj) is None)
+                # 正例：clone_path 精确指向本项目才归属
+                conn = sqlite3.connect(os.path.join(db_dir, "state.db"))
+                conn.execute("UPDATE tasks SET payload_json=? WHERE task_id='t1'",
+                             (json.dumps({"clone_path": haflow_proj}),))
+                conn.commit()
+                conn.close()
+                match = mod.check_haflow_stage_task(haflow_proj)
+                check("haflow-clone-path-matches-project",
+                      bool(match) and match.get("task_id") == "t1",
+                      f"match={match}")
+            finally:
+                if old_home is not None:
+                    os.environ["HOME"] = old_home
+
         # ── New: Self-attestation / review-write denial tests ──────────────────
 
         # 46. Main agent writing .omc/review-*.md is DENIED by PreToolUse gate

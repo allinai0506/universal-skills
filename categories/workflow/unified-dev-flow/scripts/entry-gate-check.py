@@ -1213,8 +1213,13 @@ def check_haflow_stage_task(project_dir: str) -> dict | None:
                 payload = json.loads(payload_raw or "{}")
             except Exception:
                 payload = {}
-            task_clone = os.path.realpath(str(payload.get("clone_path") or ""))
-            if task_clone and task_clone == real_dir:
+            task_clone_path = str(payload.get("clone_path") or "").strip()
+            if not task_clone_path:
+                # 缺失 clone_path 时 realpath("") 会解析为进程 cwd，把任务误归属到
+                # 任意调用方项目（P2：跨工作流任务冒认 → 静默跳过 Stop 审查）。
+                continue
+            task_clone = os.path.realpath(task_clone_path)
+            if task_clone == real_dir:
                 try:
                     config = json.loads(config_raw or "{}")
                 except Exception:
