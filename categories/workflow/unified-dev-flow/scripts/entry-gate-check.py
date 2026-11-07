@@ -1644,16 +1644,18 @@ def cmd_guard_push(ns: argparse.Namespace) -> None:
         # 删除远端分支操作不阻断
         if local_sha == "0000000000000000000000000000000000000000" or local_ref == "(delete)":
             continue
-        ref_name = local_ref.replace("refs/heads/", "")
-        if ref_name.startswith("refs/remotes/"):
-            parts = ref_name.split("/")
-            if len(parts) >= 4:
-                ref_name = "/".join(parts[3:])
-        # 豁免只看本地分支名：主干/保护分支与锚定分支由专用保护策略处理。
-        # 目标 ref 名不参与豁免——把任务分支改推到名为 main/dev/release/*-init
-        # 的远端 ref 不能绕过 S6 审查（P1：目标名豁免 = 免审交付通道）。
-        if ref_name in ("main", "master", "dev") or ref_name.startswith("release/") or ref_name.endswith("-init"):
-            continue
+        # 豁免只作用于本地 refs/heads/ 分支：只剥一层前缀后精确比较分支名。
+        # 分支名可含 "refs/heads/" 字面量（refs/heads/refs/heads/main），全量
+        # replace 会把它误判成 main（P1：全局前缀替换 = 免审通道）。非
+        # refs/heads/ 引用（refs/tags/* 等）不豁免，一律受审。
+        if local_ref.startswith("refs/heads/"):
+            ref_name = local_ref[len("refs/heads/"):]
+            if (ref_name in ("main", "master", "dev")
+                    or ref_name.startswith("release/")
+                    or ref_name.endswith("-init")):
+                continue
+        else:
+            ref_name = local_ref
         # 对开发任务分支（agent/*, feat/*, fix/*, 或其它开发分支）必须检查 S6
         ns.branch = ref_name
         if not ns.session_id:

@@ -623,9 +623,12 @@ review ordering using report times and runtime message order/time. Reports and
 attestations must describe the pushed object, not merely the checked-out branch.
 Every pushed task ref is checked; the first successful ref cannot waive later
 refs. Missing checker/dependency or unresolved baseline blocks delivery. The
-push-ref exemption is decided by the local branch name only (protected/anchor
-branches with their own policy); renaming the target ref (pushing a task branch
-to a remote ref named `main`/`dev`/`release/*`/`*-init`) does not bypass S6.
+push-ref exemption applies only to local `refs/heads/` branches, strips exactly
+one leading prefix and compares the exact branch name (protected/anchor
+branches with their own policy); a branch literally named `refs/heads/main`
+and non-branch refs (`refs/tags/*`) are not exempt, and renaming the target ref
+(pushing a task branch to a remote ref named `main`/`dev`/`release/*`/`*-init`)
+does not bypass S6.
 
 The agent may assemble evidence files, but cannot turn its own text into an
 independent result event through `--record-review`. Native session storage and

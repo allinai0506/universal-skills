@@ -799,6 +799,18 @@ def phase4_review() -> None:
         check("guard-push-local-init-anchor-passes", r.returncode == 0,
               f"exit={r.returncode}")
 
+        # 45e. 分支名含 "refs/heads/" 字面量时只剥一层前缀，不得误判为豁免（P1 回归）
+        nested_input = "refs/heads/refs/heads/main aaaaa refs/heads/feat/unreviewed bbbbb\n"
+        r = run(["--guard-push", "--project-dir", empty_proj], stdin_text=nested_input)
+        check("guard-push-nested-heads-name-blocks", r.returncode == 1,
+              f"exit={r.returncode}")
+
+        # 45f. 非分支引用（refs/tags/*）不豁免，一律受审
+        tag_input = "refs/tags/task-init aaaaa refs/tags/task-init bbbbb\n"
+        r = run(["--guard-push", "--project-dir", empty_proj], stdin_text=tag_input)
+        check("guard-push-tag-ref-blocks", r.returncode == 1,
+              f"exit={r.returncode}")
+
         # ── New: Self-attestation / review-write denial tests ──────────────────
 
         # 46. Main agent writing .omc/review-*.md is DENIED by PreToolUse gate
