@@ -831,7 +831,11 @@ def phase4_review() -> None:
             conn.close()
             haflow_proj = tempfile.mkdtemp(prefix="haflow-proj-")
             old_home = os.environ.get("HOME")
+            old_cwd = os.getcwd()
             os.environ["HOME"] = haflow_home
+            # 攻击面成立条件是进程 cwd 等于被检项目：chdir 进项目，
+            # 让 realpath("") == real_dir，回归对旧实现必失败。
+            os.chdir(haflow_proj)
             try:
                 # clone_path 缺失：realpath("") 不得把任务归属到 cwd 所在项目
                 check("haflow-cloneless-task-does-not-match-cwd",
@@ -847,6 +851,7 @@ def phase4_review() -> None:
                       bool(match) and match.get("task_id") == "t1",
                       f"match={match}")
             finally:
+                os.chdir(old_cwd)
                 if old_home is not None:
                     os.environ["HOME"] = old_home
 
