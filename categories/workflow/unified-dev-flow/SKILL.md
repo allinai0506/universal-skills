@@ -240,6 +240,19 @@ procedures. Alternatives live in [alternatives.md](references/alternatives.md)
 - Live/production changes require `production-risk-review` before S7.
   Unattended `autopilot`/`ralph` delivery also requires `ai-release-engineer`.
 
+### Mandatory delivery evidence
+
+PR/push requires the versioned delivery evidence bundle described in
+[enforcement.md](references/enforcement.md#delivery-evidence-v1-2026-11-07-hardening).
+Markdown declarations and a free `--risk-verdict PASS` do not prove execution.
+`--record-review --evidence-bundle <project-relative JSON>` validates the exact
+commit, hashed stage reports/logs, and native independent-review result events
+before producing an artifact. Missing fingerprints, evidence or runtime adapters
+block delivery; do not use skip environment variables or fabricate a transcript.
+The initial native-result adapter supports Codex; unsupported runtimes require
+an adapter rather than a silent fallback. The gate checks evidence completeness
+and provenance, while independent reviewers judge substantive sufficiency.
+
 ## Delivery Limits
 
 Apply the policy model's Delivery Targets at every stage and to every delegate.

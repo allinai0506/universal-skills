@@ -1,5 +1,7 @@
 ---
 name: writing-plans
+version: "2026.10.26-1"
+synced-at: "2026-10-26T16:29:18"
 description: Use when you have a spec or requirements for a multi-step task, before touching code
 ---
 
