@@ -160,9 +160,9 @@ The checker actively blocks three self-attestation bypass paths:
 2. **Self-reviewer rejection**: `reviewer: self` or `reviewer: main` are structurally
    rejected by `validate_review()`. A reviewer must be an identifiable external entity.
 
-3. **Diff-hash provenance**: When a review artifact contains `diff_hash: <sha256>`,
-   `cmd_guard_pr` computes the current repository diff hash and blocks if they differ
-   (indicating the code was modified after the review).
+3. **Diff-hash provenance**: The review artifact's `diff_hash: <sha256>` is
+   mandatory; `cmd_guard_pr` computes the current repository diff hash and blocks
+   on any mismatch (indicating the code was modified after the review).
 
 The **only sanctioned review write path** is:
 ```bash
@@ -170,9 +170,12 @@ python3 entry-gate-check.py --record-review \
   --project-dir <dir> --session-id <id> \
   --reviewer <independent-reviewer-name> \
   --verdict MERGE_READY \
+  --evidence-bundle .omc/delivery.json \
   --notes "审查结论..."
 ```
-This stamps `diff_hash` automatically, making stale reviews detectable.
+This stamps `diff_hash` automatically and validates the full Delivery evidence
+v1 bundle (native reviewer receipt, hashed reports, ordering) before writing the
+artifact — see [Delivery evidence v1](#delivery-evidence-v1-2026-11-07-hardening).
 
 Firing rule: count transcript toolUse blocks for real source edits
 (`.omc/` artifact writes excluded; unreadable transcripts fall back to the
@@ -247,15 +250,15 @@ python3 entry-gate-check.py --guard-push
 ```
 
 ### 拦截判定契约：
-- **目标分支识别**：主干分支（`main` / `master`）或删除远端分支操作不阻断；任务开发分支（`agent/*`、`feat/*`、`fix/*` 等）**强制受检**。
+- **目标分支识别**：本地 `refs/heads/` 主干/保护分支（`main` / `master` / `dev` / `release/*` / `*-init`，单层前缀精确比较）或删除远端分支操作不阻断；其余任务开发分支（`agent/*`、`feat/*`、`fix/*` 等）**强制受检**，目标 ref 改名不构成豁免。
 - **工件存在与合法性**：
   - 必须存在 `.omc/review-*.md` 且通过结构校验（包含 `## 评审结论`、`reviewer:`（非 self）、`round: N`，以及 `google-code-review` / `xiyu-code-review` / `code-review` / `flow:review` 审查记录）。
   - **verdict 必须为 `MERGE_READY`**！若为 `NEEDS_FIXES` 或 `ESCALATE`，直接 exit 1 阻断。
   - 必须存在合格的 `.omc/verify-*.md`（S5 证据，含 S4 `ai-slop-cleaner` 瘦身记录与命令 exit 0）。
-  - **diff_hash 凭据完整性**：若 review 含 `diff_hash`，必须与当前 repo diff 匹配；代码改动后审查证据自动失效。
-  - **Transcript 独立审查溯源**：若 transcript 可读，必须有 `invoke_subagent` Reviewer 角色记录或 `flow:review` 命令执行记录。
+  - **diff_hash 凭据完整性**：`diff_hash` 必填，且必须与被交付提交的 repo diff 匹配；代码改动后审查证据自动失效。
+  - **独立审查溯源**：按 Delivery evidence v1 执行——`--record-review` 校验证据包与 Codex 原生回执（`~/.codex/sessions`），Markdown 声明与 transcript 关键词不再作为审查证据。
 - **阻断行为**：exit 1，向 stderr 打印醒目的多行红字指引，命令直接失败。
-- **紧急逃生阀**：仅限生产故障抢修时设置环境变量 `UNIFIED_DEV_FLOW_SKIP_REVIEW=1`，放行并记录 `review-bypass` 审计日志。
+- **无环境变量逃生阀**：`UNIFIED_DEV_FLOW_SKIP_REVIEW=1` / `UNIFIED_DEV_FLOW_FORCE=1` 在交付路径被明确拒绝（fail-closed，exit 1）；交付必须携带完整 evidence bundle。
 
 ### 自动化装配：
 运行 `./sync.sh` 即可全自动完成：

@@ -432,6 +432,38 @@ def is_nexusarchive_project(project_dir: str = "") -> bool:
     return False
 
 
+def is_nexusarchive_commit(project_dir: str, head_ref: str = "HEAD") -> bool:
+    """Classify the delivered object's tree, not the current checkout.
+
+    cmd_guard_push may validate a ref that is not checked out; classifying by
+    the working tree would silently waive the mandatory production-risk review
+    for NexusArchive commits pushed from a different checkout.
+    """
+    if not project_dir:
+        return False
+    res = subprocess.run(["git", "ls-tree", "--name-only", head_ref],
+                         cwd=project_dir, capture_output=True, text=True, timeout=10)
+    git_ok = res.returncode == 0
+    if git_ok and "nexusarchive-java" in res.stdout.split():
+        return True
+    pkg = subprocess.run(["git", "show", f"{head_ref}:package.json"],
+                         cwd=project_dir, capture_output=True, text=True, timeout=10)
+    if pkg.returncode == 0:
+        try:
+            if json.loads(pkg.stdout).get("name") in ("nexusarchive", "nexusarchive-website"):
+                return True
+        except Exception:
+            pass
+    agents = subprocess.run(["git", "show", f"{head_ref}:AGENTS.md"],
+                            cwd=project_dir, capture_output=True, text=True, timeout=10)
+    if agents.returncode == 0 and "NexusArchive" in agents.stdout[:500]:
+        return True
+    if not git_ok:
+        # git unavailable / invalid ref: fall back to working-tree classification
+        return is_nexusarchive_project(project_dir)
+    return False
+
+
 def get_finish_order_hint(project_dir: str = "") -> str:
     return NEXUSARCHIVE_FINISH_HINT if is_nexusarchive_project(project_dir) else FINISH_ORDER_HINT
 
@@ -586,7 +618,7 @@ def validate_verify(content: str) -> str | None:
     return None
 
 
-def validate_review(content: str, project_dir: str = "") -> str | None:
+def validate_review(content: str, project_dir: str = "", head_ref: str = "HEAD") -> str | None:
     """S6 arrival declaration: heading + verdict + reviewer + round + review framework.
     For NexusArchive project, additionally enforces production-risk-review PASS."""
     if not re.search(r"^##\s*.*评审结论", content, re.MULTILINE):
@@ -608,7 +640,7 @@ def validate_review(content: str, project_dir: str = "") -> str | None:
         return f"评审结论过短（{len(content)} < {REVIEW_MIN_CHARS} 字）。"
 
     # NexusArchive 数凭项目专属：必须包含 production-risk-review 审计且裁决为 PASS
-    if is_nexusarchive_project(project_dir) and re.search(r"^verdict:\s*MERGE_READY\s*$", content, re.MULTILINE):
+    if is_nexusarchive_commit(project_dir, head_ref) and re.search(r"^verdict:\s*MERGE_READY\s*$", content, re.MULTILINE):
         pattern_topic = r"(?:production[-_ ]risk[-_ ]review|生产风险(?:审计|评审))"
         if not re.search(pattern_topic, content, re.IGNORECASE):
             return "数凭项目收尾铁律：缺少 production-risk-review（生产风险审计）！已上线系统必须证明不存在导致线上回归的风险。"
@@ -805,7 +837,7 @@ def validate_delivery_evidence(project_dir, reference, expected_reviewer='', hea
             raise ValueError('证据包必须绑定当前被交付提交及完整 diff 指纹')
         reports = {}
         skills = ['ai-slop-cleaner', 'verification', 'google-code-review']
-        if is_nexusarchive_project(project_dir):
+        if is_nexusarchive_commit(project_dir, head_ref):
             skills.append('production-risk-review')
         for skill in skills:
             ref = bundle['reports'][skill]
@@ -1452,7 +1484,7 @@ def cmd_record_review(ns: argparse.Namespace) -> None:
         sys.exit(1)
     diff_hash = compute_diff_hash(project_dir)
     risk_verdict = (getattr(ns, "risk_verdict", "") or "").strip().upper()
-    if is_nexusarchive_project(project_dir) and verdict == "MERGE_READY":
+    if is_nexusarchive_commit(project_dir, getattr(ns, "head_ref", "HEAD")) and verdict == "MERGE_READY":
         if risk_verdict not in ("", "PASS"):
             sys.stderr.write("风险声明与已验证证据包不一致\n")
             sys.exit(1)
@@ -1545,7 +1577,7 @@ def cmd_guard_pr(ns: argparse.Namespace, *, exit_on_success: bool = True) -> Non
         sys.stderr.write(f"⛔ [unified-dev-flow 门禁阻断]: 无法读取评审工件: {review_path} ({e})\n")
         sys.exit(1)
 
-    reason = validate_review(review_content, project_dir=project_dir)
+    reason = validate_review(review_content, project_dir=project_dir, head_ref=ns.head_ref)
     if reason:
         msg = (
             f"⛔ [unified-dev-flow 门禁阻断]: S6 评审工件不合规！\n"

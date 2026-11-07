@@ -28,8 +28,9 @@ class EvidenceGateTest(unittest.TestCase):
         self.git('config','user.name','Fixture')
         self.git('config','user.email','fixture@example.invalid')
         (self.root/'nexusarchive-java').mkdir()
+        (self.root/'nexusarchive-java'/'README.md').write_text('fixture marker\n')
         (self.root/'fixture.py').write_text('x = 1\n')
-        self.git('add','fixture.py'); self.git('commit','-qm','base')
+        self.git('add','fixture.py','nexusarchive-java/README.md'); self.git('commit','-qm','base')
         self.git('update-ref','refs/remotes/origin/dev','HEAD')
         self.git('checkout','-qb','agent/test/fix-fixture')
         (self.root/'fixture.py').write_text('x = 2\n')
@@ -231,6 +232,24 @@ class EvidenceGateTest(unittest.TestCase):
         p=self.run_gate('--guard-push',stdin_text=data)
         self.assertNotEqual(p.returncode,0,p.stdout+p.stderr)
         self.assertIn('门禁放行',p.stdout)
+
+    def test_pushed_object_classification_not_checkout(self):
+        """R3-1 回归：NexusArchive 分类必须看被推送提交树，而非当前 checkout。"""
+        self.bundle()
+        self.git('checkout','-qb','agent/test/plain-checkout')
+        self.git('rm','-q','nexusarchive-java/README.md')
+        self.git('commit','-qm','remove nexusarchive marker from checkout')
+        # 正例：完整证据包针对被推送 head（树内含标记）仍然放行，与 checkout 无关
+        p=self.run_gate('--guard-pr','--head-ref',self.head)
+        self.assertEqual(p.returncode,0,p.stderr)
+        # 反例：缺风险审计的 bundle 不能因 checkout 无标记而放行
+        del self.bundle_data['reports']['production-risk-review']
+        del self.bundle_data['attestations']['production-risk-review']
+        self.native.write_text('\n'.join(json.dumps(r) for r in self.rows[:3]))
+        self.save_bundle()
+        p=self.run_gate('--guard-pr','--head-ref',self.head)
+        self.assertNotEqual(p.returncode,0,p.stdout+p.stderr)
+        self.assertIn('production-risk-review',p.stderr)
 
 if __name__ == '__main__':
     unittest.main()
