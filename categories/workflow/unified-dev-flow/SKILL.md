@@ -1,7 +1,7 @@
 ---
 name: unified-dev-flow
-version: "2026.10.21-2"
-synced-at: "2026-10-21T12:16:44"
+version: "2026.11.07-1"
+synced-at: "2026-11-07T09:29:19"
 description: 当开始非简单的功能开发、修 bug、重构或迁移，需要决定走哪些阶段、调用哪些技能、走多深时使用。当用户问该用什么流程或技能时使用。触发词：统一流程 / 标准流程 / 开发流程 / 完整流程 / 走流程 / 端到端开发 / 该用什么技能 / 帮我选流程 / 怎么推进这个需求 / 规范流程。Use when deciding which dev workflow/skills to use for a non-trivial coding task.
 ---
 
@@ -239,6 +239,19 @@ procedures. Alternatives live in [alternatives.md](references/alternatives.md)
   rounds, escalate to a human; do not bypass escalation by changing agents.
 - Live/production changes require `production-risk-review` before S7.
   Unattended `autopilot`/`ralph` delivery also requires `ai-release-engineer`.
+
+### Mandatory delivery evidence
+
+PR/push requires the versioned delivery evidence bundle described in
+[enforcement.md](references/enforcement.md#delivery-evidence-v1-2026-11-07-hardening).
+Markdown declarations and a free `--risk-verdict PASS` do not prove execution.
+`--record-review --evidence-bundle <project-relative JSON>` validates the exact
+commit, hashed stage reports/logs, and native independent-review result events
+before producing an artifact. Missing fingerprints, evidence or runtime adapters
+block delivery; do not use skip environment variables or fabricate a transcript.
+The initial native-result adapter supports Codex; unsupported runtimes require
+an adapter rather than a silent fallback. The gate checks evidence completeness
+and provenance, while independent reviewers judge substantive sufficiency.
 
 ## Delivery Limits
 

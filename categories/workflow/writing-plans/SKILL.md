@@ -1,5 +1,7 @@
 ---
 name: writing-plans
+version: "2026.10.26-1"
+synced-at: "2026-10-26T16:29:18"
 description: Use when you have a spec or requirements for a multi-step task, before touching code
 ---
 
@@ -148,6 +150,16 @@ After writing the complete plan, look at the spec with fresh eyes and check the 
 If you find issues, fix them inline. No need to re-review — just fix and move on. If you find a spec requirement with no task, add the task.
 
 ## Execution Handoff
+
+### Orchestrator Handoff (HAFlow / Pipeline Mode)
+
+When executing inside an orchestrator (such as HAFlow `software-development-v1` plan stage):
+- The plan is delivered directly back to HAFlow;
+- Do NOT prompt the user to choose an execution sub-skill (`subagent-driven-development` or `executing-plans`);
+- Do NOT include the `REQUIRED SUB-SKILL` header demanding downstream workers run a second controller loop;
+- Save the plan to the designated location or shared notes and conclude the stage.
+
+### Interactive Execution Handoff (Standalone Mode)
 
 After saving the plan, offer execution choice:
 

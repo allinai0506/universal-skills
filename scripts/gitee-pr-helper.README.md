@@ -54,7 +54,8 @@ GIT_PR_TITLE="feat: ..." GIT_PR_BODY="$(cat /tmp/body.md)" ./scripts/gitee-pr-he
 
 **没有 `.omc/verify-<session>.md` 与合格的 `.omc/review-<session>.md`（`verdict: MERGE_READY`）
 就无法建 PR** —— 这不是脚本的软检查，而是 `entry-gate-check.py` 的硬拦截，绕过它
-没有意义。逃生阀 `UNIFIED_DEV_FLOW_SKIP_REVIEW=1` 仅限生产抢修，且会留审计记录。
+没有意义。按 Delivery evidence v1，交付必须携带完整 evidence bundle（含 Codex
+原生审查回执）；`UNIFIED_DEV_FLOW_SKIP_REVIEW=1` 等环境变量在交付路径被直接拒绝。
 
 **生效条件（须知）**：该拦截仅在分支名匹配 `agent/` / `feat/` / `fix/` 前缀时触发，
 且门禁脚本需可被找到 —— 优先 `~/.claude/scripts/entry-gate-check.py`，缺失时回退到
